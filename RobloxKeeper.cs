@@ -187,7 +187,7 @@ namespace RobloxKeeper
         struct INPUT { public uint type; public InputUnion U; }
         struct ClientInfo { public int Pid; public IntPtr Hwnd; public DateTime Start; }
 
-        const string APP_VERSION = "3.0.0";
+        const string APP_VERSION = "3.1.0";
 
         const string RUN_KEY = "Software\\Microsoft\\Windows\\CurrentVersion\\Run";
         const string AUTOSTART_VALUE = "RobloxKeeper";
@@ -218,6 +218,8 @@ namespace RobloxKeeper
         ComboBox cmbKeys;
         Button btnNudge, btnZombie, btnCloseRbx;
         bool updateHeldLogged;
+        string lastRedirectArgs;
+        DateTime lastRedirectAt = DateTime.MinValue;
         CheckBox chkAutostart, chkAutoGhost;
         Label lblCountdown, lblDot, lblMultiStatus, lblClientsTitle, lblGhosts, lblUpdating;
         ScrollPanel clientsPanel;
@@ -730,6 +732,8 @@ namespace RobloxKeeper
                 {
                     nudgePrefs[pid] = chkRef.Checked;
                     Log("Client PID " + pid + (chkRef.Checked ? " will be nudged." : " will be left alone."));
+                    UpdateAfkTimer(NudgeableClientCount());
+                    UpdateCountdown();
                 };
                 clientsPanel.Controls.Add(chk);
 
@@ -763,29 +767,25 @@ namespace RobloxKeeper
 
         void OnAfkToggled(object sender, EventArgs e)
         {
-            if (chkAfk.Checked)
-            {
-                nudgeTimer.Interval = (int)numInterval.Value * 60000;
-                nextNudge = DateTime.Now.AddMilliseconds(nudgeTimer.Interval);
-                nudgeTimer.Start();
-                if (!initializing) Log("Anti-AFK enabled \u2014 interval " + numInterval.Value + " min.");
-            }
-            else
-            {
-                nudgeTimer.Stop();
-                if (!initializing) Log("Anti-AFK disabled.");
-            }
+            if (!chkAfk.Checked) nudgeTimer.Stop();
+            if (!initializing)
+                Log(chkAfk.Checked
+                    ? "Anti-AFK enabled \u2014 interval " + numInterval.Value + " min. The timer runs while a client is open."
+                    : "Anti-AFK disabled.");
+            UpdateAfkTimer(NudgeableClientCount());
             UpdateCountdown();
             SaveSettings();
         }
 
         void OnIntervalChanged(object sender, EventArgs e)
         {
-            if (!chkAfk.Checked) return;
-            nudgeTimer.Stop();
-            nudgeTimer.Interval = (int)numInterval.Value * 60000;
-            nextNudge = DateTime.Now.AddMilliseconds(nudgeTimer.Interval);
-            nudgeTimer.Start();
+            if (chkAfk.Checked && nudgeTimer.Enabled)
+            {
+                nudgeTimer.Stop();
+                nudgeTimer.Interval = (int)numInterval.Value * 60000;
+                nextNudge = DateTime.Now.AddMilliseconds(nudgeTimer.Interval);
+                nudgeTimer.Start();
+            }
             if (!initializing) Log("Interval set to " + numInterval.Value + " min.");
             SaveSettings();
         }
@@ -895,11 +895,50 @@ namespace RobloxKeeper
             SendInput(1, inp, Marshal.SizeOf(typeof(INPUT)));
         }
 
+        // The countdown only means something once there is a ticked client to
+        // nudge, so it starts when one opens and stops when the last one closes -
+        // rather than ticking away against nothing.
+        int NudgeableClientCount()
+        {
+            int ghosts, n = 0;
+            foreach (ClientInfo ci in GetClients(out ghosts))
+            {
+                bool wanted;
+                if (!nudgePrefs.TryGetValue(ci.Pid, out wanted)) wanted = true;
+                if (wanted) n++;
+            }
+            return n;
+        }
+
+        void UpdateAfkTimer(int nudgeable)
+        {
+            bool shouldRun = chkAfk.Checked && nudgeable > 0;
+            if (shouldRun && !nudgeTimer.Enabled)
+            {
+                nudgeTimer.Interval = (int)numInterval.Value * 60000;
+                nextNudge = DateTime.Now.AddMilliseconds(nudgeTimer.Interval);
+                nudgeTimer.Start();
+                if (!initializing)
+                    Log("Roblox client detected - anti-AFK timer started (" + numInterval.Value + " min).");
+            }
+            else if (!shouldRun && nudgeTimer.Enabled)
+            {
+                nudgeTimer.Stop();
+                if (!initializing && chkAfk.Checked)
+                    Log("No client left to nudge - anti-AFK timer paused until one opens.");
+            }
+        }
+
         void UpdateCountdown()
         {
             if (!chkAfk.Checked)
             {
                 lblCountdown.Text = "Disabled";
+                return;
+            }
+            if (!nudgeTimer.Enabled)
+            {
+                lblCountdown.Text = "Waiting for Roblox";
                 return;
             }
             TimeSpan left = nextNudge - DateTime.Now;
@@ -1261,10 +1300,11 @@ namespace RobloxKeeper
             HandleVersionSwitch(clients.Count);
 
             bool installerRunning = AnyProcess("RobloxPlayerInstaller") || AnyProcess("RobloxPlayerLauncher");
-            if (installerRunning && !installerSeen)
+            string helpers = installerRunning ? DescribeHelpers() : "(none)";
+            if (installerRunning && !installerSeen && helpers != "(none)")
             {
                 updaterSeenAt = DateTime.Now;
-                Log("Roblox helper running: " + DescribeHelpers() +
+                Log("Roblox helper running: " + helpers +
                     " - it can close open clients regardless of the mutex." +
                     (UsesLegacyBootstrapper()
                         ? " Your install uses it on EVERY launch - reinstall Roblox from roblox.com to stop this."
@@ -1295,6 +1335,15 @@ namespace RobloxKeeper
             }
 
             TrackClientLifecycle(clients, installerRunning);
+
+            int nudgeable = 0;
+            foreach (ClientInfo ci in clients)
+            {
+                bool wanted;
+                if (!nudgePrefs.TryGetValue(ci.Pid, out wanted)) wanted = true;
+                if (wanted) nudgeable++;
+            }
+            UpdateAfkTimer(nudgeable);
 
             bool changed = clients.Count != shownPids.Count;
             if (!changed)
@@ -1547,6 +1596,21 @@ namespace RobloxKeeper
             int pendingPid; string pendingArgs, pendingVersion;
             bool hasPending = FindPendingLaunch(out pendingPid, out pendingArgs, out pendingVersion);
             string target = hasPending ? PickOtherVersion(pendingVersion) : null;
+
+            // A join ticket is single-use: redirecting the same launch twice burns
+            // it and Roblox answers "Authentication Failed 403". Redirect any one
+            // launch once, and never twice in quick succession.
+            if (hasPending && target != null)
+            {
+                if (pendingArgs == lastRedirectArgs ||
+                    (DateTime.Now - lastRedirectAt).TotalSeconds < 20)
+                {
+                    foreach (Process p in ups) { try { p.Kill(); } catch { } p.Dispose(); }
+                    return;
+                }
+                lastRedirectArgs = pendingArgs;
+                lastRedirectAt = DateTime.Now;
+            }
 
             if (hasPending && target != null)
             {
@@ -2236,6 +2300,7 @@ namespace RobloxKeeper
         }
     }
 }
+
 
 
 
