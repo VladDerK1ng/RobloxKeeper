@@ -78,7 +78,9 @@ A window-less Roblox process is probably still holding the mutex — the client 
 Read the Activity log — it names the cause. `SINGLETON KILL` means another client launched while a Roblox process (not RobloxKeeper) owned the mutex: close all clients, wait for the green light, reopen. If a Roblox update was installing, its own updater closes every client and no tool can prevent that. Click **Copy log** to share the full report.
 
 **My whole session died during a "big loading" screen.**
-That's a Roblox version update. The updater terminates all running clients of the old version — RobloxKeeper logs a warning when it sees the launcher/updater running. Reopen your clients afterwards; multi-instance resumes automatically.
+That's a Roblox version update. The updater terminates all running clients of the old version — no tool can prevent it. RobloxKeeper shows an amber warning and a tray notification when it detects the launcher/updater, and the log records it as the cause. Reopen your clients afterwards; multi-instance resumes automatically.
+
+**To avoid it entirely:** open **one** client first and let it fully load into a game. That triggers any pending update while only one client is open. Once it's running, open the rest — no update can interrupt you mid-session.
 
 **It works for me but not for my friend — their first client closes when they open a second.**
 That symptom means RobloxKeeper wasn't holding the mutex when the second client launched — it's an ordering problem, not detection. On the friend's machine: (1) make sure the status light is **green before** opening any Roblox client — if it's amber, click **Close all Roblox** once; (2) enable **Start with Windows** so the app always wins the ordering race; (3) note the Microsoft Store version of Roblox is not supported — use the desktop client (installed via the website).

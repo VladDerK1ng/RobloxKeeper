@@ -185,7 +185,7 @@ namespace RobloxKeeper
         struct INPUT { public uint type; public InputUnion U; }
         struct ClientInfo { public int Pid; public IntPtr Hwnd; public DateTime Start; }
 
-        const string APP_VERSION = "1.6.0";
+        const string APP_VERSION = "1.6.1";
 
         const string RUN_KEY = "Software\\Microsoft\\Windows\\CurrentVersion\\Run";
         const string AUTOSTART_VALUE = "RobloxKeeper";
@@ -216,7 +216,7 @@ namespace RobloxKeeper
         ComboBox cmbKeys;
         Button btnNudge, btnZombie, btnCloseRbx;
         CheckBox chkAutostart, chkAutoGhost;
-        Label lblCountdown, lblDot, lblMultiStatus, lblClientsTitle, lblGhosts;
+        Label lblCountdown, lblDot, lblMultiStatus, lblClientsTitle, lblGhosts, lblUpdating;
         ScrollPanel clientsPanel;
         RichTextBox rtbLog;
         System.Windows.Forms.Timer nudgeTimer, uiTimer;
@@ -227,6 +227,9 @@ namespace RobloxKeeper
         bool initializing;
         bool startHidden;
         bool installerSeen;
+        DateTime lastCloseRequest = DateTime.MinValue;
+        DateTime updaterSeenAt = DateTime.MinValue;
+        bool updatingShown;
         readonly Dictionary<int, DateTime> knownClients = new Dictionary<int, DateTime>();
         DateTime lastClientOpened = DateTime.MinValue;
         bool clientTrackingReady;
@@ -351,6 +354,7 @@ namespace RobloxKeeper
             chkAutostart.CheckedChanged += OnAutostartToggled;
             Controls.Add(chkAutostart);
 
+
             // --- Anti-AFK card ---
             Card cardAfk = new Card();
             cardAfk.Location = new Point(16, 48);
@@ -452,7 +456,8 @@ namespace RobloxKeeper
             };
             cardClients.Controls.Add(chkAutoGhost);
 
-            lblGhosts = MutedLabel("", 150, 157, 9f);
+            lblGhosts = MutedLabel("", 152, 157, 8.25f);
+            lblGhosts.MaximumSize = new Size(132, 0);   // stop short of the button at x=292
             cardClients.Controls.Add(lblGhosts);
 
             btnZombie = AccentButton("End background", 292, 151, 116, 26);
@@ -496,8 +501,8 @@ namespace RobloxKeeper
             btnCloseRbx.Click += delegate { CloseAllRoblox(); };
             cardMulti.Controls.Add(btnCloseRbx);
 
-            Label hint = MutedLabel("One account can't join two games at once \u2014 use separate accounts.", 20, 104, 8.25f);
-            cardMulti.Controls.Add(hint);
+            lblUpdating = MutedLabel("One account can't join two games at once \u2014 use separate accounts.", 20, 104, 8.25f);
+            cardMulti.Controls.Add(lblUpdating);
 
             // --- Activity card ---
             Card cardLog = new Card();
@@ -953,6 +958,7 @@ namespace RobloxKeeper
             foreach (ClientInfo ci in clients)
                 PostMessage(ci.Hwnd, WM_CLOSE, IntPtr.Zero, IntPtr.Zero);
             if (ghosts > 0) KillZombies();
+            lastCloseRequest = DateTime.Now;
             Log("Close request sent to " + clients.Count + " client(s) \u2014 taking the mutex as soon as they exit.");
         }
 
@@ -1052,7 +1058,7 @@ namespace RobloxKeeper
             int ghosts;
             List<ClientInfo> clients = GetClients(out ghosts);
             lblClientsTitle.Text = "CLIENTS \u00B7 " + clients.Count;
-            lblGhosts.Text = ghosts > 0 ? "+" + ghosts + " background process(es)" : "";
+            lblGhosts.Text = ghosts > 0 ? "+" + ghosts + " stuck" : "";
             btnZombie.Visible = ghosts > 0;
 
             // Stuck window-less Roblox processes block the mutex and confuse the
@@ -1066,8 +1072,33 @@ namespace RobloxKeeper
             // so a mass client close is explained instead of looking like a bug.
             bool installerRunning = AnyProcess("RobloxPlayerInstaller") || AnyProcess("RobloxPlayerLauncher");
             if (installerRunning && !installerSeen)
+            {
+                updaterSeenAt = DateTime.Now;
                 Log("Roblox launcher/updater detected \u2014 if an update installs, ALL open clients close once. Reopen them after; multi-instance resumes automatically.");
+                try
+                {
+                    tray.BalloonTipTitle = "Roblox is updating";
+                    tray.BalloonTipText = "Roblox's own updater closes every open client once. " +
+                        "Wait for it to finish, then reopen your clients - multi-instance keeps working.";
+                    tray.BalloonTipIcon = ToolTipIcon.Warning;
+                    tray.ShowBalloonTip(10000);
+                }
+                catch { }
+            }
             installerSeen = installerRunning;
+
+            // For a minute after the updater appears, this line turns into an
+            // on-screen warning so the cause is visible, not only in the log.
+            bool updating = installerRunning || (DateTime.Now - updaterSeenAt).TotalSeconds < 60;
+            if (updating != updatingShown)
+            {
+                updatingShown = updating;
+                lblUpdating.Text = updating
+                    ? "Roblox is UPDATING - it closes every open client once. Reopen them after."
+                    : "One account can't join two games at once \u2014 use separate accounts.";
+                lblUpdating.ForeColor = updating ? Theme.Amber : Theme.Muted;
+                lblUpdating.Font = new Font("Segoe UI", 8.25f, updating ? FontStyle.Bold : FontStyle.Regular);
+            }
 
             TrackClientLifecycle(clients, installerRunning);
 
@@ -1120,6 +1151,8 @@ namespace RobloxKeeper
                 else if (!mutexHeld && sinceOther < 30 && lastClientOpened != DateTime.MinValue)
                     why = "SINGLETON KILL \u2014 another client launched " + ((int)sinceOther) +
                           "s ago while a Roblox process (not RobloxKeeper) owned the mutex. Fix: close all clients, wait for the green light, then reopen.";
+                else if ((DateTime.Now - lastCloseRequest).TotalSeconds < 20)
+                    why = "closed by your \"Close all Roblox\" request.";
                 else if (!mutexHeld)
                     why = "closed while the mutex was NOT held by RobloxKeeper \u2014 check the multi-instance light.";
                 else
@@ -1302,6 +1335,7 @@ namespace RobloxKeeper
         }
     }
 }
+
 
 
 
