@@ -24,10 +24,10 @@ if /i "%VERSION:~0,1%"=="v" (
     goto :stripv
 )
 
-rem Validate strict x.y.z format
-echo %VERSION%| findstr /r /c:"^[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*$" >nul
+rem Validate x.y or x.y.z
+echo %VERSION%| findstr /r /c:"^[0-9][0-9]*\.[0-9][0-9]*$" /c:"^[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*$" >nul
 if errorlevel 1 (
-    echo Invalid version "%~1" - expected numbers like 1.4.2
+    echo Invalid version "%~1" - expected numbers like 1.0 or 1.4.2
     exit /b 1
 )
 
