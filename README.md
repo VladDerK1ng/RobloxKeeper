@@ -23,7 +23,8 @@ One tiny executable. Zero dependencies. No injection, no memory access, no file 
 | **Saved settings** | Every setting — anti-AFK on/off, interval, nudge profile, multi-instance, auto-clear ghosts — is written to `%APPDATA%\RobloxKeeper\settings.txt` and restored on the next launch. |
 | **Diagnostic log** | Every client open/close is logged with the reason, naming a **singleton kill**, the **Roblox bootstrapper**, or a normal close. **Copy log** puts the whole thing plus your version, Windows build, settings, and Roblox launch path on the clipboard for sharing. |
 | **Launch-path check** | Warns at startup if Roblox launches via the legacy bootstrapper (`RobloxPlayerLauncher`), which closes running clients on every launch no matter who holds the mutex — the one failure mode multi-instance cannot fix from outside. |
-| **Repair install** | Fixes the duplicate-install loop that closes clients by itself: keeps the Roblox version currently in use, removes the competing copies, and names any third-party launcher (Bloxstrap / Fishstrap / …) that must be uninstalled. Confirms before touching anything. |
+| **Updater blocking** | Roblox serves different client versions to different accounts, so signing into another account (a premium main next to an alt, for example) makes Roblox reinstall — and **its installer closes every open client**. While clients are running, RobloxKeeper stops that installer, so your session survives. With no clients open it steps aside and Roblox updates normally. On by default. |
+| **Repair install** | Fixes the duplicate-install loop that closes clients by itself: keeps the Roblox version currently in use, removes the competing copies, repoints stale shortcuts, and names any third-party launcher that must be uninstalled. Confirms before touching anything. |
 | **Auto-clear ghosts** | Stuck window-less Roblox processes that block the mutex are ended automatically once they're over 60 seconds old (the age check protects clients that are still starting up). On by default; untick in the Clients panel to disable. |
 | **Quality of life** | Dark modern UI, live countdown, activity log, minimize-to-tray with tray menu (Open / Nudge now / Exit). |
 
@@ -78,6 +79,11 @@ A window-less Roblox process is probably still holding the mutex — the client 
 
 **A client closed and I don't know why.**
 Read the Activity log — it names the cause. `SINGLETON KILL` means another client launched while a Roblox process (not RobloxKeeper) owned the mutex: close all clients, wait for the green light, reopen. If a Roblox update was installing, its own updater closes every client and no tool can prevent that. Click **Copy log** to share the full report.
+
+**It works with two alt accounts, but my main account closes everything.**
+Roblox does not serve the same client version to every account — a main account (often one with premium, or one included in a staged rollout) can be on a different release channel than your alts. Signing into it makes Roblox reinstall the other version, and **Roblox's installer closes every open client** to replace the files. Nothing about the mutex can prevent that.
+
+**Fix:** leave **Block Roblox updater while clients are open** ticked (the default). RobloxKeeper stops the installer while you have clients running, so your session survives the account switch. When you close everything, Roblox updates as usual.
 
 **My clients keep closing every few minutes and Roblox seems to "update" over and over.**
 Two Roblox installs are fighting over the `roblox-player` registration. Each hand-over runs an installer, and that installer closes every open client — then the other install claims it back on the next launch. It never settles, so it looks like an endless update loop. Holding the mutex cannot stop this; it is Roblox's own installer.

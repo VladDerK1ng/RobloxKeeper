@@ -187,7 +187,7 @@ namespace RobloxKeeper
         struct INPUT { public uint type; public InputUnion U; }
         struct ClientInfo { public int Pid; public IntPtr Hwnd; public DateTime Start; }
 
-        const string APP_VERSION = "2.1.0";
+        const string APP_VERSION = "2.2.0";
 
         const string RUN_KEY = "Software\\Microsoft\\Windows\\CurrentVersion\\Run";
         const string AUTOSTART_VALUE = "RobloxKeeper";
@@ -217,7 +217,7 @@ namespace RobloxKeeper
         NumericUpDown numInterval;
         ComboBox cmbKeys;
         Button btnNudge, btnZombie, btnCloseRbx, btnFixInstall;
-        CheckBox chkAutostart, chkAutoGhost;
+        CheckBox chkAutostart, chkAutoGhost, chkProtect;
         Label lblCountdown, lblDot, lblMultiStatus, lblClientsTitle, lblGhosts, lblUpdating;
         ScrollPanel clientsPanel;
         RichTextBox rtbLog;
@@ -244,7 +244,7 @@ namespace RobloxKeeper
             Text = "RobloxKeeper";
             FormBorderStyle = FormBorderStyle.FixedSingle;
             MaximizeBox = false;
-            ClientSize = new Size(460, 782);
+            ClientSize = new Size(460, 808);
             StartPosition = FormStartPosition.CenterScreen;
             BackColor = Theme.Bg;
             ForeColor = Theme.Text;
@@ -264,9 +264,10 @@ namespace RobloxKeeper
             Log("RobloxKeeper v" + APP_VERSION + " started.");
 
             initializing = true;
-            bool afk, multi, autoghost;
+            bool afk, multi, autoghost, protect;
             int intervalMin, keysIdx;
-            LoadSettings(out afk, out intervalMin, out keysIdx, out multi, out autoghost);
+            LoadSettings(out afk, out intervalMin, out keysIdx, out multi, out autoghost, out protect);
+            chkProtect.Checked = protect;
             if (intervalMin < 1) intervalMin = 1;
             if (intervalMin > 19) intervalMin = 19;
             numInterval.Value = intervalMin;
@@ -279,6 +280,7 @@ namespace RobloxKeeper
             Log("Settings: Anti-AFK " + (afk ? "on, " + intervalMin + " min, " + cmbKeys.Text : "off") +
                 " \u00B7 multi-instance " + (multi ? "on" : "off") + ".");
             CheckLaunchPath();
+            CheckStaleShortcuts();
             OnUiTick();
         }
 
@@ -474,7 +476,7 @@ namespace RobloxKeeper
             // --- Multi-instance card ---
             Card cardMulti = new Card();
             cardMulti.Location = new Point(16, 416);
-            cardMulti.Size = new Size(428, 152);
+            cardMulti.Size = new Size(428, 178);
             Controls.Add(cardMulti);
 
             cardMulti.Controls.Add(SectionTitle("MULTI-INSTANCE"));
@@ -515,13 +517,33 @@ namespace RobloxKeeper
             lblRepairHint.MaximumSize = new Size(258, 0);
             cardMulti.Controls.Add(lblRepairHint);
 
-            lblUpdating = MutedLabel("One account can't join two games at once \u2014 use separate accounts.", 20, 122, 8.25f);
+            chkProtect = new CheckBox();
+            chkProtect.Text = "Block Roblox updater while clients are open";
+            chkProtect.AutoSize = true;
+            chkProtect.Location = new Point(18, 114);
+            chkProtect.Font = new Font("Segoe UI", 8.75f);
+            chkProtect.ForeColor = Theme.Text;
+            chkProtect.BackColor = Theme.Card;
+            chkProtect.Cursor = Cursors.Hand;
+            chkProtect.TabStop = false;
+            chkProtect.Checked = true;
+            chkProtect.CheckedChanged += delegate
+            {
+                if (!initializing)
+                    Log(chkProtect.Checked
+                        ? "Updater blocking ON - Roblox cannot close your open clients to update."
+                        : "Updater blocking OFF - Roblox may close all clients when it updates.");
+                SaveSettings();
+            };
+            cardMulti.Controls.Add(chkProtect);
+
+            lblUpdating = MutedLabel("One account can't join two games at once \u2014 use separate accounts.", 20, 148, 8.25f);
             cardMulti.Controls.Add(lblUpdating);
 
             // --- Activity card ---
             Card cardLog = new Card();
             cardLog.BackColor = Theme.Inset;
-            cardLog.Location = new Point(16, 582);
+            cardLog.Location = new Point(16, 608);
             cardLog.Size = new Size(428, 184);
             Controls.Add(cardLog);
 
@@ -1069,6 +1091,11 @@ namespace RobloxKeeper
                 }
             }
 
+            int retargeted = RetargetShortcuts(keep, versionsRoot);
+            if (retargeted > 0)
+                Log("Fixed " + retargeted + " stale Roblox shortcut(s) that still pointed at a removed version - " +
+                    "those were launching the wrong client and triggering the repair loop.");
+
             Log("Repair finished - removed " + removed + " duplicate version folder(s)" +
                 (failed > 0 ? ", " + failed + " could not be removed (try again once everything Roblox is closed)" : "") +
                 ". Kept " + (keep ?? "(none)") + ".");
@@ -1226,6 +1253,29 @@ namespace RobloxKeeper
                     "installer that closes every open client. This repeats forever until one is removed. " +
                     "Launchers present: " + ThirdPartyLaunchers());
                 lastRegisteredVersion = regNow;
+            }
+
+            // Roblox serves different client versions to different accounts, so
+            // switching between accounts makes it reinstall - and its installer
+            // closes every running client to replace files. Stopping the installer
+            // WHILE clients are open keeps the session alive; when nothing is
+            // running it is left alone, so Roblox still updates normally.
+            if (chkProtect != null && chkProtect.Checked && clients.Count > 0)
+            {
+                Process[] ups = Process.GetProcessesByName("RobloxPlayerInstaller");
+                foreach (Process up in ups)
+                {
+                    string where = PathOf(up);
+                    try
+                    {
+                        up.Kill();
+                        Log("BLOCKED Roblox updater (" + VersionFolderOf(where) + ") - it was about to close your " +
+                            clients.Count + " open client(s). Your session is safe. Roblox will update normally once " +
+                            "you close all clients.");
+                    }
+                    catch (Exception ex) { Log("Could not block the Roblox updater: " + ex.Message); }
+                    finally { up.Dispose(); }
+                }
             }
 
             bool installerRunning = AnyProcess("RobloxPlayerInstaller") || AnyProcess("RobloxPlayerLauncher");
@@ -1394,6 +1444,35 @@ namespace RobloxKeeper
                 "then reinstall once from roblox.com.");
         }
 
+        static string DescribeShortcuts()
+        {
+            List<string[]> sc = FindRobloxShortcuts();
+            if (sc.Count == 0) return "(none pointing at a version folder)";
+            string reg = LaunchPathVersion();
+            StringBuilder sb = new StringBuilder();
+            foreach (string[] s in sc)
+            {
+                if (sb.Length > 0) sb.Append("\r\n                  ");
+                sb.Append(Path.GetFileName(s[0])).Append(" -> ").Append(s[2]);
+                if (!string.Equals(s[2], reg, StringComparison.OrdinalIgnoreCase))
+                    sb.Append("  <-- STALE (registered is ").Append(reg).Append(")");
+            }
+            return sb.ToString();
+        }
+
+        void CheckStaleShortcuts()
+        {
+            string reg = LaunchPathVersion();
+            if (reg == "?") return;
+            int stale = 0;
+            foreach (string[] s in FindRobloxShortcuts())
+                if (!string.Equals(s[2], reg, StringComparison.OrdinalIgnoreCase)) stale++;
+            if (stale > 0)
+                Log("WARNING: " + stale + " Roblox shortcut(s) point at an OLD version instead of " + reg +
+                    ". Opening Roblox from one of those launches the outdated client, which then repairs " +
+                    "itself and closes your other clients. Click \"Repair install\" to fix them.");
+        }
+
         void CheckLaunchPath()
         {
             if (HasActiveThirdPartyLauncher())
@@ -1451,6 +1530,7 @@ namespace RobloxKeeper
                     "Registered version: " + LaunchPathVersion() + "\r\n" +
                     "Version folders: " + AllVersionFolders() + "\r\n" +
                     "Third-party launchers: " + ThirdPartyLaunchers() + "\r\n" +
+                    "Roblox shortcuts: " + DescribeShortcuts() + "\r\n" +
                     "----------------------------------------\r\n";
                 Clipboard.SetText(header + rtbLog.Text);
                 Log("Log copied to clipboard \u2014 paste it wherever you need.");
@@ -1678,6 +1758,102 @@ namespace RobloxKeeper
             }
         }
 
+        // Roblox shortcuts point at a VERSIONED exe path. After an update the old
+        // shortcut still launches the previous client, which then repairs itself
+        // and closes every open client. Stale shortcuts are a prime trigger for
+        // the ping-pong, and they survive uninstalling Roblox.
+        static List<string[]> FindRobloxShortcuts()
+        {
+            List<string[]> hits = new List<string[]>();
+            List<string> dirs = new List<string>();
+            try
+            {
+                dirs.Add(Environment.GetFolderPath(Environment.SpecialFolder.Desktop));
+                dirs.Add(Environment.GetFolderPath(Environment.SpecialFolder.CommonDesktopDirectory));
+                dirs.Add(Environment.GetFolderPath(Environment.SpecialFolder.StartMenu));
+                dirs.Add(Environment.GetFolderPath(Environment.SpecialFolder.CommonStartMenu));
+                dirs.Add(Environment.GetFolderPath(Environment.SpecialFolder.Programs));
+                dirs.Add(Environment.GetFolderPath(Environment.SpecialFolder.CommonPrograms));
+                dirs.Add(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                    "Microsoft\\Internet Explorer\\Quick Launch\\User Pinned\\TaskBar"));
+            }
+            catch { }
+
+            object shell = null;
+            Type shellType = null;
+            try
+            {
+                shellType = Type.GetTypeFromProgID("WScript.Shell");
+                if (shellType == null) return hits;
+                shell = Activator.CreateInstance(shellType);
+            }
+            catch { return hits; }
+
+            foreach (string dir in dirs)
+            {
+                if (string.IsNullOrEmpty(dir) || !Directory.Exists(dir)) continue;
+                string[] files;
+                try { files = Directory.GetFiles(dir, "*.lnk", SearchOption.AllDirectories); }
+                catch { continue; }
+
+                foreach (string f in files)
+                {
+                    try
+                    {
+                        object lnk = shellType.InvokeMember("CreateShortcut",
+                            System.Reflection.BindingFlags.InvokeMethod, null, shell, new object[] { f });
+                        string target = lnk.GetType().InvokeMember("TargetPath",
+                            System.Reflection.BindingFlags.GetProperty, null, lnk, null) as string;
+                        if (string.IsNullOrEmpty(target)) continue;
+                        if (target.IndexOf("\\Roblox\\Versions\\", StringComparison.OrdinalIgnoreCase) < 0) continue;
+                        hits.Add(new string[] { f, target, VersionFolderOf(target) });
+                    }
+                    catch { }
+                }
+            }
+            return hits;
+        }
+
+        // Repoint shortcuts at the version that is actually installed/registered.
+        int RetargetShortcuts(string keepVersion, string versionsRoot)
+        {
+            if (string.IsNullOrEmpty(keepVersion)) return 0;
+            string goodExe = Path.Combine(versionsRoot, keepVersion, "RobloxPlayerBeta.exe");
+            if (!File.Exists(goodExe)) return 0;
+
+            int fixedCount = 0;
+            object shell = null;
+            Type shellType = null;
+            try
+            {
+                shellType = Type.GetTypeFromProgID("WScript.Shell");
+                if (shellType == null) return 0;
+                shell = Activator.CreateInstance(shellType);
+            }
+            catch { return 0; }
+
+            foreach (string[] sc in FindRobloxShortcuts())
+            {
+                if (string.Equals(sc[2], keepVersion, StringComparison.OrdinalIgnoreCase)) continue;
+                try
+                {
+                    object lnk = shellType.InvokeMember("CreateShortcut",
+                        System.Reflection.BindingFlags.InvokeMethod, null, shell, new object[] { sc[0] });
+                    lnk.GetType().InvokeMember("TargetPath",
+                        System.Reflection.BindingFlags.SetProperty, null, lnk, new object[] { goodExe });
+                    lnk.GetType().InvokeMember("Save",
+                        System.Reflection.BindingFlags.InvokeMethod, null, lnk, null);
+                    fixedCount++;
+                    Log("Repointed shortcut " + Path.GetFileName(sc[0]) + " from " + sc[2] + " to " + keepVersion + ".");
+                }
+                catch (Exception ex)
+                {
+                    Log("Could not repoint " + Path.GetFileName(sc[0]) + ": " + ex.Message);
+                }
+            }
+            return fixedCount;
+        }
+
         static string AllVersionFolders()
         {
             try
@@ -1787,6 +1963,7 @@ namespace RobloxKeeper
                 Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath));
                 File.WriteAllLines(SettingsPath, new string[]
                 {
+                    "protect=" + (chkProtect.Checked ? "1" : "0"),
                     "afk=" + (chkAfk.Checked ? "1" : "0"),
                     "interval=" + ((int)numInterval.Value).ToString(),
                     "keys=" + cmbKeys.SelectedIndex.ToString(),
@@ -1797,9 +1974,10 @@ namespace RobloxKeeper
             catch { }
         }
 
-        void LoadSettings(out bool afk, out int intervalMin, out int keysIdx, out bool multi, out bool autoghost)
+        void LoadSettings(out bool afk, out int intervalMin, out int keysIdx, out bool multi, out bool autoghost,
+                          out bool protect)
         {
-            afk = true; intervalMin = 15; keysIdx = 1; multi = true; autoghost = true;
+            afk = true; intervalMin = 15; keysIdx = 1; multi = true; autoghost = true; protect = true;
             try
             {
                 if (!File.Exists(SettingsPath)) return;
@@ -1815,6 +1993,7 @@ namespace RobloxKeeper
                     else if (key == "keys") { if (int.TryParse(val, out tmp)) keysIdx = tmp; }
                     else if (key == "multi") multi = val == "1";
                     else if (key == "autoghost") autoghost = val == "1";
+                    else if (key == "protect") protect = val == "1";
                 }
             }
             catch { }
@@ -1890,6 +2069,7 @@ namespace RobloxKeeper
         }
     }
 }
+
 
 
 
