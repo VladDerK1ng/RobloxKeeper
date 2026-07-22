@@ -54,6 +54,14 @@ To publish a new version (maintainers): `release.bat <version>` bumps `APP_VERSI
 
 That's it. The script generates the app icon (`make-icon.ps1`) and produces `RobloxKeeper.exe` (~45 KB) using `csc.exe` from the .NET Framework already on your machine.
 
+## Performance
+
+Measured on Windows 11 while idle: about **0.8% of one CPU core** and **67 MB** of RAM, steady, with no memory or handle growth over time. The one-second loop takes a single snapshot of running processes and answers every question from it, rather than walking the process table repeatedly.
+
+Running two Roblox clients costs whatever two Roblox clients cost on your machine (mostly GPU and RAM). RobloxKeeper adds no per-client overhead, and the number of installed Roblox versions makes no difference to it.
+
+The only moment it touches your desktop is a nudge: it focuses each selected client for roughly half a second, sends the keys, and hands focus back. If you are typing at that moment you will notice it. Nothing else it does steals focus.
+
 ## How it works
 
 **Anti-AFK** uses `SendInput` with hardware scan codes - the same level of the input stack a physical keyboard writes to, which is why clients reading raw input register it. Extended keys (arrows) are sent with the `E0` flag so they aren't misread as numpad input. Each nudge: focus client → send keys → restore your previous window. The two-key profiles (zoom out/in, turn left/right) cancel themselves out, so your camera ends up where it started.

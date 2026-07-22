@@ -661,13 +661,23 @@ namespace RobloxKeeper
 
         List<ClientInfo> GetClients(out int ghosts)
         {
+            Process[] procs = Process.GetProcessesByName(ROBLOX_PROCESS);
+            try { return ClientsFrom(procs, out ghosts); }
+            finally { foreach (Process p in procs) p.Dispose(); }
+        }
+
+        // Reads clients out of an existing process list. The per-second loop takes
+        // one system snapshot and reuses it for every check, instead of walking the
+        // whole process table once per question.
+        static List<ClientInfo> ClientsFrom(IList<Process> procs, out int ghosts)
+        {
             List<ClientInfo> list = new List<ClientInfo>();
             ghosts = 0;
-            Process[] procs = Process.GetProcessesByName(ROBLOX_PROCESS);
             foreach (Process p in procs)
             {
                 try
                 {
+                    if (!string.Equals(p.ProcessName, ROBLOX_PROCESS, StringComparison.OrdinalIgnoreCase)) continue;
                     if (p.MainWindowHandle != IntPtr.Zero)
                     {
                         ClientInfo ci = new ClientInfo();
@@ -678,10 +688,21 @@ namespace RobloxKeeper
                     }
                     else ghosts++;
                 }
-                finally { p.Dispose(); }
+                catch { }
             }
             list.Sort(delegate(ClientInfo a, ClientInfo b) { return a.Start.CompareTo(b.Start); });
             return list;
+        }
+
+        static List<Process> ByName(IList<Process> snapshot, string name)
+        {
+            List<Process> hits = new List<Process>();
+            foreach (Process p in snapshot)
+            {
+                try { if (string.Equals(p.ProcessName, name, StringComparison.OrdinalIgnoreCase)) hits.Add(p); }
+                catch { }
+            }
+            return hits;
         }
 
         void RebuildClientRows(List<ClientInfo> clients)
@@ -1267,8 +1288,15 @@ namespace RobloxKeeper
             UpdateMultiStatus();
             btnCloseRbx.Visible = chkMulti.Checked && !keeper.Held;
 
+            Process[] snapshot = Process.GetProcesses();
+            try { TickWithSnapshot(snapshot); }
+            finally { foreach (Process p in snapshot) { try { p.Dispose(); } catch { } } }
+        }
+
+        void TickWithSnapshot(Process[] snapshot)
+        {
             int ghosts;
-            List<ClientInfo> clients = GetClients(out ghosts);
+            List<ClientInfo> clients = ClientsFrom(snapshot, out ghosts);
             lblClientsTitle.Text = "CLIENTS \u00B7 " + clients.Count;
             lblGhosts.Text = ghosts > 0 ? "+" + ghosts + " stuck" : "";
             btnZombie.Visible = ghosts > 0;
@@ -1301,9 +1329,11 @@ namespace RobloxKeeper
             // closes every running client to replace files. Stopping the installer
             // WHILE clients are open keeps the session alive; when nothing is
             // running it is left alone, so Roblox still updates normally.
-            HandleVersionSwitch(clients.Count);
+            List<Process> installers = ByName(snapshot, "RobloxPlayerInstaller");
+            List<Process> launchers = ByName(snapshot, "RobloxPlayerLauncher");
+            HandleVersionSwitch(clients.Count, installers, snapshot);
 
-            bool installerRunning = AnyProcess("RobloxPlayerInstaller") || AnyProcess("RobloxPlayerLauncher");
+            bool installerRunning = installers.Count > 0 || launchers.Count > 0;
             string helpers = installerRunning ? DescribeHelpers() : "(none)";
             if (installerRunning && !installerSeen && helpers != "(none)")
             {
@@ -1544,14 +1574,15 @@ namespace RobloxKeeper
         // A Roblox client that is starting but has not drawn a window yet, holding
         // the roblox-player:// URL from the browser. This is the launch that is
         // about to make Roblox reinstall, and its URL is what lets us redirect it.
-        bool FindPendingLaunch(out int pid, out string args, out string version)
+        bool FindPendingLaunch(IList<Process> snapshot, out int pid, out string args, out string version)
         {
             pid = 0; args = null; version = null;
             DateTime best = DateTime.MinValue;
-            foreach (Process p in Process.GetProcessesByName(ROBLOX_PROCESS))
+            foreach (Process p in snapshot)
             {
                 try
                 {
+                    if (!string.Equals(p.ProcessName, ROBLOX_PROCESS, StringComparison.OrdinalIgnoreCase)) continue;
                     if (p.MainWindowHandle != IntPtr.Zero) continue;
                     DateTime started;
                     try { started = p.StartTime; } catch { continue; }
@@ -1563,8 +1594,7 @@ namespace RobloxKeeper
                         best = started; pid = p.Id; args = a; version = VersionFolderOf(PathOf(p));
                     }
                 }
-                catch { }
-                finally { p.Dispose(); }
+                catch { }   // snapshot is owned and disposed by the caller
             }
             return pid != 0;
         }
@@ -1587,18 +1617,13 @@ namespace RobloxKeeper
         // an account wants is already installed, no install is needed at all: point
         // Roblox at it and start that client directly with the same join URL. The
         // running clients are then never touched.
-        void HandleVersionSwitch(int openClients)
+        void HandleVersionSwitch(int openClients, List<Process> ups, IList<Process> snapshot)
         {
-            Process[] ups = Process.GetProcessesByName("RobloxPlayerInstaller");
-            if (ups.Length == 0) return;
-            if (openClients == 0)
-            {
-                foreach (Process p in ups) p.Dispose();
-                return;   // nothing to protect - let Roblox update normally
-            }
+            if (ups.Count == 0) return;
+            if (openClients == 0) return;   // nothing to protect - let Roblox update normally
 
             int pendingPid; string pendingArgs, pendingVersion;
-            bool hasPending = FindPendingLaunch(out pendingPid, out pendingArgs, out pendingVersion);
+            bool hasPending = FindPendingLaunch(snapshot, out pendingPid, out pendingArgs, out pendingVersion);
             string target = hasPending ? PickOtherVersion(pendingVersion) : null;
 
             // A join ticket is single-use: redirecting the same launch twice burns
@@ -1609,7 +1634,7 @@ namespace RobloxKeeper
                 if (pendingArgs == lastRedirectArgs ||
                     (DateTime.Now - lastRedirectAt).TotalSeconds < 20)
                 {
-                    foreach (Process p in ups) { try { p.Kill(); } catch { } p.Dispose(); }
+                    foreach (Process p in ups) { try { p.Kill(); } catch { } }
                     return;
                 }
                 lastRedirectArgs = pendingArgs;
@@ -1618,7 +1643,7 @@ namespace RobloxKeeper
 
             if (hasPending && target != null)
             {
-                foreach (Process p in ups) { try { p.Kill(); } catch { } p.Dispose(); }
+                foreach (Process p in ups) { try { p.Kill(); } catch { } }
                 try { using (Process p = Process.GetProcessById(pendingPid)) p.Kill(); } catch { }
 
                 string exe = Path.Combine(
@@ -1641,11 +1666,7 @@ namespace RobloxKeeper
 
             // No launch waiting: this is a background update, so keep it away from
             // the running clients. It will install once everything is closed.
-            foreach (Process p in ups)
-            {
-                try { p.Kill(); } catch { }
-                p.Dispose();
-            }
+            foreach (Process p in ups) { try { p.Kill(); } catch { } }
             if (!updateHeldLogged)
             {
                 updateHeldLogged = true;
