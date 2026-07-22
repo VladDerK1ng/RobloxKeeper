@@ -1,0 +1,4 @@
+# Batch files must be CRLF or cmd.exe misparses multi-line blocks
+*.bat text eol=crlf
+# Keep everything else on default auto handling
+* text=auto
