@@ -187,12 +187,11 @@ namespace RobloxKeeper
         struct INPUT { public uint type; public InputUnion U; }
         struct ClientInfo { public int Pid; public IntPtr Hwnd; public DateTime Start; }
 
-        const string APP_VERSION = "2.5.0";
+        const string APP_VERSION = "3.0.0";
 
         const string RUN_KEY = "Software\\Microsoft\\Windows\\CurrentVersion\\Run";
         const string AUTOSTART_VALUE = "RobloxKeeper";
         const int GHOST_MAX_AGE_SECONDS = 150;  // a client can sit window-less for a while on a slow launch
-        const int PROTECT_PAUSE_SECONDS = 120;  // long enough for a launch that needs the installer
 
         const uint INPUT_KEYBOARD = 1;
         const uint KEYEVENTF_EXTENDEDKEY = 0x0001;
@@ -216,10 +215,10 @@ namespace RobloxKeeper
         bool heldLogged;
         CheckBox chkAfk, chkMulti;
         NumericUpDown numInterval;
-        ComboBox cmbKeys, cmbVersion;
-        Button btnNudge, btnZombie, btnCloseRbx, btnAllowUpdate;
-        CheckBox chkAutoVersion;
-        CheckBox chkAutostart, chkAutoGhost, chkProtect;
+        ComboBox cmbKeys;
+        Button btnNudge, btnZombie, btnCloseRbx;
+        bool updateHeldLogged;
+        CheckBox chkAutostart, chkAutoGhost;
         Label lblCountdown, lblDot, lblMultiStatus, lblClientsTitle, lblGhosts, lblUpdating;
         ScrollPanel clientsPanel;
         RichTextBox rtbLog;
@@ -236,10 +235,6 @@ namespace RobloxKeeper
         bool updatingShown;
         bool versionConflictLogged;
         string lastRegisteredVersion;
-        DateTime protectPausedUntil = DateTime.MinValue;
-        bool protectPauseShown;
-        bool suppressVersionEvent;
-        bool versionFlipSeen;
         readonly List<string> seenClientVersions = new List<string>();
         readonly Dictionary<int, DateTime> knownClients = new Dictionary<int, DateTime>();
         DateTime lastClientOpened = DateTime.MinValue;
@@ -251,7 +246,7 @@ namespace RobloxKeeper
             Text = "RobloxKeeper";
             FormBorderStyle = FormBorderStyle.FixedSingle;
             MaximizeBox = false;
-            ClientSize = new Size(460, 826);
+            ClientSize = new Size(460, 748);
             StartPosition = FormStartPosition.CenterScreen;
             BackColor = Theme.Bg;
             ForeColor = Theme.Text;
@@ -271,11 +266,9 @@ namespace RobloxKeeper
             Log("RobloxKeeper v" + APP_VERSION + " started.");
 
             initializing = true;
-            bool afk, multi, autoghost, protect, autoversion;
+            bool afk, multi, autoghost;
             int intervalMin, keysIdx;
-            LoadSettings(out afk, out intervalMin, out keysIdx, out multi, out autoghost, out protect, out autoversion);
-            chkProtect.Checked = protect;
-            chkAutoVersion.Checked = autoversion;
+            LoadSettings(out afk, out intervalMin, out keysIdx, out multi, out autoghost);
             if (intervalMin < 1) intervalMin = 1;
             if (intervalMin > 19) intervalMin = 19;
             numInterval.Value = intervalMin;
@@ -484,7 +477,7 @@ namespace RobloxKeeper
             // --- Multi-instance card ---
             Card cardMulti = new Card();
             cardMulti.Location = new Point(16, 416);
-            cardMulti.Size = new Size(428, 196);
+            cardMulti.Size = new Size(428, 118);
             Controls.Add(cardMulti);
 
             cardMulti.Controls.Add(SectionTitle("MULTI-INSTANCE"));
@@ -516,80 +509,14 @@ namespace RobloxKeeper
             btnCloseRbx.Click += delegate { CloseAllRoblox(); };
             cardMulti.Controls.Add(btnCloseRbx);
 
-            chkProtect = new CheckBox();
-            chkProtect.Text = "Block Roblox updater while clients are open";
-            chkProtect.AutoSize = true;
-            chkProtect.Location = new Point(18, 84);
-            chkProtect.Font = new Font("Segoe UI", 8.75f);
-            chkProtect.ForeColor = Theme.Text;
-            chkProtect.BackColor = Theme.Card;
-            chkProtect.Cursor = Cursors.Hand;
-            chkProtect.TabStop = false;
-            chkProtect.Checked = true;
-            chkProtect.CheckedChanged += delegate
-            {
-                if (!initializing)
-                    Log(chkProtect.Checked
-                        ? "Updater blocking ON - Roblox cannot close your open clients to update."
-                        : "Updater blocking OFF - Roblox may close all clients when it updates.");
-                SaveSettings();
-            };
-            cardMulti.Controls.Add(chkProtect);
-
-            btnAllowUpdate = AccentButton("Allow update", 292, 80, 116, 26);
-            btnAllowUpdate.Font = new Font("Segoe UI", 8.25f, FontStyle.Bold);
-            btnAllowUpdate.Click += delegate
-            {
-                protectPausedUntil = DateTime.Now.AddSeconds(PROTECT_PAUSE_SECONDS);
-                protectPauseShown = true;
-                Log("Updater blocking paused for " + (PROTECT_PAUSE_SECONDS / 60) + " minutes - Roblox may now " +
-                    "install/update. Open the account that would not launch. Your other clients can close during " +
-                    "this window; reopen them once it finishes.");
-            };
-            cardMulti.Controls.Add(btnAllowUpdate);
-
-            chkAutoVersion = new CheckBox();
-            chkAutoVersion.Text = "Auto-pick version for each account";
-            chkAutoVersion.AutoSize = true;
-            chkAutoVersion.Location = new Point(18, 110);
-            chkAutoVersion.Font = new Font("Segoe UI", 8.75f);
-            chkAutoVersion.ForeColor = Theme.Text;
-            chkAutoVersion.BackColor = Theme.Card;
-            chkAutoVersion.Cursor = Cursors.Hand;
-            chkAutoVersion.TabStop = false;
-            chkAutoVersion.Checked = true;
-            chkAutoVersion.CheckedChanged += delegate
-            {
-                if (!initializing)
-                    Log(chkAutoVersion.Checked
-                        ? "Auto version ON - the next launch is pointed at the other installed version automatically."
-                        : "Auto version OFF - choose the version yourself below.");
-                SaveSettings();
-            };
-            cardMulti.Controls.Add(chkAutoVersion);
-
-            Label lblVerPick = MutedLabel("Next launch", 20, 140, 8.25f);
-            cardMulti.Controls.Add(lblVerPick);
-
-            cmbVersion = new ComboBox();
-            cmbVersion.DropDownStyle = ComboBoxStyle.DropDownList;
-            cmbVersion.FlatStyle = FlatStyle.Flat;
-            cmbVersion.BackColor = Theme.Inset;
-            cmbVersion.ForeColor = Theme.Text;
-            cmbVersion.Location = new Point(96, 136);
-            cmbVersion.Width = 312;
-            cmbVersion.TabStop = false;
-            cmbVersion.SelectedIndexChanged += delegate { OnVersionPicked(); };
-            cardMulti.Controls.Add(cmbVersion);
-
-            lblUpdating = MutedLabel("One account can't join two games at once \u2014 use separate accounts.",
-                20, 168, 8.25f);
+            lblUpdating = MutedLabel("Different accounts needing different Roblox versions are handled automatically.",
+                20, 84, 8.25f);
             cardMulti.Controls.Add(lblUpdating);
 
             // --- Activity card ---
             Card cardLog = new Card();
             cardLog.BackColor = Theme.Inset;
-            cardLog.Location = new Point(16, 626);
+            cardLog.Location = new Point(16, 548);
             cardLog.Size = new Size(428, 184);
             Controls.Add(cardLog);
 
@@ -1296,7 +1223,6 @@ namespace RobloxKeeper
             }
             UpdateMultiStatus();
             btnCloseRbx.Visible = chkMulti.Checked && !keeper.Held;
-            RefreshVersionList();
 
             int ghosts;
             List<ClientInfo> clients = GetClients(out ghosts);
@@ -1324,7 +1250,6 @@ namespace RobloxKeeper
                     ". Two installs are taking turns claiming Roblox; each hand-over runs an " +
                     "installer that closes every open client. This repeats forever until one is removed. " +
                     "Launchers present: " + ThirdPartyLaunchers());
-                versionFlipSeen = true;
                 lastRegisteredVersion = regNow;
             }
 
@@ -1333,29 +1258,7 @@ namespace RobloxKeeper
             // closes every running client to replace files. Stopping the installer
             // WHILE clients are open keeps the session alive; when nothing is
             // running it is left alone, so Roblox still updates normally.
-            bool paused = DateTime.Now < protectPausedUntil;
-            if (paused != protectPauseShown)
-            {
-                protectPauseShown = paused;
-                if (!paused) Log("Updater blocking resumed - your open clients are protected again.");
-            }
-            if (chkProtect != null && chkProtect.Checked && !paused && clients.Count > 0)
-            {
-                Process[] ups = Process.GetProcessesByName("RobloxPlayerInstaller");
-                foreach (Process up in ups)
-                {
-                    string where = PathOf(up);
-                    try
-                    {
-                        up.Kill();
-                        Log("BLOCKED Roblox updater (" + VersionFolderOf(where) + ") - it was about to close your " +
-                            clients.Count + " open client(s). Your session is safe. Roblox will update normally once " +
-                            "you close all clients.");
-                    }
-                    catch (Exception ex) { Log("Could not block the Roblox updater: " + ex.Message); }
-                    finally { up.Dispose(); }
-                }
-            }
+            HandleVersionSwitch(clients.Count);
 
             bool installerRunning = AnyProcess("RobloxPlayerInstaller") || AnyProcess("RobloxPlayerLauncher");
             if (installerRunning && !installerSeen)
@@ -1422,7 +1325,6 @@ namespace RobloxKeeper
                                  "NOT held (a Roblox process owns it) \u2014 THIS CAN CLOSE YOUR OTHER CLIENTS."));
                 if (clientVer != "?" && !seenClientVersions.Contains(clientVer))
                     seenClientVersions.Add(clientVer);
-                AutoPickNextVersion(clientVer);
                 WarnOnVersionConflict(clientVer);
             }
 
@@ -1586,80 +1488,102 @@ namespace RobloxKeeper
             return sb.ToString();
         }
 
-        void RefreshVersionList()
+        // A Roblox client that is starting but has not drawn a window yet, holding
+        // the roblox-player:// URL from the browser. This is the launch that is
+        // about to make Roblox reinstall, and its URL is what lets us redirect it.
+        bool FindPendingLaunch(out int pid, out string args, out string version)
         {
-            List<string> vers = InstalledVersionList();
-            string current = LaunchPathVersion();
-
-            bool same = cmbVersion.Items.Count == vers.Count;
-            if (same)
-                for (int i = 0; i < vers.Count; i++)
-                    if ((string)cmbVersion.Items[i] != vers[i]) { same = false; break; }
-
-            if (!same)
+            pid = 0; args = null; version = null;
+            DateTime best = DateTime.MinValue;
+            foreach (Process p in Process.GetProcessesByName(ROBLOX_PROCESS))
             {
-                suppressVersionEvent = true;
-                cmbVersion.Items.Clear();
-                foreach (string v in vers) cmbVersion.Items.Add(v);
-                suppressVersionEvent = false;
+                try
+                {
+                    if (p.MainWindowHandle != IntPtr.Zero) continue;
+                    DateTime started;
+                    try { started = p.StartTime; } catch { continue; }
+                    if ((DateTime.Now - started).TotalSeconds > 150) continue;
+                    string a = ArgsOf(CommandLineOf(p.Id));
+                    if (string.IsNullOrEmpty(a)) continue;
+                    if (started > best)
+                    {
+                        best = started; pid = p.Id; args = a; version = VersionFolderOf(PathOf(p));
+                    }
+                }
+                catch { }
+                finally { p.Dispose(); }
             }
-
-            int idx = cmbVersion.Items.IndexOf(current);
-            if (idx >= 0 && cmbVersion.SelectedIndex != idx)
-            {
-                suppressVersionEvent = true;
-                cmbVersion.SelectedIndex = idx;
-                suppressVersionEvent = false;
-            }
+            return pid != 0;
         }
 
-        // Once this machine is known to hand different accounts different client
-        // versions, point the NEXT launch at the other installed version as soon
-        // as a client opens. The following account then already matches, so Roblox
-        // never runs the installer that would close everything.
-        // Only engages after the problem is actually observed, so ordinary
-        // single-version setups are never touched.
-        void AutoPickNextVersion(string justOpenedVersion)
+        string PickOtherVersion(string notThis)
         {
-            if (chkAutoVersion == null || !chkAutoVersion.Checked) return;
-            if (!versionFlipSeen && seenClientVersions.Count < 2) return;
-            if (justOpenedVersion == "?") return;
-
             List<string> installed = InstalledVersionList();
-            if (installed.Count < 2) return;
-
             string other = null;
             foreach (string v in installed)
-                if (!string.Equals(v, justOpenedVersion, StringComparison.OrdinalIgnoreCase))
-                {
-                    if (seenClientVersions.Contains(v)) { other = v; break; }   // prefer a version an account really used
-                    if (other == null) other = v;
-                }
-            if (other == null) return;
-            if (string.Equals(other, LaunchPathVersion(), StringComparison.OrdinalIgnoreCase)) return;
-
-            if (SetRegisteredVersion(other))
             {
-                lastRegisteredVersion = other;
-                Log("Auto version: next launch set to " + other + " (this client uses " + justOpenedVersion +
-                    "). Open your other account now - it will start without Roblox reinstalling.");
+                if (string.Equals(v, notThis, StringComparison.OrdinalIgnoreCase)) continue;
+                if (seenClientVersions.Contains(v)) return v;   // one an account really used
+                if (other == null) other = v;
             }
+            return other;
         }
 
-        void OnVersionPicked()
+        // Roblox hands different accounts different client versions and reinstalls
+        // to switch, and that installer closes every open client. When the version
+        // an account wants is already installed, no install is needed at all: point
+        // Roblox at it and start that client directly with the same join URL. The
+        // running clients are then never touched.
+        void HandleVersionSwitch(int openClients)
         {
-            if (suppressVersionEvent || cmbVersion.SelectedItem == null) return;
-            string want = (string)cmbVersion.SelectedItem;
-            if (string.Equals(want, LaunchPathVersion(), StringComparison.OrdinalIgnoreCase)) return;
-            if (SetRegisteredVersion(want))
+            Process[] ups = Process.GetProcessesByName("RobloxPlayerInstaller");
+            if (ups.Length == 0) return;
+            if (openClients == 0)
             {
-                lastRegisteredVersion = want;   // our own change is not a Roblox flip
-                Log("Next Roblox launch will use " + want + ". Open that account now - because Roblox is " +
-                    "already pointed at the version it wants, it has no reason to reinstall, so your other " +
-                    "clients stay open.");
+                foreach (Process p in ups) p.Dispose();
+                return;   // nothing to protect - let Roblox update normally
             }
-            else
-                Log("Could not point Roblox at " + want + " - the version folder or exe is missing.");
+
+            int pendingPid; string pendingArgs, pendingVersion;
+            bool hasPending = FindPendingLaunch(out pendingPid, out pendingArgs, out pendingVersion);
+            string target = hasPending ? PickOtherVersion(pendingVersion) : null;
+
+            if (hasPending && target != null)
+            {
+                foreach (Process p in ups) { try { p.Kill(); } catch { } p.Dispose(); }
+                try { using (Process p = Process.GetProcessById(pendingPid)) p.Kill(); } catch { }
+
+                string exe = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "Roblox", "Versions", target, "RobloxPlayerBeta.exe");
+                if (File.Exists(exe) && SetRegisteredVersion(target))
+                {
+                    lastRegisteredVersion = target;
+                    try
+                    {
+                        Process.Start(new ProcessStartInfo(exe, pendingArgs) { UseShellExecute = false });
+                        Log("This account needs a different Roblox version - started it on " + target +
+                            " directly, so no reinstall was needed and your " + openClients +
+                            " other client(s) stayed open.");
+                    }
+                    catch (Exception ex) { Log("Could not start the client on " + target + ": " + ex.Message); }
+                }
+                return;
+            }
+
+            // No launch waiting: this is a background update, so keep it away from
+            // the running clients. It will install once everything is closed.
+            foreach (Process p in ups)
+            {
+                try { p.Kill(); } catch { }
+                p.Dispose();
+            }
+            if (!updateHeldLogged)
+            {
+                updateHeldLogged = true;
+                Log("Roblox tried to update while you were playing - held it back so your clients stay open. " +
+                    "It will update by itself once you close them all.");
+            }
         }
 
         // Desktop/Start-menu shortcuts hard-code a version path, so they bypass
@@ -1754,6 +1678,43 @@ namespace RobloxKeeper
             bool any = procs.Length > 0;
             foreach (Process p in procs) p.Dispose();
             return any;
+        }
+
+        static string CommandLineOf(int pid)
+        {
+            try
+            {
+                using (ManagementObjectSearcher s = new ManagementObjectSearcher(
+                    "SELECT CommandLine FROM Win32_Process WHERE ProcessId = " + pid))
+                {
+                    foreach (ManagementObject mo in s.Get())
+                        return mo["CommandLine"] as string;
+                }
+            }
+            catch { }
+            return null;
+        }
+
+        // Everything after the executable path - for a browser launch this is the
+        // roblox-player:// URL carrying the join ticket.
+        static string ArgsOf(string commandLine)
+        {
+            if (string.IsNullOrEmpty(commandLine)) return null;
+            string rest;
+            if (commandLine.StartsWith("\""))
+            {
+                int close = commandLine.IndexOf('"', 1);
+                if (close < 0) return null;
+                rest = commandLine.Substring(close + 1);
+            }
+            else
+            {
+                int sp = commandLine.IndexOf(' ');
+                if (sp < 0) return null;
+                rest = commandLine.Substring(sp);
+            }
+            rest = rest.Trim();
+            return rest.Length == 0 ? null : rest;
         }
 
         static string PathOf(Process p)
@@ -2172,8 +2133,6 @@ namespace RobloxKeeper
                 Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath));
                 File.WriteAllLines(SettingsPath, new string[]
                 {
-                    "protect=" + (chkProtect.Checked ? "1" : "0"),
-                    "autoversion=" + (chkAutoVersion.Checked ? "1" : "0"),
                     "afk=" + (chkAfk.Checked ? "1" : "0"),
                     "interval=" + ((int)numInterval.Value).ToString(),
                     "keys=" + cmbKeys.SelectedIndex.ToString(),
@@ -2184,11 +2143,9 @@ namespace RobloxKeeper
             catch { }
         }
 
-        void LoadSettings(out bool afk, out int intervalMin, out int keysIdx, out bool multi, out bool autoghost,
-                          out bool protect, out bool autoversion)
+        void LoadSettings(out bool afk, out int intervalMin, out int keysIdx, out bool multi, out bool autoghost)
         {
-            afk = true; intervalMin = 15; keysIdx = 1; multi = true; autoghost = true; protect = true;
-            autoversion = true;
+            afk = true; intervalMin = 15; keysIdx = 1; multi = true; autoghost = true;
             try
             {
                 if (!File.Exists(SettingsPath)) return;
@@ -2204,8 +2161,6 @@ namespace RobloxKeeper
                     else if (key == "keys") { if (int.TryParse(val, out tmp)) keysIdx = tmp; }
                     else if (key == "multi") multi = val == "1";
                     else if (key == "autoghost") autoghost = val == "1";
-                    else if (key == "protect") protect = val == "1";
-                    else if (key == "autoversion") autoversion = val == "1";
                 }
             }
             catch { }
@@ -2281,6 +2236,7 @@ namespace RobloxKeeper
         }
     }
 }
+
 
 
 
