@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
@@ -7,7 +7,9 @@ using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows.Forms;
 using System.IO;
+using System.Net;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Management;
 using Microsoft.Win32;
 
@@ -284,6 +286,7 @@ namespace RobloxKeeper
                 " \u00B7 multi-instance " + (multi ? "on" : "off") + ".");
             CheckLaunchPath();
             FixStaleShortcuts();
+            CheckForUpdate();
             OnUiTick();
         }
 
@@ -770,7 +773,7 @@ namespace RobloxKeeper
             if (!chkAfk.Checked) nudgeTimer.Stop();
             if (!initializing)
                 Log(chkAfk.Checked
-                    ? "Anti-AFK enabled \u2014 interval " + numInterval.Value + " min. The timer runs while a client is open."
+                    ? "Anti-AFK enabled - interval " + numInterval.Value + " min. The timer runs while a client is open."
                     : "Anti-AFK disabled.");
             UpdateAfkTimer(NudgeableClientCount());
             UpdateCountdown();
@@ -953,12 +956,12 @@ namespace RobloxKeeper
             if (chkMulti.Checked)
             {
                 StartMulti();
-                if (!initializing) Log("Multi-instance enabled \u2014 queued for the singleton mutex.");
+                if (!initializing) Log("Multi-instance enabled - queued for the singleton mutex.");
             }
             else
             {
                 StopMulti();
-                if (!initializing) Log("Multi-instance disabled \u2014 mutex released.");
+                if (!initializing) Log("Multi-instance disabled - mutex released.");
             }
             UpdateMultiStatus();
             SaveSettings();
@@ -1167,7 +1170,7 @@ namespace RobloxKeeper
                 PostMessage(ci.Hwnd, WM_CLOSE, IntPtr.Zero, IntPtr.Zero);
             if (ghosts > 0) KillZombies();
             lastCloseRequest = DateTime.Now;
-            Log("Close request sent to " + clients.Count + " client(s) \u2014 taking the mutex as soon as they exit.");
+            Log("Close request sent to " + clients.Count + " client(s) - taking the mutex as soon as they exit.");
         }
 
         void UpdateMultiStatus()
@@ -1175,17 +1178,17 @@ namespace RobloxKeeper
             if (!chkMulti.Checked)
             {
                 lblDot.ForeColor = Theme.Muted;
-                lblMultiStatus.Text = "Disabled \u2014 a new Roblox client will replace the running one.";
+                lblMultiStatus.Text = "Disabled - a new Roblox client will replace the running one.";
             }
             else if (keeper.Held)
             {
                 lblDot.ForeColor = Theme.Green;
-                lblMultiStatus.Text = "Active \u2014 singleton mutex held. New clients stay open.";
+                lblMultiStatus.Text = "Active - singleton mutex held. New clients stay open.";
             }
             else
             {
                 lblDot.ForeColor = Theme.Amber;
-                lblMultiStatus.Text = "Waiting \u2014 a Roblox client owns the mutex. Close every client and I take over instantly.";
+                lblMultiStatus.Text = "Waiting - a Roblox client owns the mutex. Close every client and I take over instantly.";
             }
         }
 
@@ -1198,7 +1201,7 @@ namespace RobloxKeeper
                     if (chkAutostart.Checked)
                     {
                         k.SetValue(AUTOSTART_VALUE, "\"" + Application.ExecutablePath + "\" --minimized");
-                        Log("Autostart enabled \u2014 starts minimized to the tray with Windows.");
+                        Log("Autostart enabled - starts minimized to the tray with Windows.");
                     }
                     else
                     {
@@ -1258,7 +1261,7 @@ namespace RobloxKeeper
             if (chkMulti.Checked && keeper.Held && !heldLogged)
             {
                 heldLogged = true;
-                Log("Multi-instance active \u2014 singleton mutex acquired.");
+                Log("Multi-instance active - singleton mutex acquired.");
             }
             UpdateMultiStatus();
             btnCloseRbx.Visible = chkMulti.Checked && !keeper.Held;
@@ -1329,7 +1332,7 @@ namespace RobloxKeeper
                 updatingShown = updating;
                 lblUpdating.Text = updating
                     ? "Roblox is UPDATING - it closes every open client once. Reopen them after."
-                    : "One account can't join two games at once \u2014 use separate accounts.";
+                    : "One account can't join two games at once - use separate accounts.";
                 lblUpdating.ForeColor = updating ? Theme.Amber : Theme.Muted;
                 lblUpdating.Font = new Font("Segoe UI", 8.25f, updating ? FontStyle.Bold : FontStyle.Regular);
             }
@@ -1369,9 +1372,9 @@ namespace RobloxKeeper
                 lastClientOpened = DateTime.Now;
                 string clientVer = VersionOfPid(ci.Pid);
                 Log("Client PID " + ci.Pid + " [" + clientVer + "] opened, launched by " + ParentOf(ci.Pid) +
-                    " \u2014 mutex " +
+                    " - mutex " +
                     (mutexHeld ? "HELD by RobloxKeeper, other clients are safe." :
-                                 "NOT held (a Roblox process owns it) \u2014 THIS CAN CLOSE YOUR OTHER CLIENTS."));
+                                 "NOT held (a Roblox process owns it) - THIS CAN CLOSE YOUR OTHER CLIENTS."));
                 if (clientVer != "?" && !seenClientVersions.Contains(clientVer))
                     seenClientVersions.Add(clientVer);
                 WarnOnVersionConflict(clientVer);
@@ -1398,15 +1401,15 @@ namespace RobloxKeeper
                     why = "the Roblox launcher/bootstrapper ran and closed it. This is Roblox's own installer, " +
                           "not the mutex - it happens even while RobloxKeeper holds the mutex.";
                 else if (!mutexHeld && sinceOther < 30 && lastClientOpened != DateTime.MinValue)
-                    why = "SINGLETON KILL \u2014 another client launched " + ((int)sinceOther) +
+                    why = "SINGLETON KILL - another client launched " + ((int)sinceOther) +
                           "s ago while a Roblox process (not RobloxKeeper) owned the mutex. Fix: close all clients, wait for the green light, then reopen.";
                 else if ((DateTime.Now - lastCloseRequest).TotalSeconds < 20)
                     why = "closed by your \"Close all Roblox\" request.";
                 else if (!mutexHeld)
-                    why = "closed while the mutex was NOT held by RobloxKeeper \u2014 check the multi-instance light.";
+                    why = "closed while the mutex was NOT held by RobloxKeeper - check the multi-instance light.";
                 else
                     why = "closed normally - RobloxKeeper held the mutex, so this was NOT a singleton kill (you or the game closed it).";
-                Log("Client PID " + pid + " ended after " + ((int)lived) + "s \u2014 " + why);
+                Log("Client PID " + pid + " ended after " + ((int)lived) + "s - " + why);
             }
 
             clientTrackingReady = true;
@@ -1731,7 +1734,7 @@ namespace RobloxKeeper
                     "Roblox shortcuts: " + DescribeShortcuts() + "\r\n" +
                     "----------------------------------------\r\n";
                 Clipboard.SetText(header + rtbLog.Text);
-                Log("Log copied to clipboard \u2014 paste it wherever you need.");
+                Log("Log copied to clipboard - paste it wherever you need.");
             }
             catch (Exception ex) { Log("Copy failed: " + ex.Message); }
         }
@@ -2228,6 +2231,142 @@ namespace RobloxKeeper
                 }
             }
             catch { }
+        }
+
+        // ---------- Updates ----------
+
+        const string RELEASE_API = "https://api.github.com/repos/VladDerK1ng/RobloxKeeper/releases/latest";
+
+        static string JsonString(string json, string key)
+        {
+            Match m = Regex.Match(json, "\"" + key + "\"\\s*:\\s*\"([^\"]*)\"");
+            return m.Success ? m.Groups[1].Value : null;
+        }
+
+        static string FindExeAsset(string json)
+        {
+            foreach (Match m in Regex.Matches(json, "\"browser_download_url\"\\s*:\\s*\"([^\"]+)\""))
+            {
+                string u = m.Groups[1].Value;
+                if (u.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) return u;
+            }
+            return null;
+        }
+
+        static bool IsNewer(string remote, string local)
+        {
+            try
+            {
+                Version a = new Version(Normalise(remote));
+                Version b = new Version(Normalise(local));
+                return a > b;
+            }
+            catch { return false; }
+        }
+
+        static string Normalise(string v)
+        {
+            if (string.IsNullOrEmpty(v)) return "0.0";
+            v = v.Trim().TrimStart('v', 'V').Split('-')[0].Trim();
+            return v.IndexOf('.') < 0 ? v + ".0" : v;
+        }
+
+        // Checks GitHub for a newer release in the background. Anything that goes
+        // wrong (no network, rate limit, odd response) is ignored silently - an
+        // update check must never get in the way of running the app.
+        void CheckForUpdate()
+        {
+            Thread t = new Thread(delegate()
+            {
+                string tag = null, url = null;
+                try
+                {
+                    ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072;   // TLS 1.2
+                    HttpWebRequest req = (HttpWebRequest)WebRequest.Create(RELEASE_API);
+                    req.UserAgent = "RobloxKeeper";
+                    req.Timeout = 15000;
+                    string json;
+                    using (WebResponse resp = req.GetResponse())
+                    using (StreamReader sr = new StreamReader(resp.GetResponseStream()))
+                        json = sr.ReadToEnd();
+                    tag = JsonString(json, "tag_name");
+                    url = FindExeAsset(json);
+                }
+                catch { return; }
+
+                if (tag == null || url == null || !IsNewer(tag, APP_VERSION)) return;
+                string ver = Normalise(tag), link = url;
+                try { BeginInvoke((MethodInvoker)delegate { OfferUpdate(ver, link); }); }
+                catch { }
+            });
+            t.IsBackground = true;
+            t.Start();
+        }
+
+        void OfferUpdate(string version, string url)
+        {
+            Log("Version " + version + " is available (you have " + APP_VERSION + ").");
+            if (MessageBox.Show(this,
+                    "RobloxKeeper " + version + " is available.\r\nYou are running " + APP_VERSION + ".\r\n\r\n" +
+                    "Download it and restart now?",
+                    "Update available", MessageBoxButtons.YesNo, MessageBoxIcon.Information) != DialogResult.Yes)
+            {
+                Log("Update skipped. It will be offered again next time you start.");
+                return;
+            }
+            InstallUpdate(version, url);
+        }
+
+        // The running exe cannot overwrite itself, so a tiny script waits for this
+        // process to exit, swaps the file, and starts the new one.
+        void InstallUpdate(string version, string url)
+        {
+            string exe = Application.ExecutablePath;
+            string staged = exe + ".new";
+            try
+            {
+                Log("Downloading version " + version + "...");
+                ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072;
+                using (WebClient wc = new WebClient())
+                {
+                    wc.Headers.Add("User-Agent", "RobloxKeeper");
+                    wc.DownloadFile(url, staged);
+                }
+                if (!File.Exists(staged) || new FileInfo(staged).Length < 10000)
+                {
+                    Log("Update download looked incomplete - keeping the current version.");
+                    try { File.Delete(staged); } catch { }
+                    return;
+                }
+
+                string bat = Path.Combine(Path.GetTempPath(), "RobloxKeeperUpdate.bat");
+                string script =
+                    "@echo off\r\n" +
+                    ":wait\r\n" +
+                    "tasklist /fi \"imagename eq RobloxKeeper.exe\" | find /i \"RobloxKeeper.exe\" >nul\r\n" +
+                    "if not errorlevel 1 (\r\n" +
+                    "  ping -n 2 127.0.0.1 >nul\r\n" +
+                    "  goto wait\r\n" +
+                    ")\r\n" +
+                    "move /y \"" + staged + "\" \"" + exe + "\" >nul\r\n" +
+                    "start \"\" \"" + exe + "\"\r\n" +
+                    "del \"%~f0\"\r\n";
+                File.WriteAllText(bat, script, Encoding.ASCII);
+
+                ProcessStartInfo psi = new ProcessStartInfo(bat);
+                psi.WindowStyle = ProcessWindowStyle.Hidden;
+                psi.CreateNoWindow = true;
+                psi.UseShellExecute = true;
+                Process.Start(psi);
+
+                Log("Update ready - restarting into version " + version + ".");
+                Close();
+            }
+            catch (Exception ex)
+            {
+                Log("Update failed: " + ex.Message + " - you can download it from the GitHub releases page.");
+                try { if (File.Exists(staged)) File.Delete(staged); } catch { }
+            }
         }
 
         void RestoreFromTray()

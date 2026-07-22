@@ -1,4 +1,4 @@
-# Generates app.ico — violet rounded tile with a tilted white square and a green "alive" dot.
+# Generates app.ico - violet rounded tile with a tilted white square and a green "alive" dot.
 Add-Type -AssemblyName System.Drawing
 
 function RoundPath([float]$x, [float]$y, [float]$w, [float]$h, [float]$r) {
