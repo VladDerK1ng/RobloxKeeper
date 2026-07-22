@@ -185,7 +185,7 @@ namespace RobloxKeeper
         struct INPUT { public uint type; public InputUnion U; }
         struct ClientInfo { public int Pid; public IntPtr Hwnd; public DateTime Start; }
 
-        const string APP_VERSION = "1.6.1";
+        const string APP_VERSION = "1.7.0";
 
         const string RUN_KEY = "Software\\Microsoft\\Windows\\CurrentVersion\\Run";
         const string AUTOSTART_VALUE = "RobloxKeeper";
@@ -274,6 +274,7 @@ namespace RobloxKeeper
             UpdateCountdown();
             Log("Settings: Anti-AFK " + (afk ? "on, " + intervalMin + " min, " + cmbKeys.Text : "off") +
                 " \u00B7 multi-instance " + (multi ? "on" : "off") + ".");
+            CheckLaunchPath();
             OnUiTick();
         }
 
@@ -1074,7 +1075,10 @@ namespace RobloxKeeper
             if (installerRunning && !installerSeen)
             {
                 updaterSeenAt = DateTime.Now;
-                Log("Roblox launcher/updater detected \u2014 if an update installs, ALL open clients close once. Reopen them after; multi-instance resumes automatically.");
+                Log("Roblox launcher/bootstrapper is running - it can close open clients regardless of the mutex." +
+                    (UsesLegacyBootstrapper()
+                        ? " Your install uses it on EVERY launch - reinstall Roblox from roblox.com to stop this."
+                        : " Reopen your clients when it finishes."));
                 try
                 {
                     tray.BalloonTipTitle = "Roblox is updating";
@@ -1147,7 +1151,8 @@ namespace RobloxKeeper
                 double sinceOther = (DateTime.Now - lastClientOpened).TotalSeconds;
                 string why;
                 if (installerRunning)
-                    why = "Roblox was updating \u2014 its updater closes every open client. Not a RobloxKeeper problem; reopen them.";
+                    why = "the Roblox launcher/bootstrapper ran and closed it. This is Roblox's own installer, " +
+                          "not the mutex - it happens even while RobloxKeeper holds the mutex.";
                 else if (!mutexHeld && sinceOther < 30 && lastClientOpened != DateTime.MinValue)
                     why = "SINGLETON KILL \u2014 another client launched " + ((int)sinceOther) +
                           "s ago while a Roblox process (not RobloxKeeper) owned the mutex. Fix: close all clients, wait for the green light, then reopen.";
@@ -1161,6 +1166,54 @@ namespace RobloxKeeper
             }
 
             clientTrackingReady = true;
+        }
+
+        // How Windows launches Roblox when you press Play on the website.
+        // A handler pointing at RobloxPlayerLauncher/Installer means the legacy
+        // bootstrapper runs on every launch, and that closes running clients
+        // regardless of who holds the singleton mutex.
+        static string RobloxLaunchCommand()
+        {
+            string[] roots = { "roblox-player", "roblox" };
+            foreach (string proto in roots)
+            {
+                try
+                {
+                    using (RegistryKey k = Registry.CurrentUser.OpenSubKey(
+                        "Software\\Classes\\" + proto + "\\shell\\open\\command"))
+                    {
+                        string v = k != null ? k.GetValue("") as string : null;
+                        if (!string.IsNullOrEmpty(v)) return v;
+                    }
+                }
+                catch { }
+                try
+                {
+                    using (RegistryKey k = Registry.ClassesRoot.OpenSubKey(
+                        proto + "\\shell\\open\\command"))
+                    {
+                        string v = k != null ? k.GetValue("") as string : null;
+                        if (!string.IsNullOrEmpty(v)) return v;
+                    }
+                }
+                catch { }
+            }
+            return "(not registered)";
+        }
+
+        static bool UsesLegacyBootstrapper()
+        {
+            string cmd = RobloxLaunchCommand().ToLowerInvariant();
+            return cmd.Contains("robloxplayerlauncher") || cmd.Contains("robloxplayerinstaller");
+        }
+
+        void CheckLaunchPath()
+        {
+            if (UsesLegacyBootstrapper())
+                Log("WARNING: Roblox launches through the legacy bootstrapper " +
+                    "(RobloxPlayerLauncher). It closes running clients on every launch, " +
+                    "even while RobloxKeeper holds the mutex. Fix: reinstall Roblox from " +
+                    "roblox.com so Play opens RobloxPlayerBeta.exe directly.");
         }
 
         // Environment.OSVersion is compatibility-shimmed for this framework target
@@ -1199,6 +1252,8 @@ namespace RobloxKeeper
                     ", mutex held: " + keeper.Held + "\r\n" +
                     "Anti-AFK: " + (chkAfk.Checked ? "on, " + numInterval.Value + " min, " + cmbKeys.Text : "off") + "\r\n" +
                     "Autostart: " + chkAutostart.Checked + ", auto-clear ghosts: " + chkAutoGhost.Checked + "\r\n" +
+                    "Launch path: " + RobloxLaunchCommand() + "\r\n" +
+                    "Legacy bootstrapper: " + UsesLegacyBootstrapper() + "\r\n" +
                     "----------------------------------------\r\n";
                 Clipboard.SetText(header + rtbLog.Text);
                 Log("Log copied to clipboard \u2014 paste it wherever you need.");
@@ -1335,6 +1390,7 @@ namespace RobloxKeeper
         }
     }
 }
+
 
 
 
