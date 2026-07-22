@@ -23,6 +23,7 @@ One tiny executable. Zero dependencies. No injection, no memory access, no file 
 | **Saved settings** | Every setting — anti-AFK on/off, interval, nudge profile, multi-instance, auto-clear ghosts — is written to `%APPDATA%\RobloxKeeper\settings.txt` and restored on the next launch. |
 | **Diagnostic log** | Every client open/close is logged with the reason, naming a **singleton kill**, the **Roblox bootstrapper**, or a normal close. **Copy log** puts the whole thing plus your version, Windows build, settings, and Roblox launch path on the clipboard for sharing. |
 | **Launch-path check** | Warns at startup if Roblox launches via the legacy bootstrapper (`RobloxPlayerLauncher`), which closes running clients on every launch no matter who holds the mutex — the one failure mode multi-instance cannot fix from outside. |
+| **Repair install** | Fixes the duplicate-install loop that closes clients by itself: keeps the Roblox version currently in use, removes the competing copies, and names any third-party launcher (Bloxstrap / Fishstrap / …) that must be uninstalled. Confirms before touching anything. |
 | **Auto-clear ghosts** | Stuck window-less Roblox processes that block the mutex are ended automatically once they're over 60 seconds old (the age check protects clients that are still starting up). On by default; untick in the Clients panel to disable. |
 | **Quality of life** | Dark modern UI, live countdown, activity log, minimize-to-tray with tray menu (Open / Nudge now / Exit). |
 
@@ -85,7 +86,9 @@ Two Roblox installs are fighting over the `roblox-player` registration. Each han
 
 RobloxKeeper reports all of this: `ROBLOX RE-REGISTERED ITSELF` when the flip happens, plus `Version folders:` and `Third-party launchers:` in the **Copy log** header.
 
-**Fix — pick ONE launcher and remove the rest:**
+**Quick fix — click "Repair install"** in the Multi-instance card. It keeps the Roblox version you currently use, deletes the duplicate copies, and tells you exactly which third-party launchers to uninstall. It shows you everything it will do and asks first; nothing happens until you confirm.
+
+**Manual fix — pick ONE launcher and remove the rest:**
 
 1. Close Roblox, all clients, and any third-party launcher.
 2. Uninstall the launchers you don't want (Bloxstrap / Fishstrap / Voidstrap) and delete their folders in `%LOCALAPPDATA%` and `%APPDATA%`.

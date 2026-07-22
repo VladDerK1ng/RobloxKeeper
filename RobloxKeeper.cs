@@ -187,7 +187,7 @@ namespace RobloxKeeper
         struct INPUT { public uint type; public InputUnion U; }
         struct ClientInfo { public int Pid; public IntPtr Hwnd; public DateTime Start; }
 
-        const string APP_VERSION = "1.9.0";
+        const string APP_VERSION = "2.0.0";
 
         const string RUN_KEY = "Software\\Microsoft\\Windows\\CurrentVersion\\Run";
         const string AUTOSTART_VALUE = "RobloxKeeper";
@@ -216,7 +216,7 @@ namespace RobloxKeeper
         CheckBox chkAfk, chkMulti;
         NumericUpDown numInterval;
         ComboBox cmbKeys;
-        Button btnNudge, btnZombie, btnCloseRbx;
+        Button btnNudge, btnZombie, btnCloseRbx, btnFixInstall;
         CheckBox chkAutostart, chkAutoGhost;
         Label lblCountdown, lblDot, lblMultiStatus, lblClientsTitle, lblGhosts, lblUpdating;
         ScrollPanel clientsPanel;
@@ -244,7 +244,7 @@ namespace RobloxKeeper
             Text = "RobloxKeeper";
             FormBorderStyle = FormBorderStyle.FixedSingle;
             MaximizeBox = false;
-            ClientSize = new Size(460, 762);
+            ClientSize = new Size(460, 782);
             StartPosition = FormStartPosition.CenterScreen;
             BackColor = Theme.Bg;
             ForeColor = Theme.Text;
@@ -474,7 +474,7 @@ namespace RobloxKeeper
             // --- Multi-instance card ---
             Card cardMulti = new Card();
             cardMulti.Location = new Point(16, 416);
-            cardMulti.Size = new Size(428, 132);
+            cardMulti.Size = new Size(428, 152);
             Controls.Add(cardMulti);
 
             cardMulti.Controls.Add(SectionTitle("MULTI-INSTANCE"));
@@ -506,13 +506,22 @@ namespace RobloxKeeper
             btnCloseRbx.Click += delegate { CloseAllRoblox(); };
             cardMulti.Controls.Add(btnCloseRbx);
 
-            lblUpdating = MutedLabel("One account can't join two games at once \u2014 use separate accounts.", 20, 104, 8.25f);
+            btnFixInstall = AccentButton("Repair install", 292, 80, 116, 26);
+            btnFixInstall.Font = new Font("Segoe UI", 8.25f, FontStyle.Bold);
+            btnFixInstall.Click += delegate { RepairInstall(); };
+            cardMulti.Controls.Add(btnFixInstall);
+
+            Label lblRepairHint = MutedLabel("Clients closing on their own? Repair removes duplicate Roblox installs.", 20, 82, 8.25f);
+            lblRepairHint.MaximumSize = new Size(258, 0);
+            cardMulti.Controls.Add(lblRepairHint);
+
+            lblUpdating = MutedLabel("One account can't join two games at once \u2014 use separate accounts.", 20, 122, 8.25f);
             cardMulti.Controls.Add(lblUpdating);
 
             // --- Activity card ---
             Card cardLog = new Card();
             cardLog.BackColor = Theme.Inset;
-            cardLog.Location = new Point(16, 562);
+            cardLog.Location = new Point(16, 582);
             cardLog.Size = new Size(428, 184);
             Controls.Add(cardLog);
 
@@ -944,6 +953,133 @@ namespace RobloxKeeper
                 singletonEvent.Close();
                 singletonEvent = null;
             }
+        }
+
+        // The duplicate-install ping-pong can only be broken by removing the
+        // competing copies. Roblox re-downloads a clean version on next launch,
+        // so this is recoverable - but it closes running games, and third-party
+        // launchers must be uninstalled by the user, so both are spelled out first.
+        void RepairInstall()
+        {
+            string versionsRoot = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "Roblox", "Versions");
+
+            string[] all;
+            try { all = Directory.Exists(versionsRoot) ? Directory.GetDirectories(versionsRoot) : new string[0]; }
+            catch (Exception ex) { Log("Repair aborted - can't read Versions folder: " + ex.Message); return; }
+
+            // Keep the version Roblox is currently registered to (fall back to the
+            // newest client), and remove every competing copy. One version left
+            // means there is nothing for the installer loop to fight over.
+            string keep = LaunchPathVersion();
+            if (keep == "?" || !Directory.Exists(Path.Combine(versionsRoot, keep)))
+            {
+                keep = null;
+                DateTime newest = DateTime.MinValue;
+                foreach (string d in all)
+                {
+                    string exe = Path.Combine(d, "RobloxPlayerBeta.exe");
+                    if (!File.Exists(exe)) continue;
+                    DateTime t = File.GetLastWriteTime(exe);
+                    if (t > newest) { newest = t; keep = Path.GetFileName(d); }
+                }
+            }
+
+            List<string> dirList = new List<string>();
+            foreach (string d in all)
+                if (keep == null || !string.Equals(Path.GetFileName(d), keep, StringComparison.OrdinalIgnoreCase))
+                    dirList.Add(d);
+            string[] dirs = dirList.ToArray();
+
+            if (dirs.Length == 0)
+            {
+                MessageBox.Show(this,
+                    "Only one Roblox version is installed (" + (keep ?? "none") + "), so there is nothing " +
+                    "for duplicate installs to fight over.\n\nIf clients still close on their own, the cause is a " +
+                    "third-party launcher reinstalling its own copy: " + ThirdPartyLaunchers() +
+                    "\nUninstall the ones you don't use, then launch Roblox from one source only.",
+                    "Nothing to repair", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                Log("Repair: only one version folder present (" + (keep ?? "none") + ") - nothing to remove.");
+                return;
+            }
+
+            int ghosts;
+            List<ClientInfo> clients = GetClients(out ghosts);
+            string tp = ThirdPartyLaunchers();
+
+            StringBuilder msg = new StringBuilder();
+            msg.AppendLine("This repairs a Roblox install whose copies keep fighting and closing your clients.");
+            msg.AppendLine();
+            msg.AppendLine("It will:");
+            msg.AppendLine("  - close " + clients.Count + " running client(s) and " + ghosts + " background process(es)");
+            msg.AppendLine("  - KEEP the version Roblox currently uses:  " + (keep ?? "(none)"));
+            msg.AppendLine("  - DELETE " + dirs.Length + " leftover version folder(s) from:");
+            msg.AppendLine("    " + versionsRoot);
+            msg.AppendLine();
+            msg.AppendLine("Your working Roblox stays installed - only the duplicate copies go, so there is");
+            msg.AppendLine("nothing left to fight over. You WILL have to rejoin your games.");
+            msg.AppendLine();
+            if (tp != "(none found)")
+            {
+                msg.AppendLine("IMPORTANT - third-party launchers found: " + tp);
+                msg.AppendLine("These install their OWN Roblox version and will recreate the conflict.");
+                msg.AppendLine("Uninstall the ones you don't use (Windows Settings > Apps) BEFORE relaunching,");
+                msg.AppendLine("then always launch Roblox from one source only.");
+                msg.AppendLine();
+            }
+            msg.Append("Continue?");
+
+            if (MessageBox.Show(this, msg.ToString(), "Repair Roblox install",
+                    MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
+            {
+                Log("Repair cancelled.");
+                return;
+            }
+
+            Log("Repair started - keeping " + (keep ?? "(none)") + ", removing " + dirs.Length + " duplicate version folder(s).");
+
+            foreach (ClientInfo ci in clients)
+                PostMessage(ci.Hwnd, WM_CLOSE, IntPtr.Zero, IntPtr.Zero);
+            Thread.Sleep(2500);
+
+            foreach (Process p in Process.GetProcessesByName(ROBLOX_PROCESS))
+            {
+                try { p.Kill(); } catch { }
+                p.Dispose();
+            }
+            foreach (string helper in new string[] { "RobloxPlayerInstaller", "RobloxPlayerLauncher", "RobloxCrashHandler" })
+            {
+                foreach (Process p in Process.GetProcessesByName(helper))
+                {
+                    try { p.Kill(); } catch { }
+                    p.Dispose();
+                }
+            }
+            Thread.Sleep(1500);
+
+            int removed = 0, failed = 0;
+            foreach (string d in dirs)
+            {
+                try { Directory.Delete(d, true); removed++; }
+                catch (Exception ex)
+                {
+                    failed++;
+                    Log("Could not remove " + Path.GetFileName(d) + ": " + ex.Message);
+                }
+            }
+
+            Log("Repair finished - removed " + removed + " duplicate version folder(s)" +
+                (failed > 0 ? ", " + failed + " could not be removed (try again once everything Roblox is closed)" : "") +
+                ". Kept " + (keep ?? "(none)") + ".");
+            if (tp != "(none found)")
+                Log("IMPORTANT: uninstall the third-party launchers you don't use (" + tp +
+                    ") or they will reinstall their own copy and the conflict returns. Then launch Roblox from ONE source only.");
+            else
+                Log("Launch Roblox from one source only from now on.");
+
+            versionConflictLogged = false;
+            lastRegisteredVersion = null;
         }
 
         void CloseAllRoblox()
@@ -1619,6 +1755,7 @@ namespace RobloxKeeper
         }
     }
 }
+
 
 
 
