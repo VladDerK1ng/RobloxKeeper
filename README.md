@@ -79,11 +79,19 @@ A window-less Roblox process is probably still holding the mutex — the client 
 Read the Activity log — it names the cause. `SINGLETON KILL` means another client launched while a Roblox process (not RobloxKeeper) owned the mutex: close all clients, wait for the green light, reopen. If a Roblox update was installing, its own updater closes every client and no tool can prevent that. Click **Copy log** to share the full report.
 
 **My clients keep closing every few minutes and Roblox seems to "update" over and over.**
-You most likely have **two Roblox versions installed that are fighting each other**. Each launch, one version's `RobloxPlayerInstaller.exe` runs, re-registers itself as the handler, and closes every open client in the process — then the other version does the same on the next launch. It never settles, so it looks like an endless update loop.
+Two Roblox installs are fighting over the `roblox-player` registration. Each hand-over runs an installer, and that installer closes every open client — then the other install claims it back on the next launch. It never settles, so it looks like an endless update loop. Holding the mutex cannot stop this; it is Roblox's own installer.
 
-RobloxKeeper detects this and logs `VERSION CONFLICT`, and the **Copy log** header shows `Installed:` and `Registered version:` so you can see it directly. The giveaway is a client whose `[version-...]` tag differs from the registered version.
+**The usual cause is a third-party launcher** — Bloxstrap, Fishstrap, Voidstrap, and similar tools install and register their *own* Roblox version alongside the official one. Uninstalling Roblox alone does **not** fix it, because the third-party launcher reinstalls its copy on the next launch.
 
-**Fix (do it once):** close Roblox completely → uninstall Roblox → delete `%LOCALAPPDATA%\Roblox` → reinstall from roblox.com. One version folder, no more fighting.
+RobloxKeeper reports all of this: `ROBLOX RE-REGISTERED ITSELF` when the flip happens, plus `Version folders:` and `Third-party launchers:` in the **Copy log** header.
+
+**Fix — pick ONE launcher and remove the rest:**
+
+1. Close Roblox, all clients, and any third-party launcher.
+2. Uninstall the launchers you don't want (Bloxstrap / Fishstrap / Voidstrap) and delete their folders in `%LOCALAPPDATA%` and `%APPDATA%`.
+3. Uninstall Roblox and delete `%LOCALAPPDATA%\Roblox`.
+4. Reinstall **once**, from your single chosen source.
+5. Always launch from that same one. Mixing the website and a third-party launcher re-creates the conflict.
 
 **My clients close every time I open another one, even though the light is green.**
 Your Roblox install probably launches through the **legacy bootstrapper** (`RobloxPlayerLauncher.exe`). That bootstrapper validates/updates the install and **closes running clients on every launch** — it's a completely separate mechanism from the singleton mutex, so holding the mutex can't stop it. RobloxKeeper detects this at startup and warns you in the log; the **Copy log** header also reports `Legacy bootstrapper: True/False`.

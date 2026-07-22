@@ -8,6 +8,7 @@ using System.Threading;
 using System.Windows.Forms;
 using System.IO;
 using System.Text;
+using System.Management;
 using Microsoft.Win32;
 
 namespace RobloxKeeper
@@ -186,7 +187,7 @@ namespace RobloxKeeper
         struct INPUT { public uint type; public InputUnion U; }
         struct ClientInfo { public int Pid; public IntPtr Hwnd; public DateTime Start; }
 
-        const string APP_VERSION = "1.8.0";
+        const string APP_VERSION = "1.9.0";
 
         const string RUN_KEY = "Software\\Microsoft\\Windows\\CurrentVersion\\Run";
         const string AUTOSTART_VALUE = "RobloxKeeper";
@@ -232,6 +233,7 @@ namespace RobloxKeeper
         DateTime updaterSeenAt = DateTime.MinValue;
         bool updatingShown;
         bool versionConflictLogged;
+        string lastRegisteredVersion;
         readonly Dictionary<int, DateTime> knownClients = new Dictionary<int, DateTime>();
         DateTime lastClientOpened = DateTime.MinValue;
         bool clientTrackingReady;
@@ -1073,6 +1075,20 @@ namespace RobloxKeeper
             // When Roblox installs an update, ITS OWN installer terminates every
             // running client (old version) - no tool can prevent that. Surface it
             // so a mass client close is explained instead of looking like a bug.
+            // The install rewriting its own registration is the ping-pong itself.
+            // Catch the flip as it happens - comparing versions only at client
+            // open misses it, because the flip lands moments later.
+            string regNow = LaunchPathVersion();
+            if (lastRegisteredVersion == null) lastRegisteredVersion = regNow;
+            else if (regNow != lastRegisteredVersion)
+            {
+                Log("ROBLOX RE-REGISTERED ITSELF: " + lastRegisteredVersion + " -> " + regNow +
+                    ". Two installs are taking turns claiming Roblox; each hand-over runs an " +
+                    "installer that closes every open client. This repeats forever until one is removed. " +
+                    "Launchers present: " + ThirdPartyLaunchers());
+                lastRegisteredVersion = regNow;
+            }
+
             bool installerRunning = AnyProcess("RobloxPlayerInstaller") || AnyProcess("RobloxPlayerLauncher");
             if (installerRunning && !installerSeen)
             {
@@ -1132,7 +1148,8 @@ namespace RobloxKeeper
                 if (!clientTrackingReady) continue;   // don't narrate clients already open at startup
                 lastClientOpened = DateTime.Now;
                 string clientVer = VersionOfPid(ci.Pid);
-                Log("Client PID " + ci.Pid + " [" + clientVer + "] opened \u2014 mutex " +
+                Log("Client PID " + ci.Pid + " [" + clientVer + "] opened, launched by " + ParentOf(ci.Pid) +
+                    " \u2014 mutex " +
                     (mutexHeld ? "HELD by RobloxKeeper, other clients are safe." :
                                  "NOT held (a Roblox process owns it) \u2014 THIS CAN CLOSE YOUR OTHER CLIENTS."));
                 WarnOnVersionConflict(clientVer);
@@ -1240,6 +1257,13 @@ namespace RobloxKeeper
 
         void CheckLaunchPath()
         {
+            string tp = ThirdPartyLaunchers();
+            if (tp != "(none found)")
+                Log("Third-party Roblox launchers present: " + tp +
+                    ". These install and register their OWN Roblox version. If clients keep " +
+                    "closing and Roblox keeps reinstalling, use only ONE launcher - remove the " +
+                    "others, then reinstall Roblox once.");
+
             if (UsesLegacyBootstrapper())
                 Log("WARNING: Roblox launches through the legacy bootstrapper " +
                     "(RobloxPlayerLauncher). It closes running clients on every launch, " +
@@ -1287,6 +1311,8 @@ namespace RobloxKeeper
                     "Legacy bootstrapper: " + UsesLegacyBootstrapper() + "\r\n" +
                     "Installed: " + InstalledVersions() + "\r\n" +
                     "Registered version: " + LaunchPathVersion() + "\r\n" +
+                    "Version folders: " + AllVersionFolders() + "\r\n" +
+                    "Third-party launchers: " + ThirdPartyLaunchers() + "\r\n" +
                     "----------------------------------------\r\n";
                 Clipboard.SetText(header + rtbLog.Text);
                 Log("Log copied to clipboard \u2014 paste it wherever you need.");
@@ -1306,6 +1332,101 @@ namespace RobloxKeeper
         {
             try { return p.MainModule.FileName; }
             catch { return "(path unavailable)"; }
+        }
+
+        // Who started this client. This is what identifies a third-party
+        // launcher (Bloxstrap and friends) or a stale shortcut launching the
+        // wrong installed version - the thing that triggers the repair loop.
+        static string ParentOf(int pid)
+        {
+            try
+            {
+                using (ManagementObjectSearcher s = new ManagementObjectSearcher(
+                    "SELECT ParentProcessId FROM Win32_Process WHERE ProcessId = " + pid))
+                {
+                    foreach (ManagementObject mo in s.Get())
+                    {
+                        object o = mo["ParentProcessId"];
+                        if (o == null) continue;
+                        int ppid = Convert.ToInt32(o);
+                        try
+                        {
+                            using (Process pp = Process.GetProcessById(ppid))
+                                return pp.ProcessName + " (PID " + ppid + ")";
+                        }
+                        catch { return "PID " + ppid + " (already exited)"; }
+                    }
+                }
+            }
+            catch { }
+            return "(unknown)";
+        }
+
+        // Known third-party Roblox launchers/bootstrappers. These install and
+        // manage their own Roblox version and re-register the protocol, which
+        // is a common cause of two versions fighting.
+        static string ThirdPartyLaunchers()
+        {
+            StringBuilder sb = new StringBuilder();
+            string[] folders = { "Bloxstrap", "Fishstrap", "Voidstrap", "Lunarstrap", "Roblox Account Manager" };
+            string[] roots =
+            {
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData)
+            };
+            foreach (string root in roots)
+            {
+                foreach (string f in folders)
+                {
+                    try
+                    {
+                        if (Directory.Exists(Path.Combine(root, f)))
+                        {
+                            if (sb.Length > 0) sb.Append(", ");
+                            sb.Append(f);
+                        }
+                    }
+                    catch { }
+                }
+            }
+            string[] procNames = { "Bloxstrap", "Fishstrap", "Voidstrap", "RobloxAccountManager" };
+            foreach (string n in procNames)
+            {
+                try
+                {
+                    Process[] ps = Process.GetProcessesByName(n);
+                    if (ps.Length > 0)
+                    {
+                        if (sb.Length > 0) sb.Append(", ");
+                        sb.Append(n).Append(" (RUNNING)");
+                    }
+                    foreach (Process p in ps) p.Dispose();
+                }
+                catch { }
+            }
+            return sb.Length > 0 ? sb.ToString() : "(none found)";
+        }
+
+        static string AllVersionFolders()
+        {
+            try
+            {
+                string root = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "Roblox", "Versions");
+                if (!Directory.Exists(root)) return "(no Versions folder)";
+                StringBuilder sb = new StringBuilder();
+                foreach (string d in Directory.GetDirectories(root))
+                {
+                    string exe = Path.Combine(d, "RobloxPlayerBeta.exe");
+                    if (!File.Exists(exe)) continue;
+                    if (sb.Length > 0) sb.Append("\r\n              ");
+                    sb.Append(Path.GetFileName(d)).Append("  (")
+                      .Append(File.GetLastWriteTime(exe).ToString("MM-dd HH:mm")).Append(")");
+                }
+                return sb.Length > 0 ? sb.ToString() : "(none with a client exe)";
+            }
+            catch { return "(unreadable)"; }
         }
 
         // "...\Versions\version-abc123\RobloxPlayerBeta.exe" -> "version-abc123"
@@ -1498,6 +1619,7 @@ namespace RobloxKeeper
         }
     }
 }
+
 
 
 
