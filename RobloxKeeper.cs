@@ -186,7 +186,7 @@ namespace RobloxKeeper
         struct INPUT { public uint type; public InputUnion U; }
         struct ClientInfo { public int Pid; public IntPtr Hwnd; public DateTime Start; }
 
-        const string APP_VERSION = "1.7.1";
+        const string APP_VERSION = "1.8.0";
 
         const string RUN_KEY = "Software\\Microsoft\\Windows\\CurrentVersion\\Run";
         const string AUTOSTART_VALUE = "RobloxKeeper";
@@ -231,6 +231,7 @@ namespace RobloxKeeper
         DateTime lastCloseRequest = DateTime.MinValue;
         DateTime updaterSeenAt = DateTime.MinValue;
         bool updatingShown;
+        bool versionConflictLogged;
         readonly Dictionary<int, DateTime> knownClients = new Dictionary<int, DateTime>();
         DateTime lastClientOpened = DateTime.MinValue;
         bool clientTrackingReady;
@@ -1130,9 +1131,11 @@ namespace RobloxKeeper
                 knownClients[ci.Pid] = DateTime.Now;
                 if (!clientTrackingReady) continue;   // don't narrate clients already open at startup
                 lastClientOpened = DateTime.Now;
-                Log("Client PID " + ci.Pid + " [" + VersionOfPid(ci.Pid) + "] opened \u2014 mutex " +
+                string clientVer = VersionOfPid(ci.Pid);
+                Log("Client PID " + ci.Pid + " [" + clientVer + "] opened \u2014 mutex " +
                     (mutexHeld ? "HELD by RobloxKeeper, other clients are safe." :
                                  "NOT held (a Roblox process owns it) \u2014 THIS CAN CLOSE YOUR OTHER CLIENTS."));
+                WarnOnVersionConflict(clientVer);
             }
 
             List<int> gone = new List<int>();
@@ -1203,10 +1206,36 @@ namespace RobloxKeeper
             return "(not registered)";
         }
 
+        // The version folder the roblox-player protocol is currently registered to.
+        static string LaunchPathVersion()
+        {
+            string cmd = RobloxLaunchCommand();
+            int i = cmd.IndexOf("version-", StringComparison.OrdinalIgnoreCase);
+            if (i < 0) return "?";
+            int end = cmd.IndexOfAny(new char[] { '\\', '/', '"' }, i);
+            return end > i ? cmd.Substring(i, end - i) : cmd.Substring(i);
+        }
+
         static bool UsesLegacyBootstrapper()
         {
             string cmd = RobloxLaunchCommand().ToLowerInvariant();
             return cmd.Contains("robloxplayerlauncher") || cmd.Contains("robloxplayerinstaller");
+        }
+
+        // Two installed Roblox versions take turns re-registering themselves.
+        // Each hand-over runs that version's installer, which closes every open
+        // client - so multi-instance appears to "randomly" break every few minutes.
+        void WarnOnVersionConflict(string clientVersion)
+        {
+            string launchVer = LaunchPathVersion();
+            if (clientVersion == "?" || launchVer == "?") return;
+            if (string.Equals(clientVersion, launchVer, StringComparison.OrdinalIgnoreCase)) return;
+            if (versionConflictLogged) return;
+            versionConflictLogged = true;
+            Log("VERSION CONFLICT: this client runs " + clientVersion + " but Roblox is registered to launch " +
+                launchVer + ". Two Roblox installs are competing - each launch re-runs the installer, " +
+                "which closes your open clients. FIX: close Roblox, delete %LOCALAPPDATA%\\Roblox, " +
+                "then reinstall once from roblox.com.");
         }
 
         void CheckLaunchPath()
@@ -1257,6 +1286,7 @@ namespace RobloxKeeper
                     "Launch path: " + RobloxLaunchCommand() + "\r\n" +
                     "Legacy bootstrapper: " + UsesLegacyBootstrapper() + "\r\n" +
                     "Installed: " + InstalledVersions() + "\r\n" +
+                    "Registered version: " + LaunchPathVersion() + "\r\n" +
                     "----------------------------------------\r\n";
                 Clipboard.SetText(header + rtbLog.Text);
                 Log("Log copied to clipboard \u2014 paste it wherever you need.");
@@ -1468,6 +1498,7 @@ namespace RobloxKeeper
         }
     }
 }
+
 
 
 

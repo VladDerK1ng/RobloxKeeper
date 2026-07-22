@@ -78,6 +78,13 @@ A window-less Roblox process is probably still holding the mutex — the client 
 **A client closed and I don't know why.**
 Read the Activity log — it names the cause. `SINGLETON KILL` means another client launched while a Roblox process (not RobloxKeeper) owned the mutex: close all clients, wait for the green light, reopen. If a Roblox update was installing, its own updater closes every client and no tool can prevent that. Click **Copy log** to share the full report.
 
+**My clients keep closing every few minutes and Roblox seems to "update" over and over.**
+You most likely have **two Roblox versions installed that are fighting each other**. Each launch, one version's `RobloxPlayerInstaller.exe` runs, re-registers itself as the handler, and closes every open client in the process — then the other version does the same on the next launch. It never settles, so it looks like an endless update loop.
+
+RobloxKeeper detects this and logs `VERSION CONFLICT`, and the **Copy log** header shows `Installed:` and `Registered version:` so you can see it directly. The giveaway is a client whose `[version-...]` tag differs from the registered version.
+
+**Fix (do it once):** close Roblox completely → uninstall Roblox → delete `%LOCALAPPDATA%\Roblox` → reinstall from roblox.com. One version folder, no more fighting.
+
 **My clients close every time I open another one, even though the light is green.**
 Your Roblox install probably launches through the **legacy bootstrapper** (`RobloxPlayerLauncher.exe`). That bootstrapper validates/updates the install and **closes running clients on every launch** — it's a completely separate mechanism from the singleton mutex, so holding the mutex can't stop it. RobloxKeeper detects this at startup and warns you in the log; the **Copy log** header also reports `Legacy bootstrapper: True/False`.
 
