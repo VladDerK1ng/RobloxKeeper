@@ -187,11 +187,12 @@ namespace RobloxKeeper
         struct INPUT { public uint type; public InputUnion U; }
         struct ClientInfo { public int Pid; public IntPtr Hwnd; public DateTime Start; }
 
-        const string APP_VERSION = "2.2.0";
+        const string APP_VERSION = "2.3.0";
 
         const string RUN_KEY = "Software\\Microsoft\\Windows\\CurrentVersion\\Run";
         const string AUTOSTART_VALUE = "RobloxKeeper";
-        const int GHOST_MAX_AGE_SECONDS = 60;   // never auto-kill a client that is still starting up
+        const int GHOST_MAX_AGE_SECONDS = 150;  // a client can sit window-less for a while on a slow launch
+        const int PROTECT_PAUSE_SECONDS = 120;  // long enough for a launch that needs the installer
 
         const uint INPUT_KEYBOARD = 1;
         const uint KEYEVENTF_EXTENDEDKEY = 0x0001;
@@ -216,7 +217,7 @@ namespace RobloxKeeper
         CheckBox chkAfk, chkMulti;
         NumericUpDown numInterval;
         ComboBox cmbKeys;
-        Button btnNudge, btnZombie, btnCloseRbx, btnFixInstall;
+        Button btnNudge, btnZombie, btnCloseRbx, btnFixInstall, btnAllowUpdate;
         CheckBox chkAutostart, chkAutoGhost, chkProtect;
         Label lblCountdown, lblDot, lblMultiStatus, lblClientsTitle, lblGhosts, lblUpdating;
         ScrollPanel clientsPanel;
@@ -234,6 +235,8 @@ namespace RobloxKeeper
         bool updatingShown;
         bool versionConflictLogged;
         string lastRegisteredVersion;
+        DateTime protectPausedUntil = DateTime.MinValue;
+        bool protectPauseShown;
         readonly Dictionary<int, DateTime> knownClients = new Dictionary<int, DateTime>();
         DateTime lastClientOpened = DateTime.MinValue;
         bool clientTrackingReady;
@@ -536,6 +539,18 @@ namespace RobloxKeeper
                 SaveSettings();
             };
             cardMulti.Controls.Add(chkProtect);
+
+            btnAllowUpdate = AccentButton("Allow update", 292, 110, 116, 26);
+            btnAllowUpdate.Font = new Font("Segoe UI", 8.25f, FontStyle.Bold);
+            btnAllowUpdate.Click += delegate
+            {
+                protectPausedUntil = DateTime.Now.AddSeconds(PROTECT_PAUSE_SECONDS);
+                protectPauseShown = true;
+                Log("Updater blocking paused for " + (PROTECT_PAUSE_SECONDS / 60) + " minutes - Roblox may now " +
+                    "install/update. Open the account that would not launch. Your other clients can close during " +
+                    "this window; reopen them once it finishes.");
+            };
+            cardMulti.Controls.Add(btnAllowUpdate);
 
             lblUpdating = MutedLabel("One account can't join two games at once \u2014 use separate accounts.", 20, 148, 8.25f);
             cardMulti.Controls.Add(lblUpdating);
@@ -991,6 +1006,31 @@ namespace RobloxKeeper
             try { all = Directory.Exists(versionsRoot) ? Directory.GetDirectories(versionsRoot) : new string[0]; }
             catch (Exception ex) { Log("Repair aborted - can't read Versions folder: " + ex.Message); return; }
 
+            // Accounts can legitimately sit on different Roblox release channels,
+            // and then BOTH versions are needed - deleting one forces a reinstall
+            // every time the user switches account. Only strip duplicates when the
+            // user confirms they are leftovers.
+            if (all.Length == 2)
+            {
+                DialogResult keepBoth = MessageBox.Show(this,
+                    "Two Roblox versions are installed.\r\n\r\n" +
+                    "That is normal if your accounts are on different Roblox release channels " +
+                    "(a premium/main account often is) - each account needs its own version, and " +
+                    "deleting one makes Roblox reinstall it every time you switch.\r\n\r\n" +
+                    "Do your accounts need DIFFERENT versions?\r\n\r\n" +
+                    "Yes  = keep both versions (recommended if two accounts fail to run together)\r\n" +
+                    "No   = remove the extra copy",
+                    "Keep both Roblox versions?", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
+                if (keepBoth == DialogResult.Cancel) { Log("Repair cancelled."); return; }
+                if (keepBoth == DialogResult.Yes)
+                {
+                    Log("Repair: keeping BOTH versions - accounts on different channels each need their own. " +
+                        "Leave \"Block Roblox updater\" ticked so neither install can close your clients.");
+                    RetargetShortcuts(LaunchPathVersion(), versionsRoot);
+                    return;
+                }
+            }
+
             // Keep the version Roblox is currently registered to (fall back to the
             // newest client), and remove every competing copy. One version left
             // means there is nothing for the installer loop to fight over.
@@ -1232,10 +1272,10 @@ namespace RobloxKeeper
             lblGhosts.Text = ghosts > 0 ? "+" + ghosts + " stuck" : "";
             btnZombie.Visible = ghosts > 0;
 
-            // Stuck window-less Roblox processes block the mutex and confuse the
-            // client count - clear them automatically once they're old enough
-            // that they can't be a client still starting up.
-            if (chkAutoGhost.Checked && ghosts > 0)
+            // Only clear ghosts when one is actually squatting on the mutex.
+            // While we hold it, a window-less Roblox process is harmless - and is
+            // usually a client still starting up, which must not be killed.
+            if (chkAutoGhost.Checked && ghosts > 0 && chkMulti.Checked && !keeper.Held)
                 AutoClearGhosts();
 
             // When Roblox installs an update, ITS OWN installer terminates every
@@ -1260,7 +1300,13 @@ namespace RobloxKeeper
             // closes every running client to replace files. Stopping the installer
             // WHILE clients are open keeps the session alive; when nothing is
             // running it is left alone, so Roblox still updates normally.
-            if (chkProtect != null && chkProtect.Checked && clients.Count > 0)
+            bool paused = DateTime.Now < protectPausedUntil;
+            if (paused != protectPauseShown)
+            {
+                protectPauseShown = paused;
+                if (!paused) Log("Updater blocking resumed - your open clients are protected again.");
+            }
+            if (chkProtect != null && chkProtect.Checked && !paused && clients.Count > 0)
             {
                 Process[] ups = Process.GetProcessesByName("RobloxPlayerInstaller");
                 foreach (Process up in ups)
@@ -2069,6 +2115,7 @@ namespace RobloxKeeper
         }
     }
 }
+
 
 
 
