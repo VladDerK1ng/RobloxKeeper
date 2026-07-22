@@ -96,6 +96,64 @@ namespace RobloxKeeper
         }
     }
 
+    // Queue-waits on the Roblox singleton mutex from a dedicated thread, the same
+    // way Roblox clients do. The kernel hands over ownership the instant the
+    // previous owner releases or dies, so a launching client can never win the
+    // race against us. Polling can't guarantee that; a blocking wait can.
+    class MutexKeeper
+    {
+        const string ROBLOX_MUTEX = "ROBLOX_singletonMutex";
+
+        Thread worker;
+        ManualResetEvent stop;
+        public volatile bool Held;
+
+        public bool Running { get { return worker != null && worker.IsAlive; } }
+
+        public void Start()
+        {
+            if (Running) return;
+            stop = new ManualResetEvent(false);
+            Held = false;
+            worker = new Thread(Run);
+            worker.IsBackground = true;
+            worker.Name = "MutexKeeper";
+            worker.Start();
+        }
+
+        public void Stop()
+        {
+            if (!Running) { Held = false; return; }
+            stop.Set();
+            worker.Join(3000);
+            worker = null;
+            Held = false;
+        }
+
+        void Run()
+        {
+            Mutex m = null;
+            try
+            {
+                bool createdNew;
+                m = new Mutex(false, ROBLOX_MUTEX, out createdNew);
+                int signaled;
+                try { signaled = WaitHandle.WaitAny(new WaitHandle[] { stop, m }); }
+                catch (AbandonedMutexException) { signaled = 1; }
+                if (signaled == 0) return;   // disabled before acquisition
+                Held = true;
+                stop.WaitOne();              // own it until disabled
+                try { m.ReleaseMutex(); } catch { }
+            }
+            catch { }
+            finally
+            {
+                Held = false;
+                if (m != null) m.Close();
+            }
+        }
+    }
+
     class MainForm : Form
     {
         [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
@@ -108,6 +166,7 @@ namespace RobloxKeeper
         [DllImport("user32.dll")] static extern uint MapVirtualKey(uint uCode, uint uMapType);
         [DllImport("user32.dll", SetLastError = true)] static extern uint SendInput(uint n, INPUT[] inputs, int size);
         [DllImport("dwmapi.dll")] static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int val, int size);
+        [DllImport("user32.dll")] static extern bool PostMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
 
         [StructLayout(LayoutKind.Sequential)]
         struct KEYBDINPUT { public ushort wVk; public ushort wScan; public uint dwFlags; public uint time; public IntPtr dwExtraInfo; }
@@ -119,7 +178,7 @@ namespace RobloxKeeper
         struct INPUT { public uint type; public InputUnion U; }
         struct ClientInfo { public int Pid; public IntPtr Hwnd; public DateTime Start; }
 
-        const string APP_VERSION = "1.3.0";
+        const string APP_VERSION = "1.4.0";
 
         const uint INPUT_KEYBOARD = 1;
         const uint KEYEVENTF_EXTENDEDKEY = 0x0001;
@@ -133,16 +192,18 @@ namespace RobloxKeeper
         const byte VK_SPACE = 0x20;   // jump
         const int SW_RESTORE = 9;
         const int SW_MINIMIZE = 6;
+        const uint WM_CLOSE = 0x0010;
 
-        const string ROBLOX_MUTEX = "ROBLOX_singletonMutex";
+        const string ROBLOX_EVENT = "ROBLOX_singletonEvent";
         const string ROBLOX_PROCESS = "RobloxPlayerBeta";
 
-        Mutex robloxMutex;
-        bool mutexWasHeld;
+        readonly MutexKeeper keeper = new MutexKeeper();
+        EventWaitHandle singletonEvent;
+        bool heldLogged;
         CheckBox chkAfk, chkMulti;
         NumericUpDown numInterval;
         ComboBox cmbKeys;
-        Button btnNudge, btnZombie;
+        Button btnNudge, btnZombie, btnCloseRbx;
         Label lblCountdown, lblDot, lblMultiStatus, lblClientsTitle, lblGhosts;
         ScrollPanel clientsPanel;
         RichTextBox rtbLog;
@@ -157,7 +218,7 @@ namespace RobloxKeeper
             Text = "RobloxKeeper";
             FormBorderStyle = FormBorderStyle.FixedSingle;
             MaximizeBox = false;
-            ClientSize = new Size(460, 686);
+            ClientSize = new Size(460, 700);
             StartPosition = FormStartPosition.CenterScreen;
             BackColor = Theme.Bg;
             ForeColor = Theme.Text;
@@ -306,7 +367,7 @@ namespace RobloxKeeper
             // --- Multi-instance card ---
             Card cardMulti = new Card();
             cardMulti.Location = new Point(16, 416);
-            cardMulti.Size = new Size(428, 118);
+            cardMulti.Size = new Size(428, 132);
             Controls.Add(cardMulti);
 
             cardMulti.Controls.Add(SectionTitle("MULTI-INSTANCE"));
@@ -326,19 +387,25 @@ namespace RobloxKeeper
 
             lblMultiStatus = new Label();
             lblMultiStatus.AutoSize = true;
-            lblMultiStatus.MaximumSize = new Size(366, 0);
+            lblMultiStatus.MaximumSize = new Size(240, 0);
             lblMultiStatus.Location = new Point(42, 49);
             lblMultiStatus.ForeColor = Theme.Text;
             lblMultiStatus.BackColor = Theme.Card;
             cardMulti.Controls.Add(lblMultiStatus);
 
-            Label hint = MutedLabel("One account can't join two games at once — use separate accounts.", 20, 90, 8.25f);
+            btnCloseRbx = AccentButton("Close all Roblox", 292, 46, 116, 28);
+            btnCloseRbx.Font = new Font("Segoe UI", 8.25f, FontStyle.Bold);
+            btnCloseRbx.Visible = false;
+            btnCloseRbx.Click += delegate { CloseAllRoblox(); };
+            cardMulti.Controls.Add(btnCloseRbx);
+
+            Label hint = MutedLabel("One account can't join two games at once — use separate accounts.", 20, 104, 8.25f);
             cardMulti.Controls.Add(hint);
 
             // --- Activity card ---
             Card cardLog = new Card();
             cardLog.BackColor = Theme.Inset;
-            cardLog.Location = new Point(16, 548);
+            cardLog.Location = new Point(16, 562);
             cardLog.Size = new Size(428, 122);
             Controls.Add(cardLog);
 
@@ -720,48 +787,60 @@ namespace RobloxKeeper
         {
             if (chkMulti.Checked)
             {
-                if (!TryAcquireMutex())
-                    Log("Mutex owned by a Roblox process — close all clients to activate multi-instance.");
+                StartMulti();
+                Log("Multi-instance enabled — queued for the singleton mutex.");
             }
             else
             {
-                ReleaseRobloxMutex();
+                StopMulti();
                 Log("Multi-instance disabled — mutex released.");
             }
             UpdateMultiStatus();
         }
 
-        bool TryAcquireMutex()
+        void StartMulti()
         {
-            bool createdNew;
-            Mutex m = new Mutex(true, ROBLOX_MUTEX, out createdNew);
-            bool acquired = createdNew;
-            if (!createdNew)
+            keeper.Start();
+            if (singletonEvent == null)
             {
-                try { acquired = m.WaitOne(0); }
-                catch (AbandonedMutexException) { acquired = true; }
-            }
-            if (acquired)
-            {
-                robloxMutex = m;
-                if (!mutexWasHeld)
+                try
                 {
-                    mutexWasHeld = true;
-                    Log("Multi-instance active — singleton mutex acquired.");
+                    bool createdNew;
+                    singletonEvent = new EventWaitHandle(false, EventResetMode.ManualReset, ROBLOX_EVENT, out createdNew);
                 }
-                return true;
+                catch { singletonEvent = null; }
             }
-            m.Close();
-            return false;
         }
 
-        void ReleaseRobloxMutex()
+        void StopMulti()
         {
-            if (robloxMutex == null) return;
-            try { robloxMutex.ReleaseMutex(); } catch { }
-            robloxMutex.Close();
-            robloxMutex = null;
-            mutexWasHeld = false;
+            keeper.Stop();
+            heldLogged = false;
+            if (singletonEvent != null)
+            {
+                singletonEvent.Close();
+                singletonEvent = null;
+            }
+        }
+
+        void CloseAllRoblox()
+        {
+            int ghosts;
+            List<ClientInfo> clients = GetClients(out ghosts);
+            if (clients.Count == 0 && ghosts == 0)
+            {
+                Log("No Roblox processes to close.");
+                return;
+            }
+            string msg = "Close " + clients.Count + " Roblox client(s)" +
+                (ghosts > 0 ? " and end " + ghosts + " background process(es)" : "") +
+                "?\n\nYou'll need to rejoin your games, but multi-instance activates the moment they're gone.";
+            if (MessageBox.Show(this, msg, "RobloxKeeper", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+                return;
+            foreach (ClientInfo ci in clients)
+                PostMessage(ci.Hwnd, WM_CLOSE, IntPtr.Zero, IntPtr.Zero);
+            if (ghosts > 0) KillZombies();
+            Log("Close request sent to " + clients.Count + " client(s) — taking the mutex as soon as they exit.");
         }
 
         void UpdateMultiStatus()
@@ -771,7 +850,7 @@ namespace RobloxKeeper
                 lblDot.ForeColor = Theme.Muted;
                 lblMultiStatus.Text = "Disabled — a new Roblox client will replace the running one.";
             }
-            else if (robloxMutex != null)
+            else if (keeper.Held)
             {
                 lblDot.ForeColor = Theme.Green;
                 lblMultiStatus.Text = "Active — singleton mutex held. New clients stay open.";
@@ -779,7 +858,7 @@ namespace RobloxKeeper
             else
             {
                 lblDot.ForeColor = Theme.Amber;
-                lblMultiStatus.Text = "Waiting — a Roblox process owns the mutex. Close all clients to activate.";
+                lblMultiStatus.Text = "Waiting — a Roblox client owns the mutex. Close every client and I take over instantly.";
             }
         }
 
@@ -803,9 +882,13 @@ namespace RobloxKeeper
         void OnUiTick()
         {
             UpdateCountdown();
-            if (chkMulti.Checked && robloxMutex == null)
-                TryAcquireMutex();
+            if (chkMulti.Checked && keeper.Held && !heldLogged)
+            {
+                heldLogged = true;
+                Log("Multi-instance active — singleton mutex acquired.");
+            }
             UpdateMultiStatus();
+            btnCloseRbx.Visible = chkMulti.Checked && !keeper.Held;
 
             int ghosts;
             List<ClientInfo> clients = GetClients(out ghosts);
@@ -886,7 +969,7 @@ namespace RobloxKeeper
             nudgeTimer.Stop();
             tray.Visible = false;
             tray.Dispose();
-            ReleaseRobloxMutex();
+            StopMulti();
             base.OnFormClosing(e);
         }
     }
