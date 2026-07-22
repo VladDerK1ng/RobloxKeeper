@@ -11,12 +11,39 @@ namespace RobloxKeeper
 {
     static class Program
     {
+        [DllImport("user32.dll", CharSet = CharSet.Auto)]
+        static extern uint RegisterWindowMessage(string lpString);
+        [DllImport("user32.dll")]
+        static extern bool PostMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+        [DllImport("user32.dll")]
+        static extern bool AllowSetForegroundWindow(int dwProcessId);
+
+        const string APP_MUTEX = "RobloxKeeper_SingleInstance_7C41A9E2";
+        static readonly IntPtr HWND_BROADCAST = (IntPtr)0xFFFF;
+        const int ASFW_ANY = -1;
+
+        public static readonly uint WM_SHOWME = RegisterWindowMessage("RobloxKeeper_ShowExistingWindow");
+
+        static Mutex appMutex;
+
         [STAThread]
         static void Main()
         {
+            // Single instance: a second launch surfaces the running window and quits.
+            // This runs before any Roblox mutex work, so the live instance is untouched.
+            bool createdNew;
+            appMutex = new Mutex(true, APP_MUTEX, out createdNew);
+            if (!createdNew)
+            {
+                AllowSetForegroundWindow(ASFW_ANY);
+                PostMessage(HWND_BROADCAST, WM_SHOWME, IntPtr.Zero, IntPtr.Zero);
+                return;
+            }
+
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
             Application.Run(new MainForm());
+            GC.KeepAlive(appMutex);
         }
     }
 
@@ -92,7 +119,7 @@ namespace RobloxKeeper
         struct INPUT { public uint type; public InputUnion U; }
         struct ClientInfo { public int Pid; public IntPtr Hwnd; public DateTime Start; }
 
-        const string APP_VERSION = "1.2.1";
+        const string APP_VERSION = "1.3.0";
 
         const uint INPUT_KEYBOARD = 1;
         const uint KEYEVENTF_EXTENDEDKEY = 0x0001;
@@ -798,8 +825,46 @@ namespace RobloxKeeper
         void RestoreFromTray()
         {
             Show();
-            WindowState = FormWindowState.Normal;
+            if (WindowState == FormWindowState.Minimized)
+                WindowState = FormWindowState.Normal;
             Activate();
+            BringToFront();
+            ForceForeground();
+        }
+
+        // Raising our OWN window needs an attach to the current foreground thread;
+        // attaching to our own thread is invalid and silently does nothing.
+        void ForceForeground()
+        {
+            IntPtr fg = GetForegroundWindow();
+            if (fg != Handle)
+            {
+                uint pid;
+                uint fgThread = GetWindowThreadProcessId(fg, out pid);
+                uint mine = GetCurrentThreadId();
+                if (fgThread != 0 && fgThread != mine)
+                {
+                    AttachThreadInput(mine, fgThread, true);
+                    SetForegroundWindow(Handle);
+                    AttachThreadInput(mine, fgThread, false);
+                }
+                else SetForegroundWindow(Handle);
+            }
+            // Guarantees the window surfaces even if Windows denies focus.
+            bool wasTop = TopMost;
+            TopMost = true;
+            TopMost = wasTop;
+        }
+
+        // A second launch broadcasts this message instead of opening another window.
+        protected override void WndProc(ref Message m)
+        {
+            if (Program.WM_SHOWME != 0 && m.Msg == (int)Program.WM_SHOWME)
+            {
+                RestoreFromTray();
+                return;
+            }
+            base.WndProc(ref m);
         }
 
         void Log(string message)

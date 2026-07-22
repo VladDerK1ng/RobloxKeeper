@@ -18,6 +18,7 @@ One tiny executable. Zero dependencies. No injection, no memory access, no file 
 | **Per-client selection** | Every running client appears as a row in the Clients panel (scrollable, so any number of clients works). Untick one and the nudger leaves it alone — run anti-AFK on two accounts while a third stays untouched. **Show** brings that client's window to the front so you can tell which is which. New clients default to enabled. |
 | **Multi-Instance** | Holds Roblox's `ROBLOX_singletonMutex` so multiple clients can run simultaneously. Fully automatic: if a Roblox process owns the mutex, RobloxKeeper waits and acquires it the instant the last client closes. |
 | **Client monitor** | Live count of open Roblox clients, plus detection of window-less "ghost" Roblox processes (they can silently block multi-instance) with a one-click **End background** button. |
+| **Single instance** | Launching RobloxKeeper while it's already running won't open a second copy — it surfaces the existing window instead, restoring it from the tray if needed. |
 | **Quality of life** | Dark modern UI, live countdown, activity log, minimize-to-tray with tray menu (Open / Nudge now / Exit). |
 
 ## Quick start
