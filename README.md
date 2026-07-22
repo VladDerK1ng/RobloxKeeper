@@ -19,7 +19,9 @@ One tiny executable. Zero dependencies. No injection, no memory access, no file 
 | **Multi-Instance** | Holds Roblox's `ROBLOX_singletonMutex` (and `ROBLOX_singletonEvent`) so multiple clients can run simultaneously. A dedicated thread queue-waits on the mutex the same way Roblox clients do, so ownership transfers to RobloxKeeper at the kernel level the instant it frees — a launching client can never win the race. If clients already own it, one click on **Close all Roblox** clears them (ghost processes included) and takeover is immediate. |
 | **Client monitor** | Live count of open Roblox clients, plus detection of window-less "ghost" Roblox processes (they can silently block multi-instance) with a one-click **End background** button. |
 | **Single instance** | Launching RobloxKeeper while it's already running won't open a second copy — it surfaces the existing window instead, restoring it from the tray if needed. |
-| **Start with Windows** | Optional autostart toggle (top-right). With it on, RobloxKeeper holds the mutex from boot — before any Roblox client can exist — which makes the launch-order problem impossible. |
+| **Start with Windows** | Optional autostart toggle (top-right). With it on, RobloxKeeper starts **minimized to the tray** at boot and holds the mutex before any Roblox client can exist, which makes the launch-order problem impossible. |
+| **Saved settings** | Every setting — anti-AFK on/off, interval, nudge profile, multi-instance, auto-clear ghosts — is written to `%APPDATA%\RobloxKeeper\settings.txt` and restored on the next launch. |
+| **Diagnostic log** | Every client open/close is logged with the reason, naming a **singleton kill** (and how to fix it), a Roblox update, or a normal close. **Copy log** puts the whole thing plus your version, Windows build, and settings on the clipboard for sharing. |
 | **Auto-clear ghosts** | Stuck window-less Roblox processes that block the mutex are ended automatically once they're over 60 seconds old (the age check protects clients that are still starting up). On by default; untick in the Clients panel to disable. |
 | **Quality of life** | Dark modern UI, live countdown, activity log, minimize-to-tray with tray menu (Open / Nudge now / Exit). |
 
@@ -71,6 +73,12 @@ Yes — the client is restored for about a second, nudged, and re-minimized.
 
 **Multi-instance shows "Waiting" but I closed everything.**
 A window-less Roblox process is probably still holding the mutex — the client counter will show it as "background". With **Auto-clear ghosts** on (the default) it's removed automatically within about a minute; **End background** clears it instantly.
+
+**A client closed and I don't know why.**
+Read the Activity log — it names the cause. `SINGLETON KILL` means another client launched while a Roblox process (not RobloxKeeper) owned the mutex: close all clients, wait for the green light, reopen. If a Roblox update was installing, its own updater closes every client and no tool can prevent that. Click **Copy log** to share the full report.
+
+**My whole session died during a "big loading" screen.**
+That's a Roblox version update. The updater terminates all running clients of the old version — RobloxKeeper logs a warning when it sees the launcher/updater running. Reopen your clients afterwards; multi-instance resumes automatically.
 
 **It works for me but not for my friend — their first client closes when they open a second.**
 That symptom means RobloxKeeper wasn't holding the mutex when the second client launched — it's an ordering problem, not detection. On the friend's machine: (1) make sure the status light is **green before** opening any Roblox client — if it's amber, click **Close all Roblox** once; (2) enable **Start with Windows** so the app always wins the ordering race; (3) note the Microsoft Store version of Roblox is not supported — use the desktop client (installed via the website).

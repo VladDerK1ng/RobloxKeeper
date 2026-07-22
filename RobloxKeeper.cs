@@ -6,6 +6,7 @@ using System.Drawing.Drawing2D;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows.Forms;
+using System.IO;
 using Microsoft.Win32;
 
 namespace RobloxKeeper
@@ -26,10 +27,15 @@ namespace RobloxKeeper
         public static readonly uint WM_SHOWME = RegisterWindowMessage("RobloxKeeper_ShowExistingWindow");
 
         static Mutex appMutex;
+        public static bool StartMinimized;
 
         [STAThread]
         static void Main()
         {
+            string[] args = Environment.GetCommandLineArgs();
+            for (int i = 1; i < args.Length; i++)
+                if (args[i] == "--minimized") StartMinimized = true;
+
             // Single instance: a second launch surfaces the running window and quits.
             // This runs before any Roblox mutex work, so the live instance is untouched.
             bool createdNew;
@@ -179,7 +185,7 @@ namespace RobloxKeeper
         struct INPUT { public uint type; public InputUnion U; }
         struct ClientInfo { public int Pid; public IntPtr Hwnd; public DateTime Start; }
 
-        const string APP_VERSION = "1.5.0";
+        const string APP_VERSION = "1.6.0";
 
         const string RUN_KEY = "Software\\Microsoft\\Windows\\CurrentVersion\\Run";
         const string AUTOSTART_VALUE = "RobloxKeeper";
@@ -218,13 +224,20 @@ namespace RobloxKeeper
         DateTime nextNudge;
         readonly Dictionary<int, bool> nudgePrefs = new Dictionary<int, bool>();
         readonly List<int> shownPids = new List<int>();
+        bool initializing;
+        bool startHidden;
+        bool installerSeen;
+        readonly Dictionary<int, DateTime> knownClients = new Dictionary<int, DateTime>();
+        DateTime lastClientOpened = DateTime.MinValue;
+        bool clientTrackingReady;
 
         public MainForm()
         {
+            startHidden = Program.StartMinimized;
             Text = "RobloxKeeper";
             FormBorderStyle = FormBorderStyle.FixedSingle;
             MaximizeBox = false;
-            ClientSize = new Size(460, 700);
+            ClientSize = new Size(460, 762);
             StartPosition = FormStartPosition.CenterScreen;
             BackColor = Theme.Bg;
             ForeColor = Theme.Text;
@@ -242,8 +255,22 @@ namespace RobloxKeeper
             uiTimer.Start();
 
             Log("RobloxKeeper v" + APP_VERSION + " started.");
-            chkAfk.Checked = true;
-            chkMulti.Checked = true;
+
+            initializing = true;
+            bool afk, multi, autoghost;
+            int intervalMin, keysIdx;
+            LoadSettings(out afk, out intervalMin, out keysIdx, out multi, out autoghost);
+            if (intervalMin < 1) intervalMin = 1;
+            if (intervalMin > 19) intervalMin = 19;
+            numInterval.Value = intervalMin;
+            if (keysIdx >= 0 && keysIdx < cmbKeys.Items.Count) cmbKeys.SelectedIndex = keysIdx;
+            chkAutoGhost.Checked = autoghost;
+            chkAfk.Checked = afk;
+            chkMulti.Checked = multi;
+            initializing = false;
+            UpdateCountdown();
+            Log("Settings: Anti-AFK " + (afk ? "on, " + intervalMin + " min, " + cmbKeys.Text : "off") +
+                " \u00B7 multi-instance " + (multi ? "on" : "off") + ".");
             OnUiTick();
         }
 
@@ -258,6 +285,21 @@ namespace RobloxKeeper
         {
             base.OnShown(e);
             ActiveControl = null;
+        }
+
+        // With --minimized (used by autostart) the window starts hidden in the
+        // tray instead of appearing on screen. The handle is still created so
+        // timers, the tray icon, and the single-instance message all work.
+        protected override void SetVisibleCore(bool value)
+        {
+            if (startHidden)
+            {
+                startHidden = false;
+                CreateHandle();
+                base.SetVisibleCore(false);
+                return;
+            }
+            base.SetVisibleCore(value);
         }
 
         void BuildUi()
@@ -293,8 +335,16 @@ namespace RobloxKeeper
             bool autostartOn = false;
             try
             {
-                using (RegistryKey k = Registry.CurrentUser.OpenSubKey(RUN_KEY))
-                    autostartOn = k != null && k.GetValue(AUTOSTART_VALUE) != null;
+                using (RegistryKey k = Registry.CurrentUser.OpenSubKey(RUN_KEY, true))
+                {
+                    object val = k != null ? k.GetValue(AUTOSTART_VALUE) : null;
+                    autostartOn = val != null;
+                    // Self-heal entries from older versions (no --minimized flag)
+                    // or after the exe was moved.
+                    string want = "\"" + Application.ExecutablePath + "\" --minimized";
+                    if (autostartOn && (val as string) != want)
+                        k.SetValue(AUTOSTART_VALUE, want);
+                }
             }
             catch { }
             chkAutostart.Checked = autostartOn;
@@ -345,7 +395,11 @@ namespace RobloxKeeper
             cmbKeys.Items.Add("Jump  (Space)");
             cmbKeys.SelectedIndex = 1;   // default: turn camera (arrow keys)
             cmbKeys.DrawItem += DrawComboItem;
-            cmbKeys.SelectedIndexChanged += delegate { Log("Nudge keys set: " + cmbKeys.Text); };
+            cmbKeys.SelectedIndexChanged += delegate
+            {
+                if (!initializing) Log("Nudge keys set: " + cmbKeys.Text);
+                SaveSettings();
+            };
             cardAfk.Controls.Add(cmbKeys);
 
             cardAfk.Controls.Add(CaptionLabel("NEXT NUDGE IN", 20, 92));
@@ -391,6 +445,11 @@ namespace RobloxKeeper
             chkAutoGhost.Cursor = Cursors.Hand;
             chkAutoGhost.TabStop = false;
             chkAutoGhost.Checked = true;
+            chkAutoGhost.CheckedChanged += delegate
+            {
+                if (!initializing) Log("Auto-clear ghosts " + (chkAutoGhost.Checked ? "on." : "off."));
+                SaveSettings();
+            };
             cardClients.Controls.Add(chkAutoGhost);
 
             lblGhosts = MutedLabel("", 150, 157, 9f);
@@ -444,7 +503,7 @@ namespace RobloxKeeper
             Card cardLog = new Card();
             cardLog.BackColor = Theme.Inset;
             cardLog.Location = new Point(16, 562);
-            cardLog.Size = new Size(428, 122);
+            cardLog.Size = new Size(428, 184);
             Controls.Add(cardLog);
 
             Label lblAct = new Label();
@@ -456,9 +515,22 @@ namespace RobloxKeeper
             lblAct.BackColor = Theme.Inset;
             cardLog.Controls.Add(lblAct);
 
+            LinkLabel lnkCopy = new LinkLabel();
+            lnkCopy.Text = "Copy log";
+            lnkCopy.AutoSize = true;
+            lnkCopy.Location = new Point(355, 13);
+            lnkCopy.Font = new Font("Segoe UI", 8.25f);
+            lnkCopy.LinkColor = Theme.Accent;
+            lnkCopy.ActiveLinkColor = Theme.AccentHover;
+            lnkCopy.LinkBehavior = LinkBehavior.HoverUnderline;
+            lnkCopy.BackColor = Theme.Inset;
+            lnkCopy.TabStop = false;
+            lnkCopy.Click += delegate { CopyLog(); };
+            cardLog.Controls.Add(lnkCopy);
+
             rtbLog = new RichTextBox();
             rtbLog.Location = new Point(18, 36);
-            rtbLog.Size = new Size(392, 72);
+            rtbLog.Size = new Size(392, 134);
             rtbLog.ReadOnly = true;
             rtbLog.BorderStyle = BorderStyle.None;
             rtbLog.BackColor = Theme.Inset;
@@ -682,14 +754,15 @@ namespace RobloxKeeper
                 nudgeTimer.Interval = (int)numInterval.Value * 60000;
                 nextNudge = DateTime.Now.AddMilliseconds(nudgeTimer.Interval);
                 nudgeTimer.Start();
-                Log("Anti-AFK enabled \u2014 interval " + numInterval.Value + " min.");
+                if (!initializing) Log("Anti-AFK enabled \u2014 interval " + numInterval.Value + " min.");
             }
             else
             {
                 nudgeTimer.Stop();
-                Log("Anti-AFK disabled.");
+                if (!initializing) Log("Anti-AFK disabled.");
             }
             UpdateCountdown();
+            SaveSettings();
         }
 
         void OnIntervalChanged(object sender, EventArgs e)
@@ -699,7 +772,8 @@ namespace RobloxKeeper
             nudgeTimer.Interval = (int)numInterval.Value * 60000;
             nextNudge = DateTime.Now.AddMilliseconds(nudgeTimer.Interval);
             nudgeTimer.Start();
-            Log("Interval set to " + numInterval.Value + " min.");
+            if (!initializing) Log("Interval set to " + numInterval.Value + " min.");
+            SaveSettings();
         }
 
         void NudgeAll(string reason)
@@ -826,14 +900,15 @@ namespace RobloxKeeper
             if (chkMulti.Checked)
             {
                 StartMulti();
-                Log("Multi-instance enabled \u2014 queued for the singleton mutex.");
+                if (!initializing) Log("Multi-instance enabled \u2014 queued for the singleton mutex.");
             }
             else
             {
                 StopMulti();
-                Log("Multi-instance disabled \u2014 mutex released.");
+                if (!initializing) Log("Multi-instance disabled \u2014 mutex released.");
             }
             UpdateMultiStatus();
+            SaveSettings();
         }
 
         void StartMulti()
@@ -908,8 +983,8 @@ namespace RobloxKeeper
                 {
                     if (chkAutostart.Checked)
                     {
-                        k.SetValue(AUTOSTART_VALUE, "\"" + Application.ExecutablePath + "\"");
-                        Log("Autostart enabled — RobloxKeeper will launch with Windows.");
+                        k.SetValue(AUTOSTART_VALUE, "\"" + Application.ExecutablePath + "\" --minimized");
+                        Log("Autostart enabled \u2014 starts minimized to the tray with Windows.");
                     }
                     else
                     {
@@ -986,6 +1061,16 @@ namespace RobloxKeeper
             if (chkAutoGhost.Checked && ghosts > 0)
                 AutoClearGhosts();
 
+            // When Roblox installs an update, ITS OWN installer terminates every
+            // running client (old version) - no tool can prevent that. Surface it
+            // so a mass client close is explained instead of looking like a bug.
+            bool installerRunning = AnyProcess("RobloxPlayerInstaller") || AnyProcess("RobloxPlayerLauncher");
+            if (installerRunning && !installerSeen)
+                Log("Roblox launcher/updater detected \u2014 if an update installs, ALL open clients close once. Reopen them after; multi-instance resumes automatically.");
+            installerSeen = installerRunning;
+
+            TrackClientLifecycle(clients, installerRunning);
+
             bool changed = clients.Count != shownPids.Count;
             if (!changed)
             {
@@ -993,6 +1078,158 @@ namespace RobloxKeeper
                     if (clients[i].Pid != shownPids[i]) { changed = true; break; }
             }
             if (changed) RebuildClientRows(clients);
+        }
+
+        // Records why each client opened or vanished. When a client dies the log
+        // states the probable cause, so the Activity text alone is enough to
+        // diagnose a "my client keeps closing" report from another machine.
+        void TrackClientLifecycle(List<ClientInfo> clients, bool installerRunning)
+        {
+            bool mutexHeld = keeper.Held;
+
+            foreach (ClientInfo ci in clients)
+            {
+                if (knownClients.ContainsKey(ci.Pid)) continue;
+                knownClients[ci.Pid] = DateTime.Now;
+                if (!clientTrackingReady) continue;   // don't narrate clients already open at startup
+                lastClientOpened = DateTime.Now;
+                Log("Client PID " + ci.Pid + " opened \u2014 mutex " +
+                    (mutexHeld ? "HELD by RobloxKeeper, other clients are safe." :
+                                 "NOT held (a Roblox process owns it) \u2014 THIS CAN CLOSE YOUR OTHER CLIENTS."));
+            }
+
+            List<int> gone = new List<int>();
+            foreach (int pid in knownClients.Keys)
+            {
+                bool alive = false;
+                foreach (ClientInfo ci in clients) if (ci.Pid == pid) { alive = true; break; }
+                if (!alive) gone.Add(pid);
+            }
+
+            foreach (int pid in gone)
+            {
+                DateTime opened = knownClients[pid];
+                knownClients.Remove(pid);
+                if (!clientTrackingReady) continue;
+
+                double lived = (DateTime.Now - opened).TotalSeconds;
+                double sinceOther = (DateTime.Now - lastClientOpened).TotalSeconds;
+                string why;
+                if (installerRunning)
+                    why = "Roblox was updating \u2014 its updater closes every open client. Not a RobloxKeeper problem; reopen them.";
+                else if (!mutexHeld && sinceOther < 30 && lastClientOpened != DateTime.MinValue)
+                    why = "SINGLETON KILL \u2014 another client launched " + ((int)sinceOther) +
+                          "s ago while a Roblox process (not RobloxKeeper) owned the mutex. Fix: close all clients, wait for the green light, then reopen.";
+                else if (!mutexHeld)
+                    why = "closed while the mutex was NOT held by RobloxKeeper \u2014 check the multi-instance light.";
+                else
+                    why = "closed normally - RobloxKeeper held the mutex, so this was NOT a singleton kill (you or the game closed it).";
+                Log("Client PID " + pid + " ended after " + ((int)lived) + "s \u2014 " + why);
+            }
+
+            clientTrackingReady = true;
+        }
+
+        // Environment.OSVersion is compatibility-shimmed for this framework target
+        // and reports 6.2 on Windows 10/11, which is useless in a shared log.
+        static string OsDescription()
+        {
+            try
+            {
+                using (RegistryKey k = Registry.LocalMachine.OpenSubKey(
+                    "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion"))
+                {
+                    if (k != null)
+                    {
+                        string name = k.GetValue("ProductName") as string;
+                        string disp = k.GetValue("DisplayVersion") as string;
+                        string build = k.GetValue("CurrentBuild") as string;
+                        int b;
+                        if (name != null && build != null && int.TryParse(build, out b) && b >= 22000)
+                            name = name.Replace("Windows 10", "Windows 11");
+                        return (name ?? "Windows") + (disp != null ? " " + disp : "") +
+                               " (build " + (build ?? "?") + ")";
+                    }
+                }
+            }
+            catch { }
+            return Environment.OSVersion.Version.ToString();
+        }
+
+        void CopyLog()
+        {
+            try
+            {
+                string header = "RobloxKeeper v" + APP_VERSION + " log\r\n" +
+                    "Windows: " + OsDescription() + "\r\n" +
+                    "Multi-instance: " + (chkMulti.Checked ? "on" : "off") +
+                    ", mutex held: " + keeper.Held + "\r\n" +
+                    "Anti-AFK: " + (chkAfk.Checked ? "on, " + numInterval.Value + " min, " + cmbKeys.Text : "off") + "\r\n" +
+                    "Autostart: " + chkAutostart.Checked + ", auto-clear ghosts: " + chkAutoGhost.Checked + "\r\n" +
+                    "----------------------------------------\r\n";
+                Clipboard.SetText(header + rtbLog.Text);
+                Log("Log copied to clipboard \u2014 paste it wherever you need.");
+            }
+            catch (Exception ex) { Log("Copy failed: " + ex.Message); }
+        }
+
+        bool AnyProcess(string name)
+        {
+            Process[] procs = Process.GetProcessesByName(name);
+            bool any = procs.Length > 0;
+            foreach (Process p in procs) p.Dispose();
+            return any;
+        }
+
+        static string SettingsPath
+        {
+            get
+            {
+                return Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                    "RobloxKeeper", "settings.txt");
+            }
+        }
+
+        void SaveSettings()
+        {
+            if (initializing) return;
+            try
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath));
+                File.WriteAllLines(SettingsPath, new string[]
+                {
+                    "afk=" + (chkAfk.Checked ? "1" : "0"),
+                    "interval=" + ((int)numInterval.Value).ToString(),
+                    "keys=" + cmbKeys.SelectedIndex.ToString(),
+                    "multi=" + (chkMulti.Checked ? "1" : "0"),
+                    "autoghost=" + (chkAutoGhost.Checked ? "1" : "0")
+                });
+            }
+            catch { }
+        }
+
+        void LoadSettings(out bool afk, out int intervalMin, out int keysIdx, out bool multi, out bool autoghost)
+        {
+            afk = true; intervalMin = 15; keysIdx = 1; multi = true; autoghost = true;
+            try
+            {
+                if (!File.Exists(SettingsPath)) return;
+                foreach (string line in File.ReadAllLines(SettingsPath))
+                {
+                    int eq = line.IndexOf('=');
+                    if (eq < 1) continue;
+                    string key = line.Substring(0, eq).Trim();
+                    string val = line.Substring(eq + 1).Trim();
+                    int tmp;
+                    if (key == "afk") afk = val == "1";
+                    else if (key == "interval") { if (int.TryParse(val, out tmp)) intervalMin = tmp; }
+                    else if (key == "keys") { if (int.TryParse(val, out tmp)) keysIdx = tmp; }
+                    else if (key == "multi") multi = val == "1";
+                    else if (key == "autoghost") autoghost = val == "1";
+                }
+            }
+            catch { }
         }
 
         void RestoreFromTray()
@@ -1055,6 +1292,7 @@ namespace RobloxKeeper
 
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
+            SaveSettings();
             uiTimer.Stop();
             nudgeTimer.Stop();
             tray.Visible = false;
@@ -1064,6 +1302,7 @@ namespace RobloxKeeper
         }
     }
 }
+
 
 
 
