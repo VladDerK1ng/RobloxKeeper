@@ -19,6 +19,8 @@ One tiny executable. Zero dependencies. No injection, no memory access, no file 
 | **Multi-Instance** | Holds Roblox's `ROBLOX_singletonMutex` (and `ROBLOX_singletonEvent`) so multiple clients can run simultaneously. A dedicated thread queue-waits on the mutex the same way Roblox clients do, so ownership transfers to RobloxKeeper at the kernel level the instant it frees — a launching client can never win the race. If clients already own it, one click on **Close all Roblox** clears them (ghost processes included) and takeover is immediate. |
 | **Client monitor** | Live count of open Roblox clients, plus detection of window-less "ghost" Roblox processes (they can silently block multi-instance) with a one-click **End background** button. |
 | **Single instance** | Launching RobloxKeeper while it's already running won't open a second copy — it surfaces the existing window instead, restoring it from the tray if needed. |
+| **Start with Windows** | Optional autostart toggle (top-right). With it on, RobloxKeeper holds the mutex from boot — before any Roblox client can exist — which makes the launch-order problem impossible. |
+| **Auto-clear ghosts** | Stuck window-less Roblox processes that block the mutex are ended automatically once they're over 60 seconds old (the age check protects clients that are still starting up). On by default; untick in the Clients panel to disable. |
 | **Quality of life** | Dark modern UI, live countdown, activity log, minimize-to-tray with tray menu (Open / Nudge now / Exit). |
 
 ## Quick start
@@ -68,7 +70,10 @@ This is the same externally-held-mutex technique used by established multi-insta
 Yes — the client is restored for about a second, nudged, and re-minimized.
 
 **Multi-instance shows "Waiting" but I closed everything.**
-A window-less Roblox process is probably still holding the mutex — the client counter will show it as "background". Click **End background** to clear it; the mutex is acquired automatically right after.
+A window-less Roblox process is probably still holding the mutex — the client counter will show it as "background". With **Auto-clear ghosts** on (the default) it's removed automatically within about a minute; **End background** clears it instantly.
+
+**It works for me but not for my friend — their first client closes when they open a second.**
+That symptom means RobloxKeeper wasn't holding the mutex when the second client launched — it's an ordering problem, not detection. On the friend's machine: (1) make sure the status light is **green before** opening any Roblox client — if it's amber, click **Close all Roblox** once; (2) enable **Start with Windows** so the app always wins the ordering race; (3) note the Microsoft Store version of Roblox is not supported — use the desktop client (installed via the website).
 
 **Why does my camera zoom blink every 15 minutes?**
 That's the nudge. Switch the key profile or raise the interval if it bothers you.

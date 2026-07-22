@@ -6,6 +6,7 @@ using System.Drawing.Drawing2D;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows.Forms;
+using Microsoft.Win32;
 
 namespace RobloxKeeper
 {
@@ -178,7 +179,11 @@ namespace RobloxKeeper
         struct INPUT { public uint type; public InputUnion U; }
         struct ClientInfo { public int Pid; public IntPtr Hwnd; public DateTime Start; }
 
-        const string APP_VERSION = "1.4.2";
+        const string APP_VERSION = "1.5.0";
+
+        const string RUN_KEY = "Software\\Microsoft\\Windows\\CurrentVersion\\Run";
+        const string AUTOSTART_VALUE = "RobloxKeeper";
+        const int GHOST_MAX_AGE_SECONDS = 60;   // never auto-kill a client that is still starting up
 
         const uint INPUT_KEYBOARD = 1;
         const uint KEYEVENTF_EXTENDEDKEY = 0x0001;
@@ -204,6 +209,7 @@ namespace RobloxKeeper
         NumericUpDown numInterval;
         ComboBox cmbKeys;
         Button btnNudge, btnZombie, btnCloseRbx;
+        CheckBox chkAutostart, chkAutoGhost;
         Label lblCountdown, lblDot, lblMultiStatus, lblClientsTitle, lblGhosts;
         ScrollPanel clientsPanel;
         RichTextBox rtbLog;
@@ -274,6 +280,26 @@ namespace RobloxKeeper
             lblVer.ForeColor = Theme.Muted;
             lblVer.BackColor = Theme.Bg;
             Controls.Add(lblVer);
+
+            chkAutostart = new CheckBox();
+            chkAutostart.Text = "Start with Windows";
+            chkAutostart.AutoSize = true;
+            chkAutostart.Location = new Point(302, 17);
+            chkAutostart.Font = new Font("Segoe UI", 9f);
+            chkAutostart.ForeColor = Theme.Muted;
+            chkAutostart.BackColor = Theme.Bg;
+            chkAutostart.Cursor = Cursors.Hand;
+            chkAutostart.TabStop = false;
+            bool autostartOn = false;
+            try
+            {
+                using (RegistryKey k = Registry.CurrentUser.OpenSubKey(RUN_KEY))
+                    autostartOn = k != null && k.GetValue(AUTOSTART_VALUE) != null;
+            }
+            catch { }
+            chkAutostart.Checked = autostartOn;
+            chkAutostart.CheckedChanged += OnAutostartToggled;
+            Controls.Add(chkAutostart);
 
             // --- Anti-AFK card ---
             Card cardAfk = new Card();
@@ -355,7 +381,19 @@ namespace RobloxKeeper
             clientsPanel.AutoScroll = true;
             cardClients.Controls.Add(clientsPanel);
 
-            lblGhosts = MutedLabel("", 20, 157, 9f);
+            chkAutoGhost = new CheckBox();
+            chkAutoGhost.Text = "Auto-clear ghosts";
+            chkAutoGhost.AutoSize = true;
+            chkAutoGhost.Location = new Point(18, 153);
+            chkAutoGhost.Font = new Font("Segoe UI", 8.25f);
+            chkAutoGhost.ForeColor = Theme.Muted;
+            chkAutoGhost.BackColor = Theme.Card;
+            chkAutoGhost.Cursor = Cursors.Hand;
+            chkAutoGhost.TabStop = false;
+            chkAutoGhost.Checked = true;
+            cardClients.Controls.Add(chkAutoGhost);
+
+            lblGhosts = MutedLabel("", 150, 157, 9f);
             cardClients.Controls.Add(lblGhosts);
 
             btnZombie = AccentButton("End background", 292, 151, 116, 26);
@@ -862,6 +900,52 @@ namespace RobloxKeeper
             }
         }
 
+        void OnAutostartToggled(object sender, EventArgs e)
+        {
+            try
+            {
+                using (RegistryKey k = Registry.CurrentUser.OpenSubKey(RUN_KEY, true))
+                {
+                    if (chkAutostart.Checked)
+                    {
+                        k.SetValue(AUTOSTART_VALUE, "\"" + Application.ExecutablePath + "\"");
+                        Log("Autostart enabled — RobloxKeeper will launch with Windows.");
+                    }
+                    else
+                    {
+                        k.DeleteValue(AUTOSTART_VALUE, false);
+                        Log("Autostart disabled.");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Log("Autostart change failed: " + ex.Message);
+            }
+        }
+
+        void AutoClearGhosts()
+        {
+            Process[] procs = Process.GetProcessesByName(ROBLOX_PROCESS);
+            int killed = 0;
+            foreach (Process p in procs)
+            {
+                try
+                {
+                    if (p.MainWindowHandle == IntPtr.Zero &&
+                        (DateTime.Now - p.StartTime).TotalSeconds > GHOST_MAX_AGE_SECONDS)
+                    {
+                        p.Kill();
+                        killed++;
+                    }
+                }
+                catch { }
+                finally { p.Dispose(); }
+            }
+            if (killed > 0)
+                Log("Auto-cleared " + killed + " stuck background Roblox process(es).");
+        }
+
         void KillZombies()
         {
             Process[] procs = Process.GetProcessesByName(ROBLOX_PROCESS);
@@ -895,6 +979,12 @@ namespace RobloxKeeper
             lblClientsTitle.Text = "CLIENTS \u00B7 " + clients.Count;
             lblGhosts.Text = ghosts > 0 ? "+" + ghosts + " background process(es)" : "";
             btnZombie.Visible = ghosts > 0;
+
+            // Stuck window-less Roblox processes block the mutex and confuse the
+            // client count - clear them automatically once they're old enough
+            // that they can't be a client still starting up.
+            if (chkAutoGhost.Checked && ghosts > 0)
+                AutoClearGhosts();
 
             bool changed = clients.Count != shownPids.Count;
             if (!changed)
