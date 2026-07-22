@@ -286,6 +286,7 @@ namespace RobloxKeeper
                 " \u00B7 multi-instance " + (multi ? "on" : "off") + ".");
             CheckLaunchPath();
             FixStaleShortcuts();
+            EnsureStartMenuShortcut();
             CheckForUpdate();
             OnUiTick();
         }
@@ -2231,6 +2232,52 @@ namespace RobloxKeeper
                 }
             }
             catch { }
+        }
+
+        // Puts RobloxKeeper in the Start menu so it can be found by typing its
+        // name in Windows search. Rewrites the shortcut if the exe has moved,
+        // so searching never launches a stale path.
+        void EnsureStartMenuShortcut()
+        {
+            try
+            {
+                string exe = Application.ExecutablePath;
+                string lnk = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.Programs),
+                    "RobloxKeeper.lnk");
+
+                Type shellType = Type.GetTypeFromProgID("WScript.Shell");
+                if (shellType == null) return;
+                object shell = Activator.CreateInstance(shellType);
+
+                if (File.Exists(lnk))
+                {
+                    object existing = shellType.InvokeMember("CreateShortcut",
+                        System.Reflection.BindingFlags.InvokeMethod, null, shell, new object[] { lnk });
+                    string target = existing.GetType().InvokeMember("TargetPath",
+                        System.Reflection.BindingFlags.GetProperty, null, existing, null) as string;
+                    if (string.Equals(target, exe, StringComparison.OrdinalIgnoreCase)) return;
+                }
+
+                object sc = shellType.InvokeMember("CreateShortcut",
+                    System.Reflection.BindingFlags.InvokeMethod, null, shell, new object[] { lnk });
+                Type t = sc.GetType();
+                t.InvokeMember("TargetPath", System.Reflection.BindingFlags.SetProperty, null, sc,
+                    new object[] { exe });
+                t.InvokeMember("WorkingDirectory", System.Reflection.BindingFlags.SetProperty, null, sc,
+                    new object[] { Path.GetDirectoryName(exe) });
+                t.InvokeMember("IconLocation", System.Reflection.BindingFlags.SetProperty, null, sc,
+                    new object[] { exe + ",0" });
+                t.InvokeMember("Description", System.Reflection.BindingFlags.SetProperty, null, sc,
+                    new object[] { "Anti-AFK and multi-instance manager for Roblox" });
+                t.InvokeMember("Save", System.Reflection.BindingFlags.InvokeMethod, null, sc, null);
+
+                Log("Added to the Start menu - search \"RobloxKeeper\" to open it.");
+            }
+            catch (Exception ex)
+            {
+                Log("Could not add a Start menu entry: " + ex.Message);
+            }
         }
 
         // ---------- Updates ----------

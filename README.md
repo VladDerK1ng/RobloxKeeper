@@ -26,6 +26,7 @@ One tiny executable. Zero dependencies. No injection, no memory access, no file 
 | **Different versions per account** | Roblox does not give every account the same client version, and it reinstalls to switch - an installer that closes every open client. RobloxKeeper spots the account that is mid-launch, reads its join URL, stops the installer, and starts that account **directly on the version it needs**. No reinstall happens, so your other clients are never touched. Fully automatic, any number of accounts, nothing to configure. |
 | **Update shielding** | A background Roblox update that would close your clients is held back while you are playing, and installs by itself once you close them all. |
 | **Auto-clear ghosts** | Stuck window-less Roblox processes are ended automatically, but only when one is actually blocking the mutex and is old enough that it can't be a client still starting up. On by default; untick in the Clients panel to disable. |
+| **Start menu entry** | Adds itself to the Start menu the first time it runs, so you can just press the Windows key, type "RobloxKeeper" and hit enter. If you move the exe, the entry is repointed automatically on the next run. |
 | **Automatic updates** | On start it checks GitHub for a newer release. If one exists it asks first, and only downloads and restarts if you say yes. Say no and it carries on, offering again next time. If you are offline or GitHub is unreachable, nothing happens and nothing is logged in your way. |
 | **Quality of life** | Dark modern UI, live countdown, activity log, minimize-to-tray with tray menu (Open / Nudge now / Exit). |
 
@@ -34,6 +35,8 @@ One tiny executable. Zero dependencies. No injection, no memory access, no file 
 1. Download (or build) `RobloxKeeper.exe` and run it - **before** opening Roblox.
 2. Open as many Roblox clients as you need.
 3. Minimize RobloxKeeper to the tray. Done.
+
+After the first run it is in your Start menu, so from then on you can just search "RobloxKeeper" to open it.
 
 Both features are enabled by default on launch.
 
