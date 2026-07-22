@@ -7,22 +7,41 @@ rem  release.bat <version>
 rem  Stops the app, bumps APP_VERSION, builds, commits, pushes,
 rem  publishes a GitHub release with RobloxKeeper.exe attached,
 rem  then starts the app again.
-rem  Example: release.bat 1.4.1
+rem  Accepts "1.4.2" or "v1.4.2" - both work.
 rem ============================================================
 
 if "%~1"=="" (
     echo Usage: release.bat ^<version^>
-    echo Example: release.bat 1.4.1
+    echo Example: release.bat 1.4.2
     exit /b 1
 )
 set VERSION=%~1
+
+rem Strip any leading v/V so "v1.4.2" and "1.4.2" both work
+:stripv
+if /i "%VERSION:~0,1%"=="v" (
+    set VERSION=%VERSION:~1%
+    goto :stripv
+)
+
+rem Validate strict x.y.z format
+echo %VERSION%| findstr /r /c:"^[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*$" >nul
+if errorlevel 1 (
+    echo Invalid version "%~1" - expected numbers like 1.4.2
+    exit /b 1
+)
 
 echo [1/6] Stopping RobloxKeeper if running ...
 taskkill /im RobloxKeeper.exe /f >nul 2>nul
 
 echo [2/6] Setting APP_VERSION to %VERSION% ...
-powershell -NoProfile -Command "$f = '%ROOT%RobloxKeeper.cs'; $c = Get-Content $f -Raw; $c = $c -replace 'APP_VERSION = \"[\d.]+\"', 'APP_VERSION = \"%VERSION%\"'; Set-Content $f -Value $c -Encoding UTF8"
+powershell -NoProfile -Command "$f = '%ROOT%RobloxKeeper.cs'; $c = Get-Content $f -Raw; $c = $c -replace 'APP_VERSION = \".+?\"', 'APP_VERSION = \"%VERSION%\"'; Set-Content $f -Value $c -Encoding UTF8"
 if errorlevel 1 goto :fail
+powershell -NoProfile -Command "if ((Get-Content '%ROOT%RobloxKeeper.cs' -Raw) -notmatch [regex]::Escape('APP_VERSION = \"%VERSION%\"')) { exit 1 }"
+if errorlevel 1 (
+    echo Version stamp did not apply - aborting.
+    goto :fail
+)
 
 echo [3/6] Building ...
 del "%ROOT%RobloxKeeper.exe" 2>nul
