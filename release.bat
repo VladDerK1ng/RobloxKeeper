@@ -43,7 +43,7 @@ gh release create v%VERSION% RobloxKeeper.exe --title "RobloxKeeper v%VERSION%" 
 if errorlevel 1 goto :fail
 
 echo.
-echo Done — v%VERSION% is live.
+echo Done - v%VERSION% is live.
 exit /b 0
 
 :fail

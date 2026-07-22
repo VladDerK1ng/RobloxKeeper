@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
@@ -315,7 +315,7 @@ namespace RobloxKeeper
             cmbKeys.TabStop = false;
             cmbKeys.DrawMode = DrawMode.OwnerDrawFixed;
             cmbKeys.Items.Add("Zoom out + in  (O, I)");
-            cmbKeys.Items.Add("Turn camera  (← →)");
+            cmbKeys.Items.Add("Turn camera  (â† â†’)");
             cmbKeys.Items.Add("Jump  (Space)");
             cmbKeys.SelectedIndex = 0;
             cmbKeys.DrawItem += DrawComboItem;
@@ -377,7 +377,7 @@ namespace RobloxKeeper
             cardMulti.Controls.Add(chkMulti);
 
             lblDot = new Label();
-            lblDot.Text = "●";
+            lblDot.Text = "â—";
             lblDot.AutoSize = true;
             lblDot.Location = new Point(20, 46);
             lblDot.Font = new Font("Segoe UI", 11f);
@@ -399,7 +399,7 @@ namespace RobloxKeeper
             btnCloseRbx.Click += delegate { CloseAllRoblox(); };
             cardMulti.Controls.Add(btnCloseRbx);
 
-            Label hint = MutedLabel("One account can't join two games at once — use separate accounts.", 20, 104, 8.25f);
+            Label hint = MutedLabel("One account can't join two games at once â€” use separate accounts.", 20, 104, 8.25f);
             cardMulti.Controls.Add(hint);
 
             // --- Activity card ---
@@ -594,7 +594,7 @@ namespace RobloxKeeper
                 CheckBox chk = new CheckBox();
                 chk.AutoSize = true;
                 chk.Location = new Point(2, y);
-                chk.Text = "Client " + idx + "   ·   PID " + ci.Pid;
+                chk.Text = "Client " + idx + "   Â·   PID " + ci.Pid;
                 chk.Checked = nudgePrefs[ci.Pid];
                 chk.ForeColor = Theme.Text;
                 chk.BackColor = Theme.Card;
@@ -644,7 +644,7 @@ namespace RobloxKeeper
                 nudgeTimer.Interval = (int)numInterval.Value * 60000;
                 nextNudge = DateTime.Now.AddMilliseconds(nudgeTimer.Interval);
                 nudgeTimer.Start();
-                Log("Anti-AFK enabled — interval " + numInterval.Value + " min.");
+                Log("Anti-AFK enabled â€” interval " + numInterval.Value + " min.");
             }
             else
             {
@@ -788,12 +788,12 @@ namespace RobloxKeeper
             if (chkMulti.Checked)
             {
                 StartMulti();
-                Log("Multi-instance enabled — queued for the singleton mutex.");
+                Log("Multi-instance enabled â€” queued for the singleton mutex.");
             }
             else
             {
                 StopMulti();
-                Log("Multi-instance disabled — mutex released.");
+                Log("Multi-instance disabled â€” mutex released.");
             }
             UpdateMultiStatus();
         }
@@ -840,7 +840,7 @@ namespace RobloxKeeper
             foreach (ClientInfo ci in clients)
                 PostMessage(ci.Hwnd, WM_CLOSE, IntPtr.Zero, IntPtr.Zero);
             if (ghosts > 0) KillZombies();
-            Log("Close request sent to " + clients.Count + " client(s) — taking the mutex as soon as they exit.");
+            Log("Close request sent to " + clients.Count + " client(s) â€” taking the mutex as soon as they exit.");
         }
 
         void UpdateMultiStatus()
@@ -848,17 +848,17 @@ namespace RobloxKeeper
             if (!chkMulti.Checked)
             {
                 lblDot.ForeColor = Theme.Muted;
-                lblMultiStatus.Text = "Disabled — a new Roblox client will replace the running one.";
+                lblMultiStatus.Text = "Disabled â€” a new Roblox client will replace the running one.";
             }
             else if (keeper.Held)
             {
                 lblDot.ForeColor = Theme.Green;
-                lblMultiStatus.Text = "Active — singleton mutex held. New clients stay open.";
+                lblMultiStatus.Text = "Active â€” singleton mutex held. New clients stay open.";
             }
             else
             {
                 lblDot.ForeColor = Theme.Amber;
-                lblMultiStatus.Text = "Waiting — a Roblox client owns the mutex. Close every client and I take over instantly.";
+                lblMultiStatus.Text = "Waiting â€” a Roblox client owns the mutex. Close every client and I take over instantly.";
             }
         }
 
@@ -885,14 +885,14 @@ namespace RobloxKeeper
             if (chkMulti.Checked && keeper.Held && !heldLogged)
             {
                 heldLogged = true;
-                Log("Multi-instance active — singleton mutex acquired.");
+                Log("Multi-instance active â€” singleton mutex acquired.");
             }
             UpdateMultiStatus();
             btnCloseRbx.Visible = chkMulti.Checked && !keeper.Held;
 
             int ghosts;
             List<ClientInfo> clients = GetClients(out ghosts);
-            lblClientsTitle.Text = "CLIENTS · " + clients.Count;
+            lblClientsTitle.Text = "CLIENTS Â· " + clients.Count;
             lblGhosts.Text = ghosts > 0 ? "+" + ghosts + " background process(es)" : "";
             btnZombie.Visible = ghosts > 0;
 
@@ -974,3 +974,4 @@ namespace RobloxKeeper
         }
     }
 }
+
