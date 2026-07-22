@@ -144,4 +144,4 @@ Yes — the mutex is only held while the app runs. Closing it releases the mutex
 
 ---
 
-*** byVladDerKing***
+** by VladDerKing **
