@@ -7,6 +7,7 @@ using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows.Forms;
 using System.IO;
+using System.Text;
 using Microsoft.Win32;
 
 namespace RobloxKeeper
@@ -185,7 +186,7 @@ namespace RobloxKeeper
         struct INPUT { public uint type; public InputUnion U; }
         struct ClientInfo { public int Pid; public IntPtr Hwnd; public DateTime Start; }
 
-        const string APP_VERSION = "1.7.0";
+        const string APP_VERSION = "1.7.1";
 
         const string RUN_KEY = "Software\\Microsoft\\Windows\\CurrentVersion\\Run";
         const string AUTOSTART_VALUE = "RobloxKeeper";
@@ -1075,7 +1076,8 @@ namespace RobloxKeeper
             if (installerRunning && !installerSeen)
             {
                 updaterSeenAt = DateTime.Now;
-                Log("Roblox launcher/bootstrapper is running - it can close open clients regardless of the mutex." +
+                Log("Roblox helper running: " + DescribeHelpers() +
+                    " - it can close open clients regardless of the mutex." +
                     (UsesLegacyBootstrapper()
                         ? " Your install uses it on EVERY launch - reinstall Roblox from roblox.com to stop this."
                         : " Reopen your clients when it finishes."));
@@ -1128,7 +1130,7 @@ namespace RobloxKeeper
                 knownClients[ci.Pid] = DateTime.Now;
                 if (!clientTrackingReady) continue;   // don't narrate clients already open at startup
                 lastClientOpened = DateTime.Now;
-                Log("Client PID " + ci.Pid + " opened \u2014 mutex " +
+                Log("Client PID " + ci.Pid + " [" + VersionOfPid(ci.Pid) + "] opened \u2014 mutex " +
                     (mutexHeld ? "HELD by RobloxKeeper, other clients are safe." :
                                  "NOT held (a Roblox process owns it) \u2014 THIS CAN CLOSE YOUR OTHER CLIENTS."));
             }
@@ -1254,6 +1256,7 @@ namespace RobloxKeeper
                     "Autostart: " + chkAutostart.Checked + ", auto-clear ghosts: " + chkAutoGhost.Checked + "\r\n" +
                     "Launch path: " + RobloxLaunchCommand() + "\r\n" +
                     "Legacy bootstrapper: " + UsesLegacyBootstrapper() + "\r\n" +
+                    "Installed: " + InstalledVersions() + "\r\n" +
                     "----------------------------------------\r\n";
                 Clipboard.SetText(header + rtbLog.Text);
                 Log("Log copied to clipboard \u2014 paste it wherever you need.");
@@ -1267,6 +1270,81 @@ namespace RobloxKeeper
             bool any = procs.Length > 0;
             foreach (Process p in procs) p.Dispose();
             return any;
+        }
+
+        static string PathOf(Process p)
+        {
+            try { return p.MainModule.FileName; }
+            catch { return "(path unavailable)"; }
+        }
+
+        // "...\Versions\version-abc123\RobloxPlayerBeta.exe" -> "version-abc123"
+        static string VersionFolderOf(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return "?";
+            try
+            {
+                string dir = Path.GetFileName(Path.GetDirectoryName(path));
+                return string.IsNullOrEmpty(dir) ? "?" : dir;
+            }
+            catch { return "?"; }
+        }
+
+        string VersionOfPid(int pid)
+        {
+            try
+            {
+                using (Process p = Process.GetProcessById(pid))
+                    return VersionFolderOf(PathOf(p));
+            }
+            catch { return "?"; }
+        }
+
+        // Names + paths of any Roblox helper processes, so a shared log shows
+        // exactly which one interfered rather than just "something did".
+        string DescribeHelpers()
+        {
+            StringBuilder sb = new StringBuilder();
+            string[] names = { "RobloxPlayerInstaller", "RobloxPlayerLauncher", "RobloxPlayerBeta" };
+            foreach (string n in names)
+            {
+                if (n == "RobloxPlayerBeta") continue;
+                Process[] procs = Process.GetProcessesByName(n);
+                foreach (Process p in procs)
+                {
+                    if (sb.Length > 0) sb.Append("; ");
+                    sb.Append(n).Append(" -> ").Append(PathOf(p));
+                    p.Dispose();
+                }
+            }
+            return sb.Length > 0 ? sb.ToString() : "(none)";
+        }
+
+        static string InstalledVersions()
+        {
+            try
+            {
+                string root = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "Roblox", "Versions");
+                if (!Directory.Exists(root)) return "(no Versions folder)";
+                string[] dirs = Directory.GetDirectories(root);
+                StringBuilder sb = new StringBuilder();
+                sb.Append(dirs.Length).Append(" version folder(s)");
+                DateTime newest = DateTime.MinValue;
+                string newestName = "?";
+                foreach (string d in dirs)
+                {
+                    string exe = Path.Combine(d, "RobloxPlayerBeta.exe");
+                    if (!File.Exists(exe)) continue;
+                    DateTime t = File.GetLastWriteTime(exe);
+                    if (t > newest) { newest = t; newestName = Path.GetFileName(d); }
+                }
+                sb.Append(", newest: ").Append(newestName);
+                if (newest != DateTime.MinValue) sb.Append(" (").Append(newest.ToString("yyyy-MM-dd HH:mm")).Append(")");
+                return sb.ToString();
+            }
+            catch { return "(unreadable)"; }
         }
 
         static string SettingsPath
@@ -1390,6 +1468,7 @@ namespace RobloxKeeper
         }
     }
 }
+
 
 
 
