@@ -187,7 +187,7 @@ namespace RobloxKeeper
         struct INPUT { public uint type; public InputUnion U; }
         struct ClientInfo { public int Pid; public IntPtr Hwnd; public DateTime Start; }
 
-        const string APP_VERSION = "2.3.0";
+        const string APP_VERSION = "2.4.0";
 
         const string RUN_KEY = "Software\\Microsoft\\Windows\\CurrentVersion\\Run";
         const string AUTOSTART_VALUE = "RobloxKeeper";
@@ -216,7 +216,7 @@ namespace RobloxKeeper
         bool heldLogged;
         CheckBox chkAfk, chkMulti;
         NumericUpDown numInterval;
-        ComboBox cmbKeys;
+        ComboBox cmbKeys, cmbVersion;
         Button btnNudge, btnZombie, btnCloseRbx, btnFixInstall, btnAllowUpdate;
         CheckBox chkAutostart, chkAutoGhost, chkProtect;
         Label lblCountdown, lblDot, lblMultiStatus, lblClientsTitle, lblGhosts, lblUpdating;
@@ -237,6 +237,7 @@ namespace RobloxKeeper
         string lastRegisteredVersion;
         DateTime protectPausedUntil = DateTime.MinValue;
         bool protectPauseShown;
+        bool suppressVersionEvent;
         readonly Dictionary<int, DateTime> knownClients = new Dictionary<int, DateTime>();
         DateTime lastClientOpened = DateTime.MinValue;
         bool clientTrackingReady;
@@ -247,7 +248,7 @@ namespace RobloxKeeper
             Text = "RobloxKeeper";
             FormBorderStyle = FormBorderStyle.FixedSingle;
             MaximizeBox = false;
-            ClientSize = new Size(460, 808);
+            ClientSize = new Size(460, 842);
             StartPosition = FormStartPosition.CenterScreen;
             BackColor = Theme.Bg;
             ForeColor = Theme.Text;
@@ -479,7 +480,7 @@ namespace RobloxKeeper
             // --- Multi-instance card ---
             Card cardMulti = new Card();
             cardMulti.Location = new Point(16, 416);
-            cardMulti.Size = new Size(428, 178);
+            cardMulti.Size = new Size(428, 212);
             Controls.Add(cardMulti);
 
             cardMulti.Controls.Add(SectionTitle("MULTI-INSTANCE"));
@@ -552,13 +553,28 @@ namespace RobloxKeeper
             };
             cardMulti.Controls.Add(btnAllowUpdate);
 
-            lblUpdating = MutedLabel("One account can't join two games at once \u2014 use separate accounts.", 20, 148, 8.25f);
+            Label lblVerPick = MutedLabel("Next launch uses version", 20, 148, 8.25f);
+            cardMulti.Controls.Add(lblVerPick);
+
+            cmbVersion = new ComboBox();
+            cmbVersion.DropDownStyle = ComboBoxStyle.DropDownList;
+            cmbVersion.FlatStyle = FlatStyle.Flat;
+            cmbVersion.BackColor = Theme.Inset;
+            cmbVersion.ForeColor = Theme.Text;
+            cmbVersion.Location = new Point(148, 144);
+            cmbVersion.Width = 260;
+            cmbVersion.TabStop = false;
+            cmbVersion.SelectedIndexChanged += delegate { OnVersionPicked(); };
+            cardMulti.Controls.Add(cmbVersion);
+
+            lblUpdating = MutedLabel("Two accounts wanting different versions? Pick each one's version before you open it.",
+                20, 178, 8.25f);
             cardMulti.Controls.Add(lblUpdating);
 
             // --- Activity card ---
             Card cardLog = new Card();
             cardLog.BackColor = Theme.Inset;
-            cardLog.Location = new Point(16, 608);
+            cardLog.Location = new Point(16, 642);
             cardLog.Size = new Size(428, 184);
             Controls.Add(cardLog);
 
@@ -1265,6 +1281,7 @@ namespace RobloxKeeper
             }
             UpdateMultiStatus();
             btnCloseRbx.Visible = chkMulti.Checked && !keeper.Held;
+            RefreshVersionList();
 
             int ghosts;
             List<ClientInfo> clients = GetClients(out ghosts);
@@ -1468,6 +1485,50 @@ namespace RobloxKeeper
             return end > i ? cmd.Substring(i, end - i) : cmd.Substring(i);
         }
 
+        // Point the roblox-player protocol at a specific installed version.
+        // Roblox does exactly this itself; doing it up-front means the next
+        // launch already matches what that account wants, so Roblox has no
+        // reason to run its installer - and the installer is what kills clients.
+        static bool SetRegisteredVersion(string versionFolder)
+        {
+            string exe = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "Roblox", "Versions", versionFolder, "RobloxPlayerBeta.exe");
+            if (!File.Exists(exe)) return false;
+            string value = "\"" + exe + "\" %1";
+            bool ok = false;
+            foreach (string proto in new string[] { "roblox-player", "roblox" })
+            {
+                try
+                {
+                    using (RegistryKey k = Registry.CurrentUser.CreateSubKey(
+                        "Software\\Classes\\" + proto + "\\shell\\open\\command"))
+                    {
+                        if (k != null) { k.SetValue("", value); ok = true; }
+                    }
+                }
+                catch { }
+            }
+            return ok;
+        }
+
+        static List<string> InstalledVersionList()
+        {
+            List<string> list = new List<string>();
+            try
+            {
+                string root = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "Roblox", "Versions");
+                if (!Directory.Exists(root)) return list;
+                foreach (string d in Directory.GetDirectories(root))
+                    if (File.Exists(Path.Combine(d, "RobloxPlayerBeta.exe")))
+                        list.Add(Path.GetFileName(d));
+            }
+            catch { }
+            return list;
+        }
+
         static bool UsesLegacyBootstrapper()
         {
             string cmd = RobloxLaunchCommand().ToLowerInvariant();
@@ -1504,6 +1565,49 @@ namespace RobloxKeeper
                     sb.Append("  <-- STALE (registered is ").Append(reg).Append(")");
             }
             return sb.ToString();
+        }
+
+        void RefreshVersionList()
+        {
+            List<string> vers = InstalledVersionList();
+            string current = LaunchPathVersion();
+
+            bool same = cmbVersion.Items.Count == vers.Count;
+            if (same)
+                for (int i = 0; i < vers.Count; i++)
+                    if ((string)cmbVersion.Items[i] != vers[i]) { same = false; break; }
+
+            if (!same)
+            {
+                suppressVersionEvent = true;
+                cmbVersion.Items.Clear();
+                foreach (string v in vers) cmbVersion.Items.Add(v);
+                suppressVersionEvent = false;
+            }
+
+            int idx = cmbVersion.Items.IndexOf(current);
+            if (idx >= 0 && cmbVersion.SelectedIndex != idx)
+            {
+                suppressVersionEvent = true;
+                cmbVersion.SelectedIndex = idx;
+                suppressVersionEvent = false;
+            }
+        }
+
+        void OnVersionPicked()
+        {
+            if (suppressVersionEvent || cmbVersion.SelectedItem == null) return;
+            string want = (string)cmbVersion.SelectedItem;
+            if (string.Equals(want, LaunchPathVersion(), StringComparison.OrdinalIgnoreCase)) return;
+            if (SetRegisteredVersion(want))
+            {
+                lastRegisteredVersion = want;   // our own change is not a Roblox flip
+                Log("Next Roblox launch will use " + want + ". Open that account now - because Roblox is " +
+                    "already pointed at the version it wants, it has no reason to reinstall, so your other " +
+                    "clients stay open.");
+            }
+            else
+                Log("Could not point Roblox at " + want + " - the version folder or exe is missing.");
         }
 
         void CheckStaleShortcuts()
@@ -2115,6 +2219,7 @@ namespace RobloxKeeper
         }
     }
 }
+
 
 
 

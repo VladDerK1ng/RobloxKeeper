@@ -23,6 +23,7 @@ One tiny executable. Zero dependencies. No injection, no memory access, no file 
 | **Saved settings** | Every setting — anti-AFK on/off, interval, nudge profile, multi-instance, auto-clear ghosts — is written to `%APPDATA%\RobloxKeeper\settings.txt` and restored on the next launch. |
 | **Diagnostic log** | Every client open/close is logged with the reason, naming a **singleton kill**, the **Roblox bootstrapper**, or a normal close. **Copy log** puts the whole thing plus your version, Windows build, settings, and Roblox launch path on the clipboard for sharing. |
 | **Launch-path check** | Warns at startup if Roblox launches via the legacy bootstrapper (`RobloxPlayerLauncher`), which closes running clients on every launch no matter who holds the mutex — the one failure mode multi-instance cannot fix from outside. |
+| **Version picker** | Accounts can be served different Roblox client versions. **Next launch uses version** points the `roblox-player` protocol at any installed version before you launch, so Roblox already matches what that account wants and never runs the installer that closes your other clients. |
 | **Updater blocking** | Roblox serves different client versions to different accounts, so signing into another account (a premium main next to an alt, for example) makes Roblox reinstall — and **its installer closes every open client**. While clients are running, RobloxKeeper stops that installer, so your session survives. With no clients open it steps aside and Roblox updates normally. On by default. |
 | **Repair install** | Fixes the duplicate-install loop that closes clients by itself: keeps the Roblox version currently in use, removes the competing copies, repoints stale shortcuts, and names any third-party launcher that must be uninstalled. Confirms before touching anything. |
 | **Auto-clear ghosts** | Stuck window-less Roblox processes that block the mutex are ended automatically once they're over 60 seconds old (the age check protects clients that are still starting up). On by default; untick in the Clients panel to disable. |
@@ -79,6 +80,16 @@ A window-less Roblox process is probably still holding the mutex — the client 
 
 **A client closed and I don't know why.**
 Read the Activity log — it names the cause. `SINGLETON KILL` means another client launched while a Roblox process (not RobloxKeeper) owned the mutex: close all clients, wait for the green light, reopen. If a Roblox update was installing, its own updater closes every client and no tool can prevent that. Click **Copy log** to share the full report.
+
+**My two accounts need different Roblox versions — how do I run both?**
+Roblox does not give every account the same client version, and it re-registers the whole install (running its installer, which closes every open client) whenever the account it launches wants a different one. Blocking the installer stops the second account launching; allowing it kills the first. The way out is to point Roblox at the right version *before* each launch, so it has no reason to reinstall:
+
+1. Open both accounts once so both versions get installed — the **Installed:** line in the log will list two version folders.
+2. In the Multi-instance card, set **Next launch uses version** to the first account's version, then open that account.
+3. Switch **Next launch uses version** to the second account's version, then open the second account.
+4. Leave **Block Roblox updater while clients are open** ticked so nothing can reinstall underneath you.
+
+Each client keeps running its own version. If a launch still stalls, click **Allow update** once, let it finish, and try again.
 
 **It works with two alt accounts, but my main account closes everything.**
 Roblox does not serve the same client version to every account — a main account (often one with premium, or one included in a staged rollout) can be on a different release channel than your alts. Signing into it makes Roblox reinstall the other version, and **Roblox's installer closes every open client** to replace the files. Nothing about the mutex can prevent that.
