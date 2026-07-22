@@ -187,7 +187,7 @@ namespace RobloxKeeper
         struct INPUT { public uint type; public InputUnion U; }
         struct ClientInfo { public int Pid; public IntPtr Hwnd; public DateTime Start; }
 
-        const string APP_VERSION = "2.0.0";
+        const string APP_VERSION = "2.1.0";
 
         const string RUN_KEY = "Software\\Microsoft\\Windows\\CurrentVersion\\Run";
         const string AUTOSTART_VALUE = "RobloxKeeper";
@@ -1020,7 +1020,7 @@ namespace RobloxKeeper
             msg.AppendLine("Your working Roblox stays installed - only the duplicate copies go, so there is");
             msg.AppendLine("nothing left to fight over. You WILL have to rejoin your games.");
             msg.AppendLine();
-            if (tp != "(none found)")
+            if (HasActiveThirdPartyLauncher())
             {
                 msg.AppendLine("IMPORTANT - third-party launchers found: " + tp);
                 msg.AppendLine("These install their OWN Roblox version and will recreate the conflict.");
@@ -1072,11 +1072,14 @@ namespace RobloxKeeper
             Log("Repair finished - removed " + removed + " duplicate version folder(s)" +
                 (failed > 0 ? ", " + failed + " could not be removed (try again once everything Roblox is closed)" : "") +
                 ". Kept " + (keep ?? "(none)") + ".");
-            if (tp != "(none found)")
-                Log("IMPORTANT: uninstall the third-party launchers you don't use (" + tp +
-                    ") or they will reinstall their own copy and the conflict returns. Then launch Roblox from ONE source only.");
+            if (HasActiveThirdPartyLauncher())
+            {
+                Log("IMPORTANT: a third-party launcher is still installed (" + tp +
+                    ") - it will reinstall its own copy and the conflict returns unless you remove it.");
+                OfferLauncherUninstall();
+            }
             else
-                Log("Launch Roblox from one source only from now on.");
+                Log("No active third-party launcher found. Launch Roblox from one source only from now on.");
 
             versionConflictLogged = false;
             lastRegisteredVersion = null;
@@ -1393,9 +1396,8 @@ namespace RobloxKeeper
 
         void CheckLaunchPath()
         {
-            string tp = ThirdPartyLaunchers();
-            if (tp != "(none found)")
-                Log("Third-party Roblox launchers present: " + tp +
+            if (HasActiveThirdPartyLauncher())
+                Log("Third-party Roblox launcher detected: " + ThirdPartyLaunchers() +
                     ". These install and register their OWN Roblox version. If clients keep " +
                     "closing and Roblox keeps reinstalling, use only ONE launcher - remove the " +
                     "others, then reinstall Roblox once.");
@@ -1501,46 +1503,179 @@ namespace RobloxKeeper
         // Known third-party Roblox launchers/bootstrappers. These install and
         // manage their own Roblox version and re-register the protocol, which
         // is a common cause of two versions fighting.
+        // A leftover settings folder is NOT an installed launcher - reporting one
+        // as active sends people hunting for software they already removed. Only
+        // a live process, an executable, or an uninstall entry counts as active.
         static string ThirdPartyLaunchers()
         {
             StringBuilder sb = new StringBuilder();
-            string[] folders = { "Bloxstrap", "Fishstrap", "Voidstrap", "Lunarstrap", "Roblox Account Manager" };
+            string[] names = { "Bloxstrap", "Fishstrap", "Voidstrap", "Lunarstrap", "Roblox Account Manager" };
             string[] roots =
             {
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData)
             };
-            foreach (string root in roots)
+
+            List<string[]> uninstallers = FindLauncherUninstallers();
+
+            foreach (string name in names)
             {
-                foreach (string f in folders)
+                bool running = false;
+                try
+                {
+                    Process[] ps = Process.GetProcessesByName(name.Replace(" ", ""));
+                    running = ps.Length > 0;
+                    foreach (Process p in ps) p.Dispose();
+                }
+                catch { }
+
+                bool hasExe = false, hasFolder = false;
+                foreach (string root in roots)
                 {
                     try
                     {
-                        if (Directory.Exists(Path.Combine(root, f)))
+                        string dir = Path.Combine(root, name);
+                        if (!Directory.Exists(dir)) continue;
+                        hasFolder = true;
+                        if (Directory.GetFiles(dir, "*.exe", SearchOption.AllDirectories).Length > 0)
+                            hasExe = true;
+                    }
+                    catch { }
+                }
+
+                bool registered = false;
+                foreach (string[] u in uninstallers)
+                    if (u[0].ToLowerInvariant().Contains(name.ToLowerInvariant().Replace(" ", "")))
+                        registered = true;
+
+                if (!running && !hasExe && !hasFolder && !registered) continue;
+
+                string state = running ? "RUNNING - this one is active"
+                             : (hasExe || registered) ? "installed"
+                             : "leftover settings only, not installed";
+                if (sb.Length > 0) sb.Append(", ");
+                sb.Append(name).Append(" (").Append(state).Append(")");
+            }
+            return sb.Length > 0 ? sb.ToString() : "(none found)";
+        }
+
+        // Only launchers that are actually installed/running can cause the loop.
+        static bool HasActiveThirdPartyLauncher()
+        {
+            string s = ThirdPartyLaunchers();
+            return s.Contains("RUNNING") || s.Contains("(installed)");
+        }
+
+        // Windows uninstall entries for third-party Roblox launchers, so the
+        // one step the app cannot do for the user is at least one click away.
+        static List<string[]> FindLauncherUninstallers()
+        {
+            List<string[]> found = new List<string[]>();
+            string[] needles = { "bloxstrap", "fishstrap", "voidstrap", "lunarstrap" };
+            RegistryKey[] roots = { Registry.CurrentUser, Registry.LocalMachine };
+            string[] paths =
+            {
+                "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
+                "Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall"
+            };
+            foreach (RegistryKey root in roots)
+            {
+                foreach (string p in paths)
+                {
+                    try
+                    {
+                        using (RegistryKey k = root.OpenSubKey(p))
                         {
-                            if (sb.Length > 0) sb.Append(", ");
-                            sb.Append(f);
+                            if (k == null) continue;
+                            foreach (string sub in k.GetSubKeyNames())
+                            {
+                                try
+                                {
+                                    using (RegistryKey s = k.OpenSubKey(sub))
+                                    {
+                                        if (s == null) continue;
+                                        string name = s.GetValue("DisplayName") as string;
+                                        string cmd = s.GetValue("UninstallString") as string;
+                                        if (string.IsNullOrEmpty(name) || string.IsNullOrEmpty(cmd)) continue;
+                                        string lower = name.ToLowerInvariant();
+                                        foreach (string n in needles)
+                                        {
+                                            if (lower.Contains(n))
+                                            {
+                                                found.Add(new string[] { name, cmd });
+                                                break;
+                                            }
+                                        }
+                                    }
+                                }
+                                catch { }
+                            }
                         }
                     }
                     catch { }
                 }
             }
-            string[] procNames = { "Bloxstrap", "Fishstrap", "Voidstrap", "RobloxAccountManager" };
-            foreach (string n in procNames)
+            return found;
+        }
+
+        void OfferLauncherUninstall()
+        {
+            List<string[]> unins = FindLauncherUninstallers();
+            if (unins.Count == 0)
+            {
+                MessageBox.Show(this,
+                    "No third-party launcher uninstaller was found in Windows' installed-programs list.\r\n\r\n" +
+                    "If one is still installed, remove it from Windows Settings > Apps > Installed apps, " +
+                    "then delete any leftover folder in %LOCALAPPDATA%.",
+                    "Nothing to uninstall", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            StringBuilder sb = new StringBuilder();
+            sb.AppendLine("These third-party Roblox launchers are installed:");
+            sb.AppendLine();
+            foreach (string[] u in unins) sb.AppendLine("  - " + u[0]);
+            sb.AppendLine();
+            sb.AppendLine("They install and register their OWN Roblox version, which is what makes");
+            sb.AppendLine("clients close by themselves when a second install disagrees.");
+            sb.AppendLine();
+            sb.AppendLine("Run their uninstallers now? Each one opens its own uninstall window;");
+            sb.AppendLine("follow the prompts. Keep a launcher only if it is the ONLY way you start Roblox.");
+
+            if (MessageBox.Show(this, sb.ToString(), "Uninstall third-party launchers",
+                    MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
+            {
+                Log("Launcher uninstall cancelled.");
+                return;
+            }
+
+            foreach (string[] u in unins)
             {
                 try
                 {
-                    Process[] ps = Process.GetProcessesByName(n);
-                    if (ps.Length > 0)
+                    string cmd = u[1].Trim();
+                    string exe, args = "";
+                    if (cmd.StartsWith("\""))
                     {
-                        if (sb.Length > 0) sb.Append(", ");
-                        sb.Append(n).Append(" (RUNNING)");
+                        int close = cmd.IndexOf('"', 1);
+                        exe = cmd.Substring(1, close - 1);
+                        args = cmd.Substring(close + 1).Trim();
                     }
-                    foreach (Process p in ps) p.Dispose();
+                    else
+                    {
+                        int sp = cmd.IndexOf(' ');
+                        exe = sp > 0 ? cmd.Substring(0, sp) : cmd;
+                        args = sp > 0 ? cmd.Substring(sp + 1) : "";
+                    }
+                    Process.Start(new ProcessStartInfo(exe, args) { UseShellExecute = true });
+                    Log("Started uninstaller for " + u[0] + ".");
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    Log("Could not start uninstaller for " + u[0] + ": " + ex.Message +
+                        " - remove it from Windows Settings > Apps instead.");
+                }
             }
-            return sb.Length > 0 ? sb.ToString() : "(none found)";
         }
 
         static string AllVersionFolders()
@@ -1755,6 +1890,7 @@ namespace RobloxKeeper
         }
     }
 }
+
 
 
 
