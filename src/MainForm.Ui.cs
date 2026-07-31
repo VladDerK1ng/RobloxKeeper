@@ -29,6 +29,12 @@ namespace RobloxKeeper
         const int LOG_Y = 724, LOG_H = 184;
 
         const int ROW_H = 26;
+        const int WELL_W = 248;   // the countdown well, left of the Nudge now button
+
+        // Title bar columns. TITLE_X + TITLE_W must not reach VER_X.
+        internal const int TITLE_X = 18, TITLE_W = 138;
+        internal const int VER_X = 156, VER_W = 60;
+        internal const int AUTOSTART_RIGHT = 356;
 
         Panel titleBar;
 
@@ -53,21 +59,24 @@ namespace RobloxKeeper
             titleBar.BackColor = Theme.Bg;
             Controls.Add(titleBar);
 
-            Label lblTitle = Ui.RowLabel("RobloxKeeper", 18, 0, TITLEBAR_H, 170, 13f, Theme.Text);
+            // Width stops at TITLE_W, not wherever looks roomy: these labels are
+            // opaque, and one added earlier sits higher in the z-order, so an
+            // oversized box here silently paints over the version beside it.
+            Label lblTitle = Ui.RowLabel("RobloxKeeper", 18, 0, TITLEBAR_H, TITLE_W, 13f, Theme.Text);
             lblTitle.Font = new Font("Segoe UI", 13f, FontStyle.Bold);
             lblTitle.BackColor = Theme.Bg;
             titleBar.Controls.Add(lblTitle);
 
             // Smaller and dimmer than the surrounding UI text so it reads as a
             // footnote to the title rather than competing with it.
-            Label lblVer = Ui.RowLabel("v" + AppInfo.APP_VERSION, 156, 0, TITLEBAR_H, 60, 8.25f,
+            Label lblVer = Ui.RowLabel("v" + AppInfo.APP_VERSION, VER_X, 0, TITLEBAR_H, VER_W, 8.25f,
                 Color.FromArgb(96, 100, 122));
             lblVer.BackColor = Theme.Bg;
             titleBar.Controls.Add(lblVer);
 
             chkAutostart = Ui.DarkCheck("Start with Windows", 0, 0, 9f);
             chkAutostart.BackColor = Theme.Bg;
-            chkAutostart.Location = new Point(356 - chkAutostart.PreferredSize.Width,
+            chkAutostart.Location = new Point(AUTOSTART_RIGHT - chkAutostart.PreferredSize.Width,
                                               (TITLEBAR_H - chkAutostart.PreferredSize.Height) / 2);
             bool autostartOn = false;
             try
@@ -154,10 +163,21 @@ namespace RobloxKeeper
             // contained readout rather than text floating in empty space.
             InsetPanel well = new InsetPanel();
             well.Location = new Point(Ui.PAD, 82);
-            well.Size = new Size(248, 58);
+            well.Size = new Size(WELL_W, 58);
             card.Controls.Add(well);
 
-            Label caption = Ui.CaptionLabel("NEXT NUDGE IN", 14, 10);
+            // Both span the full width of the well and centre their own text, so
+            // the caption and the readout stay centred no matter how the text
+            // below changes - "12:47" and "Waiting for Roblox" are very
+            // different widths.
+            Label caption = new Label();
+            caption.Text = "NEXT NUDGE IN";
+            caption.AutoSize = false;
+            caption.Location = new Point(0, 8);
+            caption.Size = new Size(WELL_W, 14);
+            caption.TextAlign = ContentAlignment.MiddleCenter;
+            caption.Font = new Font("Segoe UI", 7.5f, FontStyle.Bold);
+            caption.ForeColor = Theme.Muted;
             caption.BackColor = Theme.Inset;
             well.Controls.Add(caption);
 
@@ -165,8 +185,10 @@ namespace RobloxKeeper
             countdownWord = new Font("Segoe UI", 12f, FontStyle.Bold);
 
             lblCountdown = new Label();
-            lblCountdown.AutoSize = true;
-            lblCountdown.Location = new Point(12, COUNTDOWN_CLOCK_Y);
+            lblCountdown.AutoSize = false;
+            lblCountdown.Location = new Point(0, 22);
+            lblCountdown.Size = new Size(WELL_W, 30);
+            lblCountdown.TextAlign = ContentAlignment.MiddleCenter;
             lblCountdown.Font = countdownClock;
             lblCountdown.ForeColor = Theme.Text;
             lblCountdown.BackColor = Theme.Inset;

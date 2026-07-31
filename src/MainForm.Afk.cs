@@ -134,17 +134,13 @@ namespace RobloxKeeper
             SetCountdown(((int)left.TotalMinutes).ToString() + ":" + left.Seconds.ToString("00"), true);
         }
 
-        // The big numeral suits a clock, but "Waiting for Roblox" at 19pt runs
-        // all the way into the Nudge now button, so word states drop a size and
-        // sit lower to stay optically centred.
+        // The big numeral suits a clock, but "Waiting for Roblox" at 19pt is too
+        // wide for the well, so word states drop a size. The label is fixed-width
+        // and centres its own text, so swapping the font re-centres by itself.
         void SetCountdown(string text, bool clock)
         {
             Font want = clock ? countdownClock : countdownWord;
-            if (!ReferenceEquals(lblCountdown.Font, want))
-            {
-                lblCountdown.Font = want;
-                lblCountdown.Location = new Point(12, clock ? COUNTDOWN_CLOCK_Y : COUNTDOWN_WORD_Y);
-            }
+            if (!ReferenceEquals(lblCountdown.Font, want)) lblCountdown.Font = want;
             if (lblCountdown.Text != text) lblCountdown.Text = text;
         }
     }

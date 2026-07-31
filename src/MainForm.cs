@@ -151,9 +151,6 @@ namespace RobloxKeeper
         internal const int FULL_HEIGHT = 924;
         internal const int BASE_WIDTH = 460;
 
-        const int COUNTDOWN_CLOCK_Y = 22;
-        const int COUNTDOWN_WORD_Y = 27;
-
         void SetHeightToFitScreen()
         {
             int available = FULL_HEIGHT;
