@@ -12,7 +12,7 @@ namespace RobloxKeeper
         readonly int clientIndex;
         readonly PerformanceManager perf;
 
-        ComboBox cmbPriority, cmbCores;
+        ThemedPicker cmbPriority, cmbCores;
         CheckBox chkEco;
         Label lblRam;
         Button btnTrim;
@@ -33,7 +33,7 @@ namespace RobloxKeeper
             MinimizeBox = false;
             ShowInTaskbar = false;
             StartPosition = FormStartPosition.CenterParent;
-            ClientSize = new Size(372, 262);
+            ClientSize = new Size(372, 296);
             BackColor = Theme.Bg;
             ForeColor = Theme.Text;
             Font = new Font("Segoe UI", 9.75f);
@@ -45,50 +45,54 @@ namespace RobloxKeeper
         {
             Card card = new Card();
             card.Location = new Point(12, 12);
-            card.Size = new Size(348, 196);
+            card.Size = new Size(348, 228);
             Controls.Add(card);
 
             card.Controls.Add(Ui.SectionTitle(label.ToUpperInvariant()));
 
             lblRam = Ui.MutedLabel("", 20, 38, 8.25f);
+            lblRam.MaximumSize = new Size(308, 0);
             card.Controls.Add(lblRam);
 
-            card.Controls.Add(Ui.MutedLabel("CPU priority", 20, 68, 9.75f));
-            cmbPriority = Ui.DarkCombo(160, 65, 168);
+            card.Controls.Add(Ui.MutedLabel("CPU priority", 20, 70, 9.75f));
+            cmbPriority = Ui.DarkCombo(150, 66, 178);
             Ui.FillPriorityCombo(cmbPriority);
             cmbPriority.SelectedIndex = Result.Priority;
             card.Controls.Add(cmbPriority);
 
-            card.Controls.Add(Ui.MutedLabel("Cores", 20, 102, 9.75f));
-            cmbCores = Ui.DarkCombo(160, 99, 168);
+            card.Controls.Add(Ui.MutedLabel("Cores", 20, 104, 9.75f));
+            cmbCores = Ui.DarkCombo(150, 100, 178);
             Ui.FillCoreCombo(cmbCores);
             Ui.SelectCoreCount(cmbCores, Result.Cores);
             card.Controls.Add(cmbCores);
 
-            chkEco = Ui.DarkCheck("Efficiency mode (EcoQoS)", 20, 136, 9f);
+            chkEco = Ui.DarkCheck("Efficiency mode (EcoQoS)", 20, 138, 9f);
             chkEco.ForeColor = Theme.Text;
             chkEco.Checked = Result.Eco;
             card.Controls.Add(chkEco);
 
-            btnTrim = Ui.AccentButton("Trim memory now", 190, 158, 138, 28);
+            // Indented to sit under the checkbox's text rather than its box.
+            Label hint = Ui.MutedLabel("Parks the client on efficiency cores and caps its clock.", 45, 162, 8.25f);
+            hint.MaximumSize = new Size(283, 0);
+            card.Controls.Add(hint);
+
+            btnTrim = Ui.AccentButton("Trim memory now", 188, 186, 140, 30);
             btnTrim.Font = new Font("Segoe UI", 8.25f, FontStyle.Bold);
             btnTrim.Click += delegate { TrimNow(); };
             card.Controls.Add(btnTrim);
 
-            card.Controls.Add(Ui.MutedLabel("Parks the client on efficiency cores.", 20, 160, 8.25f));
-
-            Button ok = Ui.AccentButton("Apply", 244, 220, 116, 30);
+            Button ok = Ui.AccentButton("Apply", 244, 252, 116, 32);
             ok.Click += delegate { Commit(false); };
             Controls.Add(ok);
 
-            Button reset = Ui.AccentButton("Use default", 124, 220, 112, 30);
+            Button reset = Ui.AccentButton("Use default", 124, 252, 112, 32);
             reset.BackColor = Theme.Card;
             reset.Font = new Font("Segoe UI", 8.25f, FontStyle.Bold);
             reset.FlatAppearance.MouseOverBackColor = Theme.Inset;
             reset.Click += delegate { Commit(true); };
             Controls.Add(reset);
 
-            Button cancel = Ui.AccentButton("Cancel", 12, 220, 100, 30);
+            Button cancel = Ui.AccentButton("Cancel", 12, 252, 100, 32);
             cancel.BackColor = Theme.Card;
             cancel.Font = new Font("Segoe UI", 8.25f, FontStyle.Bold);
             cancel.FlatAppearance.MouseOverBackColor = Theme.Inset;

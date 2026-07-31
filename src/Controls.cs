@@ -99,65 +99,33 @@ namespace RobloxKeeper
             return b;
         }
 
-        // WinForms combo boxes ignore BackColor unless they are owner-drawn, so
-        // every dropdown in the app is painted by hand to stay on-theme.
-        public static ComboBox DarkCombo(int x, int y, int w)
+        public static ThemedPicker DarkCombo(int x, int y, int w)
         {
-            ComboBox c = new ComboBox();
-            c.DropDownStyle = ComboBoxStyle.DropDownList;
-            c.FlatStyle = FlatStyle.Flat;
-            c.BackColor = Theme.Inset;
-            c.ForeColor = Theme.Text;
+            ThemedPicker c = new ThemedPicker();
             c.Location = new Point(x, y);
             c.Width = w;
-            c.TabStop = false;
-            c.DrawMode = DrawMode.OwnerDrawFixed;
-            c.DrawItem += DrawComboItem;
             return c;
         }
 
-        public static void DrawComboItem(object sender, DrawItemEventArgs e)
+        public static ThemedCheckBox DarkCheck(string text, int x, int y, float size)
         {
-            ComboBox cb = sender as ComboBox;
-            if (cb == null || e.Index < 0) return;
-            bool inEdit = (e.State & DrawItemState.ComboBoxEdit) != 0;
-            bool selected = (e.State & DrawItemState.Selected) != 0;
-            Color bg = (!inEdit && selected) ? Theme.Accent : Theme.Inset;
-            Color fg = (!inEdit && selected) ? Color.White : Theme.Text;
-            using (SolidBrush b = new SolidBrush(bg))
-                e.Graphics.FillRectangle(b, e.Bounds);
-            Rectangle textRect = new Rectangle(e.Bounds.X + 6, e.Bounds.Y, e.Bounds.Width - 6, e.Bounds.Height);
-            TextRenderer.DrawText(e.Graphics, cb.Items[e.Index].ToString(), cb.Font, textRect, fg,
-                TextFormatFlags.VerticalCenter | TextFormatFlags.Left);
-        }
-
-        public static CheckBox DarkCheck(string text, int x, int y, float size)
-        {
-            CheckBox c = new CheckBox();
+            ThemedCheckBox c = new ThemedCheckBox();
             c.Text = text;
-            c.AutoSize = true;
             c.Location = new Point(x, y);
             c.Font = new Font("Segoe UI", size);
             c.ForeColor = Theme.Muted;
             c.BackColor = Theme.Card;
-            c.Cursor = Cursors.Hand;
-            c.TabStop = false;
             return c;
         }
 
-        public static NumericUpDown DarkNumeric(int x, int y, int w, int min, int max, int value)
+        public static ThemedNumeric DarkNumeric(int x, int y, int w, int min, int max, int value)
         {
-            NumericUpDown n = new NumericUpDown();
+            ThemedNumeric n = new ThemedNumeric();
             n.Minimum = min;
             n.Maximum = max;
             n.Value = value;
             n.Width = w;
             n.Location = new Point(x, y);
-            n.BackColor = Theme.Inset;
-            n.ForeColor = Theme.Text;
-            n.BorderStyle = BorderStyle.FixedSingle;
-            n.TextAlign = HorizontalAlignment.Center;
-            n.TabStop = false;
             return n;
         }
 
@@ -175,7 +143,7 @@ namespace RobloxKeeper
             return list.ToArray();
         }
 
-        public static void FillCoreCombo(ComboBox c)
+        public static void FillCoreCombo(ThemedPicker c)
         {
             c.Items.Clear();
             c.Items.Add("All cores");
@@ -184,7 +152,7 @@ namespace RobloxKeeper
             c.SelectedIndex = 0;
         }
 
-        public static int SelectedCoreCount(ComboBox c)
+        public static int SelectedCoreCount(ThemedPicker c)
         {
             int i = c.SelectedIndex;
             if (i <= 0) return 0;
@@ -192,7 +160,7 @@ namespace RobloxKeeper
             return i - 1 < choices.Length ? choices[i - 1] : 0;
         }
 
-        public static void SelectCoreCount(ComboBox c, int count)
+        public static void SelectCoreCount(ThemedPicker c, int count)
         {
             if (count <= 0) { c.SelectedIndex = 0; return; }
             int[] choices = CoreChoices();
@@ -201,7 +169,7 @@ namespace RobloxKeeper
             c.SelectedIndex = 0;
         }
 
-        public static void FillPriorityCombo(ComboBox c)
+        public static void FillPriorityCombo(ThemedPicker c)
         {
             c.Items.Clear();
             foreach (string n in PerformanceManager.AllPriorityNames()) c.Items.Add(n);

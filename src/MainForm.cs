@@ -8,6 +8,19 @@ using Microsoft.Win32;
 
 namespace RobloxKeeper
 {
+    // The multi-instance status line shares a fixed-height card with the hint
+    // below it, so how these wrap is a layout constraint, not just wording.
+    // Kept together here so the length of each is obvious side by side.
+    static class MultiStatus
+    {
+        public const int WIDTH_WITH_BUTTON = 238;
+        public const int WIDTH_ALONE = 362;
+
+        public const string DISABLED = "Disabled - a new client replaces the running one.";
+        public const string ACTIVE = "Active - singleton mutex held. New clients stay open.";
+        public const string WAITING = "Waiting - a Roblox client owns the mutex. Close them all and I take over.";
+    }
+
     // Window state, the one-second housekeeping loop, and the glue between the
     // UI and the workers. The pieces that do real work live in their own files:
     // MainForm.Ui.cs builds the layout, MainForm.Afk.cs runs the nudges, and
@@ -30,9 +43,10 @@ namespace RobloxKeeper
         string lastRedirectArgs;
         DateTime lastRedirectAt = DateTime.MinValue;
 
-        CheckBox chkAfk, chkMulti, chkAutostart, chkAutoGhost, chkAutoTrim, chkPerfEco;
-        NumericUpDown numInterval, numTrimEvery;
-        ComboBox cmbKeys, cmbPerfPriority, cmbPerfCores;
+        ThemedToggle chkAfk, chkMulti;
+        ThemedCheckBox chkAutostart, chkAutoGhost, chkAutoTrim, chkPerfEco;
+        ThemedNumeric numInterval, numTrimEvery;
+        ThemedPicker cmbKeys, cmbPerfPriority, cmbPerfCores;
         Button btnNudge, btnZombie, btnCloseRbx, btnTrimAll;
         Label lblCountdown, lblDot, lblMultiStatus, lblClientsTitle, lblGhosts, lblUpdating;
         ScrollPanel clientsPanel;
@@ -41,12 +55,14 @@ namespace RobloxKeeper
         NotifyIcon tray;
 
         DateTime nextNudge;
+        Font countdownClock, countdownWord;
         readonly Dictionary<int, bool> nudgePrefs = new Dictionary<int, bool>();
         readonly List<int> shownPids = new List<int>();
         readonly Dictionary<int, Label> ramLabels = new Dictionary<int, Label>();
         List<ClientInfo> lastClients = new List<ClientInfo>();
 
         bool initializing;
+        bool rowsBuilt;
         bool startHidden;
         bool installerSeen;
         DateTime lastCloseRequest = DateTime.MinValue;
@@ -122,7 +138,7 @@ namespace RobloxKeeper
         // would simply be off-screen and unreachable, so the window is capped to
         // the working area and scrolls instead. The extra width covers the
         // scrollbar so it never sits on top of a card.
-        const int FULL_HEIGHT = 862;
+        const int FULL_HEIGHT = 870;
         const int BASE_WIDTH = 460;
 
         void SetHeightToFitScreen()
@@ -154,6 +170,12 @@ namespace RobloxKeeper
             base.OnHandleCreated(e);
             int on = 1;
             try { Native.DwmSetWindowAttribute(Handle, 20, ref on, 4); } catch { }
+
+            // Scrollbars are child windows with their own theme, so they stay
+            // bright white next to the dark log unless asked otherwise.
+            DarkScrollbars.Apply(rtbLog);
+            DarkScrollbars.Apply(clientsPanel);
+            DarkScrollbars.Apply(this);
         }
 
         protected override void OnShown(EventArgs e)
@@ -218,7 +240,7 @@ namespace RobloxKeeper
             perf.Prune(clients);
             perf.ApplyPending(clients);
             if (chkAutoTrim.Checked)
-                perf.AutoTrimTick(clients, (int)numTrimEvery.Value, PerformanceManager.ForegroundPid());
+                perf.AutoTrimTick(clients, numTrimEvery.Value, PerformanceManager.ForegroundPid());
 
             // When Roblox installs an update, ITS OWN installer terminates every
             // running client (old version) - no tool can prevent that. Surface it
@@ -292,13 +314,16 @@ namespace RobloxKeeper
             }
             UpdateAfkTimer(nudgeable);
 
-            bool changed = clients.Count != shownPids.Count;
+            // rowsBuilt forces the first pass through. Without it, starting with
+            // no clients means 0 == 0, the rows are never built, and the panel
+            // sits empty instead of saying so.
+            bool changed = !rowsBuilt || clients.Count != shownPids.Count;
             if (!changed)
             {
                 for (int i = 0; i < clients.Count; i++)
                     if (clients[i].Pid != shownPids[i]) { changed = true; break; }
             }
-            if (changed) RebuildClientRows(clients);
+            if (changed) { RebuildClientRows(clients); rowsBuilt = true; }
             else UpdateRamLabels(clients);
         }
 
@@ -412,20 +437,27 @@ namespace RobloxKeeper
 
         void UpdateMultiStatus()
         {
+            // The status shares its row with "Close all Roblox", which only
+            // appears while waiting. Widening the text when the button is gone
+            // keeps the common "Active" case on a single line.
+            bool buttonShowing = chkMulti.Checked && !keeper.Held;
+            lblMultiStatus.MaximumSize = new Size(
+                buttonShowing ? MultiStatus.WIDTH_WITH_BUTTON : MultiStatus.WIDTH_ALONE, 0);
+
             if (!chkMulti.Checked)
             {
                 lblDot.ForeColor = Theme.Muted;
-                lblMultiStatus.Text = "Disabled - a new Roblox client will replace the running one.";
+                lblMultiStatus.Text = MultiStatus.DISABLED;
             }
             else if (keeper.Held)
             {
                 lblDot.ForeColor = Theme.Green;
-                lblMultiStatus.Text = "Active - singleton mutex held. New clients stay open.";
+                lblMultiStatus.Text = MultiStatus.ACTIVE;
             }
             else
             {
                 lblDot.ForeColor = Theme.Amber;
-                lblMultiStatus.Text = "Waiting - a Roblox client owns the mutex. Close every client and I take over instantly.";
+                lblMultiStatus.Text = MultiStatus.WAITING;
             }
         }
 
@@ -507,15 +539,15 @@ namespace RobloxKeeper
         {
             if (initializing) return;
             settings.Afk = chkAfk.Checked;
-            settings.IntervalMinutes = (int)numInterval.Value;
             settings.KeysIndex = cmbKeys.SelectedIndex;
+            settings.IntervalMinutes = numInterval.Value;
             settings.Multi = chkMulti.Checked;
             settings.AutoGhost = chkAutoGhost.Checked;
             settings.PerfPriority = cmbPerfPriority.SelectedIndex;
             settings.PerfCores = Ui.SelectedCoreCount(cmbPerfCores);
             settings.PerfEco = chkPerfEco.Checked;
             settings.AutoTrim = chkAutoTrim.Checked;
-            settings.AutoTrimMinutes = (int)numTrimEvery.Value;
+            settings.AutoTrimMinutes = numTrimEvery.Value;
             settings.Save();
         }
 

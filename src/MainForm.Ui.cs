@@ -31,15 +31,8 @@ namespace RobloxKeeper
             lblVer.BackColor = Theme.Bg;
             Controls.Add(lblVer);
 
-            chkAutostart = new CheckBox();
-            chkAutostart.Text = "Start with Windows";
-            chkAutostart.AutoSize = true;
-            chkAutostart.Location = new Point(302, 17);
-            chkAutostart.Font = new Font("Segoe UI", 9f);
-            chkAutostart.ForeColor = Theme.Muted;
+            chkAutostart = Ui.DarkCheck("Start with Windows", 296, 16, 9f);
             chkAutostart.BackColor = Theme.Bg;
-            chkAutostart.Cursor = Cursors.Hand;
-            chkAutostart.TabStop = false;
             bool autostartOn = false;
             try
             {
@@ -93,10 +86,13 @@ namespace RobloxKeeper
 
             cardAfk.Controls.Add(Ui.CaptionLabel("NEXT NUDGE IN", 20, 92));
 
+            countdownClock = new Font("Segoe UI", 19f, FontStyle.Bold);
+            countdownWord = new Font("Segoe UI", 12f, FontStyle.Bold);
+
             lblCountdown = new Label();
             lblCountdown.AutoSize = true;
-            lblCountdown.Location = new Point(17, 108);
-            lblCountdown.Font = new Font("Segoe UI", 19f, FontStyle.Bold);
+            lblCountdown.Location = new Point(17, 106);
+            lblCountdown.Font = countdownClock;
             lblCountdown.ForeColor = Theme.Text;
             lblCountdown.BackColor = Theme.Card;
             cardAfk.Controls.Add(lblCountdown);
@@ -203,7 +199,7 @@ namespace RobloxKeeper
             // --- Multi-instance card ---
             Card cardMulti = new Card();
             cardMulti.Location = new Point(16, 530);
-            cardMulti.Size = new Size(428, 118);
+            cardMulti.Size = new Size(428, 126);
             Controls.Add(cardMulti);
 
             cardMulti.Controls.Add(Ui.SectionTitle("MULTI-INSTANCE"));
@@ -215,7 +211,7 @@ namespace RobloxKeeper
             lblDot = new Label();
             lblDot.Text = "●";
             lblDot.AutoSize = true;
-            lblDot.Location = new Point(20, 46);
+            lblDot.Location = new Point(20, 45);
             lblDot.Font = new Font("Segoe UI", 11f);
             lblDot.ForeColor = Theme.Muted;
             lblDot.BackColor = Theme.Card;
@@ -223,26 +219,26 @@ namespace RobloxKeeper
 
             lblMultiStatus = new Label();
             lblMultiStatus.AutoSize = true;
-            lblMultiStatus.MaximumSize = new Size(240, 0);
-            lblMultiStatus.Location = new Point(42, 49);
+            lblMultiStatus.MaximumSize = new Size(362, 0);   // narrowed by UpdateMultiStatus when the button shows
+            lblMultiStatus.Location = new Point(42, 48);
             lblMultiStatus.ForeColor = Theme.Text;
             lblMultiStatus.BackColor = Theme.Card;
             cardMulti.Controls.Add(lblMultiStatus);
 
-            btnCloseRbx = Ui.AccentButton("Close all Roblox", 292, 46, 116, 28);
+            btnCloseRbx = Ui.AccentButton("Close all Roblox", 292, 44, 116, 28);
             btnCloseRbx.Font = new Font("Segoe UI", 8.25f, FontStyle.Bold);
             btnCloseRbx.Visible = false;
             btnCloseRbx.Click += delegate { CloseAllRoblox(); };
             cardMulti.Controls.Add(btnCloseRbx);
 
-            lblUpdating = Ui.MutedLabel("Different accounts needing different Roblox versions are handled automatically.",
-                20, 84, 8.25f);
+            lblUpdating = Ui.MutedLabel("Accounts needing different Roblox versions are handled automatically.",
+                20, 92, 8.25f);
             cardMulti.Controls.Add(lblUpdating);
 
             // --- Activity card ---
             Card cardLog = new Card();
             cardLog.BackColor = Theme.Inset;
-            cardLog.Location = new Point(16, 662);
+            cardLog.Location = new Point(16, 670);
             cardLog.Size = new Size(428, 184);
             Controls.Add(cardLog);
 
@@ -290,16 +286,15 @@ namespace RobloxKeeper
             Resize += delegate { if (WindowState == FormWindowState.Minimized) Hide(); };
         }
 
-        CheckBox MakeToggle()
+        // Right-aligned to 408 so it lines up with the accent buttons below it.
+        ThemedToggle MakeToggle()
         {
-            CheckBox c = new CheckBox();
+            ThemedToggle c = new ThemedToggle();
+            c.Font = new Font("Segoe UI", 9.75f);
             c.Text = "Enabled";
-            c.AutoSize = true;
-            c.Location = new Point(334, 14);
             c.ForeColor = Theme.Text;
             c.BackColor = Theme.Card;
-            c.Cursor = Cursors.Hand;
-            c.TabStop = false;
+            c.Location = new Point(408 - c.PreferredSize.Width, 13);
             return c;
         }
 
@@ -343,17 +338,14 @@ namespace RobloxKeeper
             {
                 if (!nudgePrefs.ContainsKey(ci.Pid)) nudgePrefs[ci.Pid] = true;
 
-                CheckBox chk = new CheckBox();
-                chk.AutoSize = true;
+                ThemedCheckBox chk = new ThemedCheckBox();
                 chk.Location = new Point(2, y);
                 chk.Text = "Client " + idx + " · PID " + ci.Pid;
                 chk.Checked = nudgePrefs[ci.Pid];
                 chk.ForeColor = Theme.Text;
                 chk.BackColor = Theme.Card;
-                chk.Cursor = Cursors.Hand;
-                chk.TabStop = false;
                 int pid = ci.Pid;
-                CheckBox chkRef = chk;
+                ThemedCheckBox chkRef = chk;
                 chk.CheckedChanged += delegate
                 {
                     nudgePrefs[pid] = chkRef.Checked;

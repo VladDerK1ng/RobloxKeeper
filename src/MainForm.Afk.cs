@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.Threading;
 
 namespace RobloxKeeper
@@ -25,7 +26,7 @@ namespace RobloxKeeper
             if (chkAfk.Checked && nudgeTimer.Enabled)
             {
                 nudgeTimer.Stop();
-                nudgeTimer.Interval = (int)numInterval.Value * 60000;
+                nudgeTimer.Interval = numInterval.Value * 60000;
                 nextNudge = DateTime.Now.AddMilliseconds(nudgeTimer.Interval);
                 nudgeTimer.Start();
             }
@@ -109,7 +110,7 @@ namespace RobloxKeeper
             bool shouldRun = chkAfk.Checked && nudgeable > 0;
             if (shouldRun && !nudgeTimer.Enabled)
             {
-                nudgeTimer.Interval = (int)numInterval.Value * 60000;
+                nudgeTimer.Interval = numInterval.Value * 60000;
                 nextNudge = DateTime.Now.AddMilliseconds(nudgeTimer.Interval);
                 nudgeTimer.Start();
                 if (!initializing)
@@ -125,19 +126,26 @@ namespace RobloxKeeper
 
         void UpdateCountdown()
         {
-            if (!chkAfk.Checked)
-            {
-                lblCountdown.Text = "Disabled";
-                return;
-            }
-            if (!nudgeTimer.Enabled)
-            {
-                lblCountdown.Text = "Waiting for Roblox";
-                return;
-            }
+            if (!chkAfk.Checked) { SetCountdown("Disabled", false); return; }
+            if (!nudgeTimer.Enabled) { SetCountdown("Waiting for Roblox", false); return; }
+
             TimeSpan left = nextNudge - DateTime.Now;
             if (left < TimeSpan.Zero) left = TimeSpan.Zero;
-            lblCountdown.Text = ((int)left.TotalMinutes).ToString() + ":" + left.Seconds.ToString("00");
+            SetCountdown(((int)left.TotalMinutes).ToString() + ":" + left.Seconds.ToString("00"), true);
+        }
+
+        // The big numeral suits a clock, but "Waiting for Roblox" at 19pt runs
+        // all the way into the Nudge now button, so word states drop a size and
+        // sit lower to stay optically centred.
+        void SetCountdown(string text, bool clock)
+        {
+            Font want = clock ? countdownClock : countdownWord;
+            if (!ReferenceEquals(lblCountdown.Font, want))
+            {
+                lblCountdown.Font = want;
+                lblCountdown.Location = new Point(17, clock ? 106 : 114);
+            }
+            if (lblCountdown.Text != text) lblCountdown.Text = text;
         }
     }
 }

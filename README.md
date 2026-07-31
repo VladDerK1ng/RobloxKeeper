@@ -116,8 +116,14 @@ src/
   Native.cs              every P/Invoke, in one place
   InputSender.cs         SendInput scan codes and focus handling
   Controls.cs            Card, ScrollPanel, dark-theme widget builders
+  ThemedControls.cs      owner-drawn checkbox, toggle, stepper and picker
   Theme.cs               colours
 ```
+
+Windows draws checkboxes, spinners and combo buttons with the system theme, which puts white boxes and
+grey chrome on top of near-black cards. `ThemedControls.cs` replaces those four with owner-drawn
+equivalents - including a picker whose dropdown is a popup the app paints itself, because a
+`DropDownList` combo never lets go of its own border and drop button.
 
 ## RobloxKeeper's own footprint
 
