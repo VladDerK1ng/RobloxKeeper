@@ -1,0 +1,114 @@
+name: Release
+
+# Publishes RobloxKeeper.exe straight from the tagged source. Nobody uploads a
+# binary by hand, so the exe on the releases page is always the output of the
+# code you can read in this repository at that tag.
+#
+# To cut a release:  release.bat 1.4.2   (bumps, commits, tags, pushes)
+# or by hand:        git tag v1.4.2 && git push origin v1.4.2
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to build and publish (e.g. v1.4.2)"
+        required: true
+
+permissions:
+  contents: write        # create the release
+  id-token: write        # sign the build provenance attestation
+  attestations: write    # publish that attestation
+
+jobs:
+  release:
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out the tagged source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+          fetch-depth: 0
+
+      # The tag is the source of truth. If the version baked into the binary
+      # disagreed with the tag, the in-app updater would offer an endless
+      # upgrade to a version the user already has.
+      - name: Check the tag matches APP_VERSION
+        id: version
+        shell: pwsh
+        run: |
+          $tag = "${{ github.event.inputs.tag || github.ref_name }}"
+          $want = $tag -replace '^v', ''
+          $src = Get-Content src/AppInfo.cs -Raw
+          $m = [regex]::Match($src, 'APP_VERSION\s*=\s*"([^"]+)"')
+          if (-not $m.Success) { throw "Could not find APP_VERSION in src/AppInfo.cs" }
+          $have = $m.Groups[1].Value
+          if ($have -ne $want) {
+            throw "Tag $tag says version $want but src/AppInfo.cs says $have. Bump AppInfo.cs and re-tag."
+          }
+          Write-Host "Tag $tag matches APP_VERSION $have."
+          "version=$want" >> $env:GITHUB_OUTPUT
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+
+      - name: Build with build.bat
+        shell: cmd
+        run: build.bat
+
+      - name: Checksum the binary
+        id: hash
+        shell: pwsh
+        run: |
+          if (-not (Test-Path RobloxKeeper.exe)) {
+            throw "build.bat exited 0 but produced no RobloxKeeper.exe"
+          }
+          $sha = (Get-FileHash RobloxKeeper.exe -Algorithm SHA256).Hash.ToLower()
+          "$sha  RobloxKeeper.exe" | Out-File RobloxKeeper.exe.sha256 -Encoding ascii
+          Write-Host "sha256 $sha"
+          "sha256=$sha" >> $env:GITHUB_OUTPUT
+
+      # A signed, public record that this exact exe came out of this exact
+      # commit in this repository, verifiable with:
+      #   gh attestation verify RobloxKeeper.exe --repo VladDerK1ng/RobloxKeeper
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: RobloxKeeper.exe
+
+      - name: Write the release notes header
+        shell: pwsh
+        run: |
+          @"
+          Built automatically by GitHub Actions from ``${{ github.sha }}`` - no hand-uploaded binary.
+
+          **Verify what you downloaded**
+
+          ``````
+          gh attestation verify RobloxKeeper.exe --repo ${{ github.repository }}
+          ``````
+
+          Or check the hash matches ``RobloxKeeper.exe.sha256``:
+
+          ``````
+          Get-FileHash RobloxKeeper.exe -Algorithm SHA256
+          ``````
+
+          ``sha256: ${{ steps.hash.outputs.sha256 }}``
+
+          The exact compiler command is in [build.bat](../../blob/${{ github.sha }}/build.bat), and the
+          run that produced this file is [here](../../actions/runs/${{ github.run_id }}).
+
+          ---
+          "@ | Out-File notes.md -Encoding utf8
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          gh release create "${{ steps.version.outputs.tag }}" `
+            RobloxKeeper.exe RobloxKeeper.exe.sha256 `
+            --title "RobloxKeeper ${{ steps.version.outputs.tag }}" `
+            --notes-file notes.md `
+            --generate-notes

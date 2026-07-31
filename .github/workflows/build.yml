@@ -1,0 +1,47 @@
+name: Build
+
+# Every push and pull request is compiled from source on a clean runner. This is
+# the check that keeps the release workflow honest: if main does not build here,
+# a tag cut from it cannot be published either.
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out the source
+        uses: actions/checkout@v4
+
+      - name: Build with build.bat
+        shell: cmd
+        run: build.bat
+
+      - name: Report what was built
+        shell: pwsh
+        run: |
+          if (-not (Test-Path RobloxKeeper.exe)) {
+            throw "build.bat exited 0 but produced no RobloxKeeper.exe"
+          }
+          $exe = Get-Item RobloxKeeper.exe
+          $sha = (Get-FileHash RobloxKeeper.exe -Algorithm SHA256).Hash.ToLower()
+          $ver = [regex]::Match((Get-Content src/AppInfo.cs -Raw), 'APP_VERSION\s*=\s*"([^"]+)"').Groups[1].Value
+          Write-Host "APP_VERSION : $ver"
+          Write-Host "size        : $($exe.Length) bytes"
+          Write-Host "sha256      : $sha"
+
+      - name: Upload the build for inspection
+        uses: actions/upload-artifact@v4
+        with:
+          name: RobloxKeeper-${{ github.sha }}
+          path: RobloxKeeper.exe
+          if-no-files-found: error
+          retention-days: 14

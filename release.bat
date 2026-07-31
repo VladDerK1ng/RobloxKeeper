@@ -4,9 +4,10 @@ set ROOT=%~dp0
 
 rem ============================================================
 rem  release.bat <version>
-rem  Stops the app, bumps APP_VERSION, builds, commits, pushes,
-rem  publishes a GitHub release with RobloxKeeper.exe attached,
-rem  then starts the app again.
+rem  Bumps APP_VERSION, test-compiles, commits, pushes and tags.
+rem  GitHub Actions takes it from there: it builds RobloxKeeper.exe
+rem  from the tagged source and publishes the release itself, so no
+rem  binary is ever uploaded by hand.
 rem  Accepts "1.4.2" or "v1.4.2" - both work.
 rem ============================================================
 
@@ -31,24 +32,32 @@ if errorlevel 1 (
     exit /b 1
 )
 
-echo [1/6] Stopping RobloxKeeper if running ...
-taskkill /im RobloxKeeper.exe /f >nul 2>nul
+rem A tag that already exists would be silently ignored by the push, and no
+rem release would ever appear. Catch it before anything is committed.
+git -C "%ROOT%." rev-parse -q --verify "refs/tags/v%VERSION%" >nul
+if not errorlevel 1 (
+    echo Tag v%VERSION% already exists - pick a new version number.
+    exit /b 1
+)
 
-echo [2/6] Setting APP_VERSION to %VERSION% ...
-powershell -NoProfile -Command "$f = '%ROOT%RobloxKeeper.cs'; $c = Get-Content $f -Raw; $c = $c -replace 'APP_VERSION = \".+?\"', 'APP_VERSION = \"%VERSION%\"'; Set-Content $f -Value $c -Encoding UTF8"
+echo [1/5] Setting APP_VERSION to %VERSION% ...
+powershell -NoProfile -Command "$f = '%ROOT%src\AppInfo.cs'; $c = Get-Content $f -Raw; $c = $c -replace 'APP_VERSION = \".+?\"', 'APP_VERSION = \"%VERSION%\"'; Set-Content $f -Value $c -Encoding UTF8"
 if errorlevel 1 goto :fail
-powershell -NoProfile -Command "if ((Get-Content '%ROOT%RobloxKeeper.cs' -Raw) -notmatch [regex]::Escape('APP_VERSION = \"%VERSION%\"')) { exit 1 }"
+powershell -NoProfile -Command "if ((Get-Content '%ROOT%src\AppInfo.cs' -Raw) -notmatch [regex]::Escape('APP_VERSION = \"%VERSION%\"')) { exit 1 }"
 if errorlevel 1 (
     echo Version stamp did not apply - aborting.
     goto :fail
 )
 
-echo [3/6] Building ...
-del "%ROOT%RobloxKeeper.exe" 2>nul
-call "%ROOT%build.bat"
-if not exist "%ROOT%RobloxKeeper.exe" goto :fail
+rem Compiled to a scratch path so a running RobloxKeeper.exe never has to be
+rem killed just to check that the tag will build. The real binary is produced
+rem by the release workflow, not here.
+echo [2/5] Test-compiling ...
+call "%ROOT%build.bat" "%TEMP%\RobloxKeeper.build-check.exe"
+if errorlevel 1 goto :fail
+del "%TEMP%\RobloxKeeper.build-check.exe" 2>nul
 
-echo [4/6] Committing ...
+echo [3/5] Committing ...
 git -C "%ROOT%." add -A
 git -C "%ROOT%." diff --cached --quiet
 if errorlevel 1 (
@@ -58,20 +67,23 @@ if errorlevel 1 (
     echo        No source changes to commit.
 )
 
-echo [5/6] Pushing ...
+echo [4/5] Pushing main ...
 git -C "%ROOT%." push origin main
 if errorlevel 1 goto :fail
 
-echo [6/6] Publishing GitHub release v%VERSION% ...
-gh release create v%VERSION% "%ROOT%RobloxKeeper.exe" --title "RobloxKeeper v%VERSION%" --generate-notes
+echo [5/5] Tagging v%VERSION% and pushing the tag ...
+git -C "%ROOT%." tag "v%VERSION%"
+if errorlevel 1 goto :fail
+git -C "%ROOT%." push origin "v%VERSION%"
 if errorlevel 1 goto :fail
 
-start "" "%ROOT%RobloxKeeper.exe"
 echo.
-echo Done - v%VERSION% is live and the app was restarted.
+echo Done - GitHub Actions is now building and publishing v%VERSION%.
+echo Watch it here:
+echo   https://github.com/VladDerK1ng/RobloxKeeper/actions
 exit /b 0
 
 :fail
 echo.
-echo Release FAILED at the step above.
+echo Release FAILED at the step above. Nothing was tagged.
 exit /b 1

@@ -3,6 +3,7 @@
 **Anti-AFK + Multi-Instance manager for Roblox on Windows.**
 One tiny executable. Zero dependencies. No injection, no memory access, no file tampering.
 
+[![Build](https://github.com/VladDerK1ng/RobloxKeeper/actions/workflows/build.yml/badge.svg)](https://github.com/VladDerK1ng/RobloxKeeper/actions/workflows/build.yml)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D6)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Dependencies](https://img.shields.io/badge/dependencies-none-blueviolet)
@@ -21,18 +22,20 @@ One tiny executable. Zero dependencies. No injection, no memory access, no file 
 | **Nudge key profiles** | Choose what the nudge sends: **Turn camera** (`←`, `→` - default), **Zoom out + in** (`O`, `I`), or **Jump** (`Space`). Pick whichever is safe for your game's keybinds. |
 | **Per-client selection** | Every running client appears as a row in the Clients panel (scrollable, so any number of clients works). Untick one and the nudger leaves it alone - run anti-AFK on two accounts while a third stays untouched. **Show** brings that client's window to the front so you can tell which is which. New clients default to enabled. |
 | **Multi-Instance** | Holds Roblox's `ROBLOX_singletonMutex` (and `ROBLOX_singletonEvent`) so multiple clients can run simultaneously. A dedicated thread queue-waits on the mutex the same way Roblox clients do, so ownership transfers to RobloxKeeper at the kernel level the instant it frees - a launching client can never win the race. If clients already own it, one click on **Close all Roblox** clears them (ghost processes included) and takeover is immediate. |
-| **Client monitor** | Live count of open Roblox clients, plus detection of window-less "ghost" Roblox processes (they can silently block multi-instance) with a one-click **End background** button. |
+| **Client monitor** | Live count of open Roblox clients with each one's memory use, plus detection of window-less "ghost" Roblox processes (they can silently block multi-instance) with a one-click **End background** button. Processes still starting up are shown as *starting* rather than *stuck*, so a normal launch never looks like a fault. |
+| **Per-client resources** | Each client row has a **Tune** link: set its **CPU priority**, pin it to a number of **cores**, switch on **efficiency mode** (EcoQoS - the same throttling as Task Manager's), or **trim its memory** on the spot. Successive clients are given non-overlapping core blocks, so "4 cores" on two clients means two sets of four that genuinely don't fight. |
+| **Client defaults + auto-trim** | The **Performance** card sets the profile every newly launched client gets, so the foreground account can outrank the AFK ones without touching anything per-launch. **Auto-trim** hands idle memory back to Windows on a timer, skipping whichever client you're actually looking at. **Trim all now** does it immediately, from the window or the tray menu. |
 | **Single instance** | Launching RobloxKeeper while it's already running won't open a second copy - it surfaces the existing window instead, restoring it from the tray if needed. |
 | **Start with Windows** | Optional autostart toggle (top-right). With it on, RobloxKeeper starts **minimized to the tray** at boot and holds the mutex before any Roblox client can exist, which makes the launch-order problem impossible. |
-| **Saved settings** | Every setting - anti-AFK on/off, interval, nudge profile, multi-instance, auto-clear ghosts - is written to `%APPDATA%\RobloxKeeper\settings.txt` and restored on the next launch. |
+| **Saved settings** | Every setting - anti-AFK on/off, interval, nudge profile, multi-instance, auto-clear ghosts, client defaults, auto-trim - is written to `%APPDATA%\RobloxKeeper\settings.txt` and restored on the next launch. Per-client **Tune** overrides are deliberately session-only: Windows recycles PIDs, so a saved override would eventually land on an unrelated process. |
 | **Diagnostic log** | Every client open/close is logged with the reason, naming a **singleton kill**, the **Roblox bootstrapper**, or a normal close. **Copy log** puts the whole thing plus your version, Windows build, settings, and Roblox launch path on the clipboard for sharing. |
 | **Launch-path check** | Warns at startup if Roblox launches via the legacy bootstrapper (`RobloxPlayerLauncher`), which closes running clients on every launch no matter who holds the mutex - the one failure mode multi-instance cannot fix from outside. |
 | **Different versions per account** | Roblox does not give every account the same client version, and it reinstalls to switch - an installer that closes every open client. RobloxKeeper spots the account that is mid-launch, reads its join URL, stops the installer, and starts that account **directly on the version it needs**. No reinstall happens, so your other clients are never touched. Fully automatic, any number of accounts, nothing to configure. |
 | **Update shielding** | A background Roblox update that would close your clients is held back while you are playing, and installs by itself once you close them all. |
-| **Auto-clear ghosts** | Stuck window-less Roblox processes are ended automatically, but only when one is actually blocking the mutex and is old enough that it can't be a client still starting up. On by default; untick in the Clients panel to disable. |
+| **Auto-clear ghosts** | Stuck window-less Roblox processes are ended automatically once they have been window-less for 150 seconds - long enough that they cannot be a client still starting up. A leaked client wastes a gigabyte of RAM whether or not multi-instance is on, so nothing else gates this. On by default; untick in the Clients panel to disable. |
 | **Start menu entry** | Adds itself to the Start menu the first time it runs, so you can just press the Windows key, type "RobloxKeeper" and hit enter. If you move the exe, the entry is repointed automatically on the next run. |
 | **Automatic updates** | On start it checks GitHub for a newer release. If one exists it asks first, and only downloads and restarts if you say yes. Say no and it carries on, offering again next time. If you are offline or GitHub is unreachable, nothing happens and nothing is logged in your way. |
-| **Quality of life** | Dark modern UI, live countdown, activity log, minimize-to-tray with tray menu (Open / Nudge now / Exit). |
+| **Quality of life** | Dark modern UI, live countdown, activity log, minimize-to-tray with tray menu (Open / Nudge now / Trim client memory / Exit). |
 
 ## Quick start
 
@@ -46,6 +49,30 @@ Both features are enabled by default on launch.
 
 > **Note:** one Roblox *account* can't be in two games at once - that's enforced server-side. Multi-instance is for running multiple accounts (or one in-game plus others at the home screen).
 
+## Verifying a download
+
+Releases are built and published by [GitHub Actions](.github/workflows/release.yml) straight from the tagged
+source - nobody uploads a binary by hand. Given the app touches `SendInput`, the registry and autostart,
+you shouldn't have to take that on trust:
+
+- **Check the build provenance.** Every release carries a signed attestation tying that exact exe to the
+  commit and workflow run that produced it:
+
+  ```bat
+  gh attestation verify RobloxKeeper.exe --repo VladDerK1ng/RobloxKeeper
+  ```
+
+- **Check the hash.** Each release ships a `RobloxKeeper.exe.sha256` next to the exe; compare it with
+  `Get-FileHash RobloxKeeper.exe -Algorithm SHA256`.
+
+- **Read the build.** The release notes link the commit and the workflow run, and the entire compiler
+  invocation is the one line in [build.bat](build.bat) - the same script the workflow runs.
+
+One caveat, stated plainly: the .NET Framework `csc.exe` this project uses has no `/deterministic` switch,
+so two builds of the same source produce binaries that differ in embedded GUIDs and timestamps. You can
+verify the release was built by the workflow from a given commit; you cannot byte-compare it against your
+own local build.
+
 ## Building from source
 
 No SDK or IDE required - it compiles with the C# compiler that ships inside Windows:
@@ -54,15 +81,49 @@ No SDK or IDE required - it compiles with the C# compiler that ships inside Wind
 build.bat
 ```
 
-To publish a new version (maintainers): `release.bat <version>` bumps `APP_VERSION`, builds, commits, pushes, and publishes a GitHub release with the exe attached.
+That's it. The script generates the app icon (`make-icon.ps1`) and produces `RobloxKeeper.exe` using
+`csc.exe` from the .NET Framework already on your machine. It is the single build command in the
+repository - CI runs this same script, so a local build and a published build never drift apart.
 
-That's it. The script generates the app icon (`make-icon.ps1`) and produces `RobloxKeeper.exe` (~45 KB) using `csc.exe` from the .NET Framework already on your machine.
+To publish a new version (maintainers):
 
-## Performance
+```bat
+release.bat 1.4.2
+```
+
+That bumps `APP_VERSION` in `src/AppInfo.cs`, test-compiles, commits, pushes, and pushes the `v1.4.2` tag.
+The tag is what triggers the release workflow, which rebuilds from that tag and publishes the exe itself.
+The workflow refuses to publish if the tag and `APP_VERSION` disagree.
+
+## Project layout
+
+```
+src/
+  AppInfo.cs             version + repo constants (release.bat and CI stamp this)
+  Program.cs             entry point, single-instance guard
+  MainForm.cs            window state, the one-second loop, logging
+  MainForm.Ui.cs         layout, client rows, performance handlers
+  MainForm.Afk.cs        the anti-AFK nudge
+  MainForm.Install.cs    Roblox reinstall detection, version switching, repair
+  MutexKeeper.cs         the queue-wait that holds ROBLOX_singletonMutex
+  ClientTracker.cs       finds clients, tells "starting" from "stuck"
+  GhostCleaner.cs        ends leaked window-less clients
+  PerformanceManager.cs  per-client priority, affinity, EcoQoS, memory trim
+  ClientTuneDialog.cs    the per-client Tune window
+  RobloxInstall.cs       version folders, protocol registration, shortcuts, launchers
+  AppSettings.cs         settings.txt load/save
+  Updater.cs             self-update against the GitHub releases API
+  Native.cs              every P/Invoke, in one place
+  InputSender.cs         SendInput scan codes and focus handling
+  Controls.cs            Card, ScrollPanel, dark-theme widget builders
+  Theme.cs               colours
+```
+
+## RobloxKeeper's own footprint
 
 Measured on Windows 11 while idle: about **0.8% of one CPU core** and **67 MB** of RAM, steady, with no memory or handle growth over time. The one-second loop takes a single snapshot of running processes and answers every question from it, rather than walking the process table repeatedly.
 
-Running two Roblox clients costs whatever two Roblox clients cost on your machine (mostly GPU and RAM). RobloxKeeper adds no per-client overhead, and the number of installed Roblox versions makes no difference to it.
+Running two Roblox clients costs whatever two Roblox clients cost on your machine (mostly GPU and RAM), and the number of installed Roblox versions makes no difference. The per-client work added by the Performance card is a memory reading per client per tick, plus a priority/affinity call only when a client's settings have actually drifted from its profile - so it is proportional to the number of clients, not to time.
 
 The only moment it touches your desktop is a nudge: it focuses each selected client for roughly half a second, sends the keys, and hands focus back. If you are typing at that moment you will notice it. Nothing else it does steals focus.
 
@@ -91,7 +152,16 @@ This is the same externally-held-mutex technique used by established multi-insta
 Yes - the client is restored for about a second, nudged, and re-minimized.
 
 **Multi-instance shows "Waiting" but I closed everything.**
-A window-less Roblox process is probably still holding the mutex - the client counter will show it as "background". With **Auto-clear ghosts** on (the default) it's removed automatically within about a minute; **End background** clears it instantly.
+A window-less Roblox process is probably still holding the mutex - the client counter will show it as `+1 stuck`. With **Auto-clear ghosts** on (the default) it's ended automatically once it has been window-less for 150 seconds; **End background** clears it instantly. If the counter says `+1 starting` instead, that's a client still loading - give it a moment.
+
+**Which performance settings should I actually use?**
+The common case is one account you're playing and two or three parked in AFK games. Set the **Performance** card's client default to **Below normal** so newly launched clients yield to whatever you're doing, then **Tune** the one you're playing back up to **Normal**. On a laptop, **Eco** on the parked clients is the single biggest win for fan noise and battery. Pin cores only if you have plenty - splitting an 8-thread CPU four ways makes everything worse, not better.
+
+**What does "trim memory" actually do?**
+It asks Windows to push that client's idle pages out of physical RAM (`SetProcessWorkingSetSize` with `-1, -1`). The pages go to the standby list and come back if the client needs them, so it's safe to run on a client mid-game - it costs a brief hitch, not stability. It's most useful when several clients have been parked for hours and are sitting on memory they aren't touching. Auto-trim skips whichever client is in the foreground so the game you're playing never takes the hitch.
+
+**Efficiency mode does nothing on my machine.**
+EcoQoS needs Windows 10 version 2004 or newer. On older builds the call is refused and the log says so; priority and core affinity still work.
 
 **A client closed and I don't know why.**
 Read the Activity log - it names the cause. `SINGLETON KILL` means another client launched while a Roblox process (not RobloxKeeper) owned the mutex: close all clients, wait for the green light, reopen. If a Roblox update was installing, its own updater closes every client and no tool can prevent that. Click **Copy log** to share the full report.
