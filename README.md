@@ -55,23 +55,40 @@ Releases are built and published by [GitHub Actions](.github/workflows/release.y
 source - nobody uploads a binary by hand. Given the app touches `SendInput`, the registry and autostart,
 you shouldn't have to take that on trust:
 
+> **Verify the exe you downloaded from Releases - not one you built yourself.** Only the binary the
+> workflow produced is attested, so checking a local `build.bat` output returns `HTTP 404: Not Found`.
+> That is the expected answer, not a failure. See the caveat at the end of this section.
+
+Download it somewhere of its own so it can't be confused with a local build:
+
+```bat
+gh release download v1.2 --repo VladDerK1ng/RobloxKeeper --dir "%TEMP%\rk-verify"
+```
+
 - **Check the build provenance.** Every release carries a signed attestation tying that exact exe to the
   commit and workflow run that produced it:
 
   ```bat
-  gh attestation verify RobloxKeeper.exe --repo VladDerK1ng/RobloxKeeper
+  gh attestation verify "%TEMP%\rk-verify\RobloxKeeper.exe" --repo VladDerK1ng/RobloxKeeper
   ```
 
-- **Check the hash.** Each release ships a `RobloxKeeper.exe.sha256` next to the exe; compare it with
-  `Get-FileHash RobloxKeeper.exe -Algorithm SHA256`.
+  A pass prints the source repository, the commit it was built from, and the workflow that built it.
+
+- **Check the hash.** Each release ships a `RobloxKeeper.exe.sha256` next to the exe. In `cmd.exe`:
+
+  ```bat
+  certutil -hashfile "%TEMP%\rk-verify\RobloxKeeper.exe" SHA256
+  ```
+
+  In PowerShell it's `Get-FileHash <path> -Algorithm SHA256` - that cmdlet does not exist in `cmd.exe`.
 
 - **Read the build.** The release notes link the commit and the workflow run, and the entire compiler
   invocation is the one line in [build.bat](build.bat) - the same script the workflow runs.
 
 One caveat, stated plainly: the .NET Framework `csc.exe` this project uses has no `/deterministic` switch,
-so two builds of the same source produce binaries that differ in embedded GUIDs and timestamps. You can
-verify the release was built by the workflow from a given commit; you cannot byte-compare it against your
-own local build.
+so two builds of the same source produce binaries that differ in embedded GUIDs and timestamps - identical
+in size, different in hash. You can verify the release was built by this workflow from a given commit; you
+cannot byte-compare it against your own local build, and there is no point trying.
 
 ## Building from source
 
