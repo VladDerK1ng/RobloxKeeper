@@ -121,9 +121,16 @@ src/
 ```
 
 Windows draws checkboxes, spinners and combo buttons with the system theme, which puts white boxes and
-grey chrome on top of near-black cards. `ThemedControls.cs` replaces those four with owner-drawn
-equivalents - including a picker whose dropdown is a popup the app paints itself, because a
-`DropDownList` combo never lets go of its own border and drop button.
+grey chrome on top of near-black cards. `ThemedControls.cs` replaces those with owner-drawn equivalents -
+including a picker whose dropdown is a popup the app paints itself, because a `DropDownList` combo never
+lets go of its own border and drop button. The window is borderless for the same reason: the system title
+bar is bright chrome no dark theme can reach, so `BuildTitleBar` draws its own and hands dragging back to
+the OS via `WM_NCLBUTTONDOWN`, which keeps snapping and multi-monitor behaviour intact.
+
+Cards use a 20px gutter, a heading at y=14 with any explanatory line stacked beneath it, and fixed-height
+rows so labels and inputs centre on the same line. Because the layout is hand-placed rather than driven by
+a layout engine, the geometry is covered by tests that measure the real strings in the real fonts -
+rewording a status line is a layout change here, and the tests treat it as one.
 
 ## RobloxKeeper's own footprint
 

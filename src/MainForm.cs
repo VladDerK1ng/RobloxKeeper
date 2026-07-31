@@ -19,6 +19,13 @@ namespace RobloxKeeper
         public const string DISABLED = "Disabled - a new client replaces the running one.";
         public const string ACTIVE = "Active - singleton mutex held. New clients stay open.";
         public const string WAITING = "Waiting - a Roblox client owns the mutex. Close them all and I take over.";
+
+        // The hint under the status. Both must fit one line at HINT_WIDTH - the
+        // updating one in bold - or the card's bottom padding stops matching its
+        // top padding in one state and not the other.
+        public const int HINT_WIDTH = 388;
+        public const string HINT_NORMAL = "Accounts needing different Roblox versions are handled automatically.";
+        public const string HINT_UPDATING = "Roblox is UPDATING - it closes every client once. Reopen after.";
     }
 
     // Window state, the one-second housekeeping loop, and the glue between the
@@ -48,7 +55,8 @@ namespace RobloxKeeper
         ThemedNumeric numInterval, numTrimEvery;
         ThemedPicker cmbKeys, cmbPerfPriority, cmbPerfCores;
         Button btnNudge, btnZombie, btnCloseRbx, btnTrimAll;
-        Label lblCountdown, lblDot, lblMultiStatus, lblClientsTitle, lblGhosts, lblUpdating;
+        Label lblCountdown, lblMultiStatus, lblClientsTitle, lblGhosts, lblUpdating;
+        Dot statusDot;
         ScrollPanel clientsPanel;
         RichTextBox rtbLog;
         System.Windows.Forms.Timer nudgeTimer, uiTimer;
@@ -79,7 +87,9 @@ namespace RobloxKeeper
         {
             startHidden = Program.StartMinimized;
             Text = "RobloxKeeper";
-            FormBorderStyle = FormBorderStyle.FixedSingle;
+            // Borderless: the system title bar is bright chrome that no dark
+            // theme can reach, so the window draws its own in BuildTitleBar.
+            FormBorderStyle = FormBorderStyle.None;
             MaximizeBox = false;
             SetHeightToFitScreen();
             StartPosition = FormStartPosition.CenterScreen;
@@ -138,18 +148,20 @@ namespace RobloxKeeper
         // would simply be off-screen and unreachable, so the window is capped to
         // the working area and scrolls instead. The extra width covers the
         // scrollbar so it never sits on top of a card.
-        const int FULL_HEIGHT = 870;
-        const int BASE_WIDTH = 460;
+        internal const int FULL_HEIGHT = 924;
+        internal const int BASE_WIDTH = 460;
+
+        const int COUNTDOWN_CLOCK_Y = 22;
+        const int COUNTDOWN_WORD_Y = 27;
 
         void SetHeightToFitScreen()
         {
             int available = FULL_HEIGHT;
             try
             {
-                Rectangle work = Screen.PrimaryScreen.WorkingArea;
-                // Leave room for the title bar and border, which sit outside ClientSize.
-                available = work.Height - (SystemInformation.CaptionHeight +
-                                           SystemInformation.FixedFrameBorderSize.Height * 2 + 8);
+                // Borderless, so the whole window is client area - only a small
+                // margin is needed so it doesn't sit flush against the taskbar.
+                available = Screen.PrimaryScreen.WorkingArea.Height - 8;
             }
             catch { }
 
@@ -169,13 +181,27 @@ namespace RobloxKeeper
         {
             base.OnHandleCreated(e);
             int on = 1;
-            try { Native.DwmSetWindowAttribute(Handle, 20, ref on, 4); } catch { }
+            try { Native.DwmSetWindowAttribute(Handle, Native.DWMWA_USE_IMMERSIVE_DARK_MODE, ref on, 4); } catch { }
+
+            // Windows 11 rounds a borderless window's corners when asked; on
+            // Windows 10 the call is simply ignored.
+            int round = Native.DWMWCP_ROUND;
+            try { Native.DwmSetWindowAttribute(Handle, Native.DWMWA_WINDOW_CORNER_PREFERENCE, ref round, 4); } catch { }
 
             // Scrollbars are child windows with their own theme, so they stay
             // bright white next to the dark log unless asked otherwise.
             DarkScrollbars.Apply(rtbLog);
             DarkScrollbars.Apply(clientsPanel);
             DarkScrollbars.Apply(this);
+        }
+
+        // A borderless window has no frame, so without this it dissolves into a
+        // dark desktop or another dark window behind it.
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            base.OnPaint(e);
+            using (Pen p = new Pen(Color.FromArgb(52, 52, 74), 1f))
+                e.Graphics.DrawRectangle(p, 0, 0, ClientSize.Width - 1, ClientSize.Height - 1);
         }
 
         protected override void OnShown(EventArgs e)
@@ -296,9 +322,7 @@ namespace RobloxKeeper
             if (updating != updatingShown)
             {
                 updatingShown = updating;
-                lblUpdating.Text = updating
-                    ? "Roblox is UPDATING - it closes every open client once. Reopen them after."
-                    : "One account can't join two games at once - use separate accounts.";
+                lblUpdating.Text = updating ? MultiStatus.HINT_UPDATING : MultiStatus.HINT_NORMAL;
                 lblUpdating.ForeColor = updating ? Theme.Amber : Theme.Muted;
                 lblUpdating.Font = new Font("Segoe UI", 8.25f, updating ? FontStyle.Bold : FontStyle.Regular);
             }
@@ -446,17 +470,17 @@ namespace RobloxKeeper
 
             if (!chkMulti.Checked)
             {
-                lblDot.ForeColor = Theme.Muted;
+                statusDot.ForeColor = Theme.Muted;
                 lblMultiStatus.Text = MultiStatus.DISABLED;
             }
             else if (keeper.Held)
             {
-                lblDot.ForeColor = Theme.Green;
+                statusDot.ForeColor = Theme.Green;
                 lblMultiStatus.Text = MultiStatus.ACTIVE;
             }
             else
             {
-                lblDot.ForeColor = Theme.Amber;
+                statusDot.ForeColor = Theme.Amber;
                 lblMultiStatus.Text = MultiStatus.WAITING;
             }
         }

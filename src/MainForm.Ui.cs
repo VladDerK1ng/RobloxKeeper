@@ -6,33 +6,69 @@ using Microsoft.Win32;
 
 namespace RobloxKeeper
 {
-    // Layout and the widgets that hang off it. Every card is a fixed-position
-    // panel; the window does not resize, so the coordinates are the layout.
+    // Layout and the widgets that hang off it. The window is borderless and
+    // fixed size, so these coordinates are the layout - there is no layout
+    // engine to fall back on. Cards keep a 20px gutter, put their heading close
+    // to the top edge, and give each row a fixed height so labels and inputs
+    // centre on the same line instead of drifting apart by a pixel or two.
     partial class MainForm
     {
+        // Card geometry
+        const int CARD_X = 16;
+        const int CARD_W = 428;
+        const int RIGHT = 408;    // right edge of every button and toggle
+        const int BTN_X = 292;
+        const int BTN_W = 116;
+
+        // Vertical stack
+        const int TITLEBAR_H = 44;
+        const int AFK_Y = 54, AFK_H = 156;
+        const int CLIENTS_Y = 224, CLIENTS_H = 208;
+        const int PERF_Y = 446, PERF_H = 130;
+        const int MULTI_Y = 590, MULTI_H = 120;
+        const int LOG_Y = 724, LOG_H = 184;
+
+        const int ROW_H = 26;
+
+        Panel titleBar;
+
         void BuildUi()
         {
-            // --- Header ---
-            Label lblTitle = new Label();
-            lblTitle.Text = "RobloxKeeper";
-            lblTitle.AutoSize = true;
-            lblTitle.Location = new Point(18, 12);
+            BuildTitleBar();
+            BuildAfkCard();
+            BuildClientsCard();
+            BuildPerformanceCard();
+            BuildMultiCard();
+            BuildLogCard();
+            BuildTray();
+        }
+
+        // ---------- Title bar ----------
+
+        void BuildTitleBar()
+        {
+            titleBar = new Panel();
+            titleBar.Location = new Point(0, 0);
+            titleBar.Size = new Size(BASE_WIDTH, TITLEBAR_H);
+            titleBar.BackColor = Theme.Bg;
+            Controls.Add(titleBar);
+
+            Label lblTitle = Ui.RowLabel("RobloxKeeper", 18, 0, TITLEBAR_H, 170, 13f, Theme.Text);
             lblTitle.Font = new Font("Segoe UI", 13f, FontStyle.Bold);
-            lblTitle.ForeColor = Theme.Text;
             lblTitle.BackColor = Theme.Bg;
-            Controls.Add(lblTitle);
+            titleBar.Controls.Add(lblTitle);
 
-            Label lblVer = new Label();
-            lblVer.Text = "v" + AppInfo.APP_VERSION;
-            lblVer.AutoSize = true;
-            lblVer.Location = new Point(152, 19);
-            lblVer.Font = new Font("Segoe UI", 8.25f);
-            lblVer.ForeColor = Theme.Muted;
+            // Smaller and dimmer than the surrounding UI text so it reads as a
+            // footnote to the title rather than competing with it.
+            Label lblVer = Ui.RowLabel("v" + AppInfo.APP_VERSION, 156, 0, TITLEBAR_H, 60, 8.25f,
+                Color.FromArgb(96, 100, 122));
             lblVer.BackColor = Theme.Bg;
-            Controls.Add(lblVer);
+            titleBar.Controls.Add(lblVer);
 
-            chkAutostart = Ui.DarkCheck("Start with Windows", 296, 16, 9f);
+            chkAutostart = Ui.DarkCheck("Start with Windows", 0, 0, 9f);
             chkAutostart.BackColor = Theme.Bg;
+            chkAutostart.Location = new Point(356 - chkAutostart.PreferredSize.Width,
+                                              (TITLEBAR_H - chkAutostart.PreferredSize.Height) / 2);
             bool autostartOn = false;
             try
             {
@@ -50,29 +86,59 @@ namespace RobloxKeeper
             catch { }
             chkAutostart.Checked = autostartOn;
             chkAutostart.CheckedChanged += OnAutostartToggled;
-            Controls.Add(chkAutostart);
+            titleBar.Controls.Add(chkAutostart);
 
-            // --- Anti-AFK card ---
-            Card cardAfk = new Card();
-            cardAfk.Location = new Point(16, 48);
-            cardAfk.Size = new Size(428, 156);
-            Controls.Add(cardAfk);
+            WindowButton btnMin = new WindowButton(false);
+            btnMin.Location = new Point(BASE_WIDTH - 88, 0);
+            btnMin.Size = new Size(44, 32);
+            btnMin.Click += delegate { WindowState = FormWindowState.Minimized; };
+            titleBar.Controls.Add(btnMin);
 
-            cardAfk.Controls.Add(Ui.SectionTitle("ANTI-AFK"));
+            WindowButton btnClose = new WindowButton(true);
+            btnClose.Location = new Point(BASE_WIDTH - 44, 0);
+            btnClose.Size = new Size(44, 32);
+            btnClose.Click += delegate { Close(); };
+            titleBar.Controls.Add(btnClose);
+
+            // Dragging works from the bar itself and from the text on it; the
+            // buttons keep their own clicks.
+            titleBar.MouseDown += StartWindowDrag;
+            lblTitle.MouseDown += StartWindowDrag;
+            lblVer.MouseDown += StartWindowDrag;
+        }
+
+        void StartWindowDrag(object sender, MouseEventArgs e)
+        {
+            if (e.Button != MouseButtons.Left) return;
+            Native.ReleaseCapture();
+            Native.SendMessage(Handle, Native.WM_NCLBUTTONDOWN, (IntPtr)Native.HTCAPTION, IntPtr.Zero);
+        }
+
+        // ---------- Anti-AFK ----------
+
+        void BuildAfkCard()
+        {
+            Card card = new Card();
+            card.Location = new Point(CARD_X, AFK_Y);
+            card.Size = new Size(CARD_W, AFK_H);
+            Controls.Add(card);
+
+            card.Controls.Add(Ui.SectionTitle("ANTI-AFK"));
 
             chkAfk = MakeToggle();
             chkAfk.CheckedChanged += OnAfkToggled;
-            cardAfk.Controls.Add(chkAfk);
+            card.Controls.Add(chkAfk);
 
-            cardAfk.Controls.Add(Ui.MutedLabel("Nudge every", 20, 53, 9.75f));
+            const int row = 44;
+            card.Controls.Add(Ui.RowLabel("Nudge every", Ui.PAD, row, ROW_H, 86, 9.75f, Theme.Muted));
 
-            numInterval = Ui.DarkNumeric(102, 50, 46, 1, 19, 15);
+            numInterval = Ui.DarkNumeric(110, row, 46, 1, 19, 15);
             numInterval.ValueChanged += OnIntervalChanged;
-            cardAfk.Controls.Add(numInterval);
+            card.Controls.Add(numInterval);
 
-            cardAfk.Controls.Add(Ui.MutedLabel("min", 154, 53, 9.75f));
+            card.Controls.Add(Ui.RowLabel("min", 162, row, ROW_H, 30, 9.75f, Theme.Muted));
 
-            cmbKeys = Ui.DarkCombo(206, 49, 202);
+            cmbKeys = Ui.DarkCombo(196, row, 212);
             cmbKeys.Items.Add("Zoom out + in  (O, I)");
             cmbKeys.Items.Add("Turn camera  (← →)");
             cmbKeys.Items.Add("Jump  (Space)");
@@ -82,45 +148,60 @@ namespace RobloxKeeper
                 if (!initializing) Log("Nudge keys set: " + cmbKeys.Text);
                 SaveSettings();
             };
-            cardAfk.Controls.Add(cmbKeys);
+            card.Controls.Add(cmbKeys);
 
-            cardAfk.Controls.Add(Ui.CaptionLabel("NEXT NUDGE IN", 20, 92));
+            // The countdown sits in its own well so the big numeral reads as a
+            // contained readout rather than text floating in empty space.
+            InsetPanel well = new InsetPanel();
+            well.Location = new Point(Ui.PAD, 82);
+            well.Size = new Size(248, 58);
+            card.Controls.Add(well);
+
+            Label caption = Ui.CaptionLabel("NEXT NUDGE IN", 14, 10);
+            caption.BackColor = Theme.Inset;
+            well.Controls.Add(caption);
 
             countdownClock = new Font("Segoe UI", 19f, FontStyle.Bold);
             countdownWord = new Font("Segoe UI", 12f, FontStyle.Bold);
 
             lblCountdown = new Label();
             lblCountdown.AutoSize = true;
-            lblCountdown.Location = new Point(17, 106);
+            lblCountdown.Location = new Point(12, COUNTDOWN_CLOCK_Y);
             lblCountdown.Font = countdownClock;
             lblCountdown.ForeColor = Theme.Text;
-            lblCountdown.BackColor = Theme.Card;
-            cardAfk.Controls.Add(lblCountdown);
+            lblCountdown.BackColor = Theme.Inset;
+            well.Controls.Add(lblCountdown);
 
-            btnNudge = Ui.AccentButton("Nudge now", 292, 104, 116, 36);
+            // Centred against the well beside it: well is 82..140, button 87..135.
+            btnNudge = Ui.AccentButton("Nudge now", BTN_X, 87, BTN_W, 48);
             btnNudge.Click += delegate { NudgeAll("manual"); };
-            cardAfk.Controls.Add(btnNudge);
+            card.Controls.Add(btnNudge);
+        }
 
-            // --- Clients card ---
-            Card cardClients = new Card();
-            cardClients.Location = new Point(16, 218);
-            cardClients.Size = new Size(428, 184);
-            Controls.Add(cardClients);
+        // ---------- Clients ----------
+
+        void BuildClientsCard()
+        {
+            Card card = new Card();
+            card.Location = new Point(CARD_X, CLIENTS_Y);
+            card.Size = new Size(CARD_W, CLIENTS_H);
+            Controls.Add(card);
 
             lblClientsTitle = Ui.SectionTitle("CLIENTS");
-            cardClients.Controls.Add(lblClientsTitle);
-
-            cardClients.Controls.Add(Ui.MutedLabel("untick to skip its nudge · Tune for CPU + memory", 110, 18, 8.25f));
+            card.Controls.Add(lblClientsTitle);
+            card.Controls.Add(Ui.Subtitle("Untick a client to skip its nudge · Tune sets its CPU and memory"));
 
             clientsPanel = new ScrollPanel();
-            clientsPanel.Location = new Point(20, 44);
+            clientsPanel.Location = new Point(Ui.PAD, 54);
             clientsPanel.Size = new Size(388, 104);
             clientsPanel.BackColor = Theme.Card;
             clientsPanel.AutoScroll = true;
-            cardClients.Controls.Add(clientsPanel);
+            card.Controls.Add(clientsPanel);
 
-            chkAutoGhost = Ui.DarkCheck("Auto-clear ghosts", 18, 153, 8.25f);
+            const int row = 166;
+            chkAutoGhost = Ui.DarkCheck("Auto-clear ghosts", 18, row, 8.25f);
             chkAutoGhost.Checked = true;
+            Ui.CenterIn(chkAutoGhost, row, ROW_H);
             chkAutoGhost.CheckedChanged += delegate
             {
                 if (!initializing)
@@ -129,44 +210,55 @@ namespace RobloxKeeper
                         : "off."));
                 SaveSettings();
             };
-            cardClients.Controls.Add(chkAutoGhost);
+            card.Controls.Add(chkAutoGhost);
 
-            lblGhosts = Ui.MutedLabel("", 152, 157, 8.25f);
-            lblGhosts.MaximumSize = new Size(132, 0);   // stop short of the button at x=292
-            cardClients.Controls.Add(lblGhosts);
+            // Amber, not muted grey: "stuck" is a state that wants attention, and
+            // at muted grey this line was almost invisible against the card.
+            lblGhosts = Ui.RowLabel("", 166, row, ROW_H, 120, 8.25f, Theme.Amber);
+            card.Controls.Add(lblGhosts);
 
-            btnZombie = Ui.AccentButton("End background", 292, 151, 116, 26);
+            btnZombie = Ui.AccentButton("End background", BTN_X, row, BTN_W, ROW_H);
             btnZombie.Font = new Font("Segoe UI", 8.25f, FontStyle.Bold);
             btnZombie.Visible = false;
             btnZombie.Click += delegate { ghostCleaner.KillAll(); };
-            cardClients.Controls.Add(btnZombie);
+            card.Controls.Add(btnZombie);
+        }
 
-            // --- Performance card ---
-            Card cardPerf = new Card();
-            cardPerf.Location = new Point(16, 416);
-            cardPerf.Size = new Size(428, 100);
-            Controls.Add(cardPerf);
+        // ---------- Performance ----------
 
-            cardPerf.Controls.Add(Ui.SectionTitle("PERFORMANCE"));
-            cardPerf.Controls.Add(Ui.MutedLabel("what each Roblox client is allowed to use", 130, 18, 8.25f));
+        void BuildPerformanceCard()
+        {
+            Card card = new Card();
+            card.Location = new Point(CARD_X, PERF_Y);
+            card.Size = new Size(CARD_W, PERF_H);
+            Controls.Add(card);
 
-            cardPerf.Controls.Add(Ui.MutedLabel("New clients:", 20, 46, 9f));
+            card.Controls.Add(Ui.SectionTitle("PERFORMANCE"));
+            card.Controls.Add(Ui.Subtitle("What each Roblox client is allowed to use"));
 
-            cmbPerfPriority = Ui.DarkCombo(104, 43, 108);
+            const int row1 = 54;
+            card.Controls.Add(Ui.RowLabel("New clients:", Ui.PAD, row1, ROW_H, 80, 9f, Theme.Muted));
+
+            cmbPerfPriority = Ui.DarkCombo(104, row1, 108);
             Ui.FillPriorityCombo(cmbPerfPriority);
             cmbPerfPriority.SelectedIndexChanged += OnPerfDefaultsChanged;
-            cardPerf.Controls.Add(cmbPerfPriority);
+            card.Controls.Add(cmbPerfPriority);
 
-            cmbPerfCores = Ui.DarkCombo(218, 43, 94);
+            cmbPerfCores = Ui.DarkCombo(218, row1, 94);
             Ui.FillCoreCombo(cmbPerfCores);
             cmbPerfCores.SelectedIndexChanged += OnPerfDefaultsChanged;
-            cardPerf.Controls.Add(cmbPerfCores);
+            card.Controls.Add(cmbPerfCores);
 
-            chkPerfEco = Ui.DarkCheck("Eco", 320, 45, 9f);
+            // A wider gap here than between the two dropdowns, so Eco reads as a
+            // separate switch rather than a third field in the same group.
+            chkPerfEco = Ui.DarkCheck("Eco", 336, row1, 9f);
+            Ui.CenterIn(chkPerfEco, row1, ROW_H);
             chkPerfEco.CheckedChanged += OnPerfDefaultsChanged;
-            cardPerf.Controls.Add(chkPerfEco);
+            card.Controls.Add(chkPerfEco);
 
-            chkAutoTrim = Ui.DarkCheck("Auto-trim idle clients every", 20, 74, 8.25f);
+            const int row2 = 88;
+            chkAutoTrim = Ui.DarkCheck("Auto-trim idle clients every", Ui.PAD, row2, 8.25f);
+            Ui.CenterIn(chkAutoTrim, row2, ROW_H);
             chkAutoTrim.CheckedChanged += delegate
             {
                 // Starting the clock now stops a freshly ticked box from trimming
@@ -178,84 +270,82 @@ namespace RobloxKeeper
                         : "Auto-trim off.");
                 SaveSettings();
             };
-            cardPerf.Controls.Add(chkAutoTrim);
+            card.Controls.Add(chkAutoTrim);
 
-            numTrimEvery = Ui.DarkNumeric(188, 70, 44, 1, 120, 10);
+            numTrimEvery = Ui.DarkNumeric(188, row2, 46, 1, 120, 10);
             numTrimEvery.ValueChanged += delegate
             {
                 if (!initializing && chkAutoTrim.Checked)
                     Log("Auto-trim interval set to " + numTrimEvery.Value + " min.");
                 SaveSettings();
             };
-            cardPerf.Controls.Add(numTrimEvery);
+            card.Controls.Add(numTrimEvery);
 
-            cardPerf.Controls.Add(Ui.MutedLabel("min", 236, 74, 8.25f));
+            card.Controls.Add(Ui.RowLabel("min", 240, row2, ROW_H, 32, 8.25f, Theme.Muted));
 
-            btnTrimAll = Ui.AccentButton("Trim all now", 292, 68, 116, 26);
+            btnTrimAll = Ui.AccentButton("Trim all now", BTN_X, row2, BTN_W, ROW_H);
             btnTrimAll.Font = new Font("Segoe UI", 8.25f, FontStyle.Bold);
             btnTrimAll.Click += delegate { OnTrimAllClicked(); };
-            cardPerf.Controls.Add(btnTrimAll);
+            card.Controls.Add(btnTrimAll);
+        }
 
-            // --- Multi-instance card ---
-            Card cardMulti = new Card();
-            cardMulti.Location = new Point(16, 530);
-            cardMulti.Size = new Size(428, 126);
-            Controls.Add(cardMulti);
+        // ---------- Multi-instance ----------
 
-            cardMulti.Controls.Add(Ui.SectionTitle("MULTI-INSTANCE"));
+        void BuildMultiCard()
+        {
+            Card card = new Card();
+            card.Location = new Point(CARD_X, MULTI_Y);
+            card.Size = new Size(CARD_W, MULTI_H);
+            Controls.Add(card);
+
+            card.Controls.Add(Ui.SectionTitle("MULTI-INSTANCE"));
 
             chkMulti = MakeToggle();
             chkMulti.CheckedChanged += OnMultiToggled;
-            cardMulti.Controls.Add(chkMulti);
+            card.Controls.Add(chkMulti);
 
-            lblDot = new Label();
-            lblDot.Text = "●";
-            lblDot.AutoSize = true;
-            lblDot.Location = new Point(20, 45);
-            lblDot.Font = new Font("Segoe UI", 11f);
-            lblDot.ForeColor = Theme.Muted;
-            lblDot.BackColor = Theme.Card;
-            cardMulti.Controls.Add(lblDot);
+            const int row = 44;
+            statusDot = new Dot();
+            statusDot.Location = new Point(Ui.PAD, row);
+            card.Controls.Add(statusDot);
 
             lblMultiStatus = new Label();
             lblMultiStatus.AutoSize = true;
-            lblMultiStatus.MaximumSize = new Size(362, 0);   // narrowed by UpdateMultiStatus when the button shows
-            lblMultiStatus.Location = new Point(42, 48);
+            lblMultiStatus.MaximumSize = new Size(MultiStatus.WIDTH_ALONE, 0);
+            lblMultiStatus.Location = new Point(40, row);
             lblMultiStatus.ForeColor = Theme.Text;
             lblMultiStatus.BackColor = Theme.Card;
-            cardMulti.Controls.Add(lblMultiStatus);
+            card.Controls.Add(lblMultiStatus);
 
-            btnCloseRbx = Ui.AccentButton("Close all Roblox", 292, 44, 116, 28);
+            btnCloseRbx = Ui.AccentButton("Close all Roblox", BTN_X, row - 1, BTN_W, 28);
             btnCloseRbx.Font = new Font("Segoe UI", 8.25f, FontStyle.Bold);
             btnCloseRbx.Visible = false;
             btnCloseRbx.Click += delegate { CloseAllRoblox(); };
-            cardMulti.Controls.Add(btnCloseRbx);
+            card.Controls.Add(btnCloseRbx);
 
-            lblUpdating = Ui.MutedLabel("Accounts needing different Roblox versions are handled automatically.",
-                20, 92, 8.25f);
-            cardMulti.Controls.Add(lblUpdating);
+            lblUpdating = Ui.MutedLabel(MultiStatus.HINT_NORMAL, Ui.PAD, 86, 8.25f);
+            card.Controls.Add(lblUpdating);
+        }
 
-            // --- Activity card ---
-            Card cardLog = new Card();
-            cardLog.BackColor = Theme.Inset;
-            cardLog.Location = new Point(16, 670);
-            cardLog.Size = new Size(428, 184);
-            Controls.Add(cardLog);
+        // ---------- Activity ----------
 
-            Label lblAct = new Label();
-            lblAct.Text = "ACTIVITY";
-            lblAct.AutoSize = true;
-            lblAct.Location = new Point(20, 14);
-            lblAct.Font = new Font("Segoe UI", 8.25f, FontStyle.Bold);
-            lblAct.ForeColor = Theme.Muted;
+        void BuildLogCard()
+        {
+            Card card = new Card();
+            card.BackColor = Theme.Inset;
+            card.Location = new Point(CARD_X, LOG_Y);
+            card.Size = new Size(CARD_W, LOG_H);
+            Controls.Add(card);
+
+            Label lblAct = Ui.SectionTitle("ACTIVITY");
             lblAct.BackColor = Theme.Inset;
-            cardLog.Controls.Add(lblAct);
+            card.Controls.Add(lblAct);
 
-            LinkLabel lnkCopy = Ui.RowLink("Copy log", 355, 13);
+            LinkLabel lnkCopy = Ui.RowLink("Copy log", 352, 13);
             lnkCopy.Font = new Font("Segoe UI", 8.25f);
             lnkCopy.BackColor = Theme.Inset;
             lnkCopy.Click += delegate { CopyLog(); };
-            cardLog.Controls.Add(lnkCopy);
+            card.Controls.Add(lnkCopy);
 
             rtbLog = new RichTextBox();
             rtbLog.Location = new Point(18, 36);
@@ -266,11 +356,17 @@ namespace RobloxKeeper
             rtbLog.ForeColor = Theme.LogFg;
             rtbLog.Font = new Font("Consolas", 8.75f);
             rtbLog.WordWrap = true;
+            // Vertical, not ForcedVertical: the bar only appears once the log
+            // actually overflows the box.
             rtbLog.ScrollBars = RichTextBoxScrollBars.Vertical;
             rtbLog.TabStop = false;
-            cardLog.Controls.Add(rtbLog);
+            card.Controls.Add(rtbLog);
+        }
 
-            // --- Tray ---
+        // ---------- Tray ----------
+
+        void BuildTray()
+        {
             tray = new NotifyIcon();
             try { tray.Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); }
             catch { tray.Icon = SystemIcons.Application; }
@@ -286,7 +382,8 @@ namespace RobloxKeeper
             Resize += delegate { if (WindowState == FormWindowState.Minimized) Hide(); };
         }
 
-        // Right-aligned to 408 so it lines up with the accent buttons below it.
+        // Right-aligned to the same edge as the accent buttons below it, and
+        // centred against the section heading.
         ThemedToggle MakeToggle()
         {
             ThemedToggle c = new ThemedToggle();
@@ -294,11 +391,19 @@ namespace RobloxKeeper
             c.Text = "Enabled";
             c.ForeColor = Theme.Text;
             c.BackColor = Theme.Card;
-            c.Location = new Point(408 - c.PreferredSize.Width, 13);
+            c.Location = new Point(RIGHT - c.PreferredSize.Width, 12);
             return c;
         }
 
         // ---------- Client rows ----------
+
+        // The list is a table: every column starts at a fixed x so the memory
+        // figures right-align under each other and the links sit in a column.
+        const int ROW_PITCH = 26;
+        const int ROW_INNER = 24;
+        const int COL_RAM_X = 186, COL_RAM_W = 62;
+        const int COL_TUNE_X = 256, COL_LINK_W = 46;
+        const int COL_SHOW_X = 310;
 
         void RebuildClientRows(List<ClientInfo> clients)
         {
@@ -323,13 +428,8 @@ namespace RobloxKeeper
 
             if (clients.Count == 0)
             {
-                Label empty = new Label();
-                empty.Text = "No Roblox clients running.";
-                empty.AutoSize = true;
-                empty.Location = new Point(2, 4);
-                empty.ForeColor = Theme.Muted;
-                empty.BackColor = Theme.Card;
-                clientsPanel.Controls.Add(empty);
+                clientsPanel.Controls.Add(
+                    Ui.RowLabel("No Roblox clients running.", 2, 2, ROW_INNER, 300, 9.75f, Theme.Muted));
             }
 
             int y = 2;
@@ -339,11 +439,12 @@ namespace RobloxKeeper
                 if (!nudgePrefs.ContainsKey(ci.Pid)) nudgePrefs[ci.Pid] = true;
 
                 ThemedCheckBox chk = new ThemedCheckBox();
-                chk.Location = new Point(2, y);
                 chk.Text = "Client " + idx + " · PID " + ci.Pid;
                 chk.Checked = nudgePrefs[ci.Pid];
                 chk.ForeColor = Theme.Text;
                 chk.BackColor = Theme.Card;
+                chk.Location = new Point(2, y);
+                Ui.CenterIn(chk, y, ROW_INNER);
                 int pid = ci.Pid;
                 ThemedCheckBox chkRef = chk;
                 chk.CheckedChanged += delegate
@@ -355,34 +456,24 @@ namespace RobloxKeeper
                 };
                 clientsPanel.Controls.Add(chk);
 
-                // Fixed width and right-aligned so the number does not shuffle the
-                // links around every time it changes.
-                Label ram = new Label();
-                ram.AutoSize = false;
-                ram.Size = new Size(58, 17);
-                ram.Location = new Point(192, y + 3);
-                ram.TextAlign = ContentAlignment.MiddleRight;
-                ram.Font = new Font("Segoe UI", 8.25f);
-                ram.ForeColor = Theme.Muted;
-                ram.BackColor = Theme.Card;
-                ram.Text = ClientTracker.FormatBytes(ci.WorkingSet);
+                Label ram = Ui.RowValue(ClientTracker.FormatBytes(ci.WorkingSet),
+                    COL_RAM_X, y, ROW_INNER, COL_RAM_W, 8.25f);
                 clientsPanel.Controls.Add(ram);
                 ramLabels[ci.Pid] = ram;
 
                 string label = "Client " + idx;
                 int index = idx - 1;
-                LinkLabel tune = Ui.RowLink("Tune", 258, y + 3);
-                tune.Font = new Font("Segoe UI", 8.25f);
+                LinkLabel tune = Ui.ColumnLink("Tune", COL_TUNE_X, y, ROW_INNER, COL_LINK_W);
                 tune.Click += delegate { OpenTune(pid, index, label); };
                 clientsPanel.Controls.Add(tune);
 
-                LinkLabel show = Ui.RowLink("Show", 312, y + 3);
+                LinkLabel show = Ui.ColumnLink("Show", COL_SHOW_X, y, ROW_INNER, COL_LINK_W);
                 IntPtr hwnd = ci.Hwnd;
                 show.Click += delegate { InputSender.ShowClient(hwnd); };
                 clientsPanel.Controls.Add(show);
 
                 shownPids.Add(ci.Pid);
-                y += 26;
+                y += ROW_PITCH;
                 idx++;
             }
             clientsPanel.ResumeLayout();

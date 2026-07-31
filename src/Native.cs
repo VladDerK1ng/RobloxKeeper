@@ -32,6 +32,21 @@ namespace RobloxKeeper
         [DllImport("dwmapi.dll")]
         public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int val, int size);
 
+        // Dragging a borderless window: let go of the mouse and tell Windows the
+        // click landed on a caption, so the OS runs its own move loop - snapping,
+        // multi-monitor and DPI all keep working for free.
+        [DllImport("user32.dll")]
+        public static extern bool ReleaseCapture();
+        [DllImport("user32.dll")]
+        public static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
+
+        public const int WM_NCLBUTTONDOWN = 0x00A1;
+        public const int HTCAPTION = 2;
+
+        public const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
+        public const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;
+        public const int DWMWCP_ROUND = 2;
+
         // ---------- Synthetic input ----------
 
         [DllImport("user32.dll")]

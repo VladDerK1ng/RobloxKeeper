@@ -45,16 +45,71 @@ namespace RobloxKeeper
     // the per-client tuning dialog, so both look like the same application.
     static class Ui
     {
+        // Cards use a 20px gutter on both sides and sit their heading close to the
+        // top edge, so the heading groups with the content under it rather than
+        // floating midway between.
+        public const int PAD = 20;
+        public const int TITLE_Y = 14;
+        public const int SUBTITLE_Y = 32;
+
         public static Label SectionTitle(string text)
         {
             Label l = new Label();
             l.Text = text;
             l.AutoSize = true;
-            l.Location = new Point(20, 16);
+            l.Location = new Point(PAD, TITLE_Y);
             l.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
             l.ForeColor = Theme.Muted;
             l.BackColor = Theme.Card;
             return l;
+        }
+
+        // The explanatory line under a heading. Previously these sat beside the
+        // heading, which crowded it and broke the left alignment of the card.
+        public static Label Subtitle(string text)
+        {
+            Label l = new Label();
+            l.Text = text;
+            l.AutoSize = true;
+            l.MaximumSize = new Size(388, 0);
+            l.Location = new Point(PAD, SUBTITLE_Y);
+            l.Font = new Font("Segoe UI", 8.25f);
+            l.ForeColor = Color.FromArgb(104, 108, 132);
+            l.BackColor = Theme.Card;
+            return l;
+        }
+
+        // A label that fills a row's full height and centres its text inside it.
+        // AutoSize labels sit wherever their font's ascent puts them, which is
+        // what makes a row of labels and input boxes look a pixel jagged.
+        public static Label RowLabel(string text, int x, int rowTop, int rowHeight, int width,
+                                     float size, Color color)
+        {
+            Label l = new Label();
+            l.Text = text;
+            l.AutoSize = false;
+            l.Location = new Point(x, rowTop);
+            l.Size = new Size(width, rowHeight);
+            l.TextAlign = ContentAlignment.MiddleLeft;
+            l.Font = new Font("Segoe UI", size);
+            l.ForeColor = color;
+            l.BackColor = Theme.Card;
+            return l;
+        }
+
+        // Same, right-aligned - for the memory column in the client list, so the
+        // GB and MB stack instead of drifting with the number's width.
+        public static Label RowValue(string text, int x, int rowTop, int rowHeight, int width, float size)
+        {
+            Label l = RowLabel(text, x, rowTop, rowHeight, width, size, Theme.Muted);
+            l.TextAlign = ContentAlignment.MiddleRight;
+            return l;
+        }
+
+        // Vertically centres an auto-sized control inside a row.
+        public static void CenterIn(Control c, int rowTop, int rowHeight)
+        {
+            c.Location = new Point(c.Location.X, rowTop + (rowHeight - c.Height) / 2);
         }
 
         public static Label CaptionLabel(string text, int x, int y)
@@ -187,6 +242,18 @@ namespace RobloxKeeper
             l.LinkBehavior = LinkBehavior.HoverUnderline;
             l.BackColor = Theme.Card;
             l.TabStop = false;
+            return l;
+        }
+
+        // Fixed-width, centred version for the client list, so Tune and Show sit
+        // in columns rather than wherever their text happens to end.
+        public static LinkLabel ColumnLink(string text, int x, int rowTop, int rowHeight, int width)
+        {
+            LinkLabel l = RowLink(text, x, rowTop);
+            l.AutoSize = false;
+            l.Size = new Size(width, rowHeight);
+            l.TextAlign = ContentAlignment.MiddleCenter;
+            l.Font = new Font("Segoe UI", 8.75f);
             return l;
         }
     }

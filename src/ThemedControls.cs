@@ -187,16 +187,19 @@ namespace RobloxKeeper
 
         int minimum = 1, maximum = 99, value = 1;
         int hotZone;   // 0 none, 1 up, 2 down
+        bool hot;
 
         public event EventHandler ValueChanged;
 
+        // Height, corner radius and border deliberately mirror ThemedPicker so a
+        // number box and a dropdown read as the same family of control.
         public ThemedNumeric()
         {
             SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw |
                      ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint, true);
             Cursor = Cursors.Hand;
             TabStop = false;
-            Height = 24;
+            Height = 26;
             Width = 46;
             ForeColor = Theme.Text;
             BackColor = Theme.Card;
@@ -248,10 +251,14 @@ namespace RobloxKeeper
             if (z != hotZone) { hotZone = z; Invalidate(); }
         }
 
+        protected override void OnMouseEnter(EventArgs e) { hot = true; Invalidate(); base.OnMouseEnter(e); }
+
         protected override void OnMouseLeave(EventArgs e)
         {
             base.OnMouseLeave(e);
-            if (hotZone != 0) { hotZone = 0; Invalidate(); }
+            hot = false;
+            if (hotZone != 0) hotZone = 0;
+            Invalidate();
         }
 
         protected override void OnPaint(PaintEventArgs e)
@@ -264,7 +271,8 @@ namespace RobloxKeeper
             using (GraphicsPath p = Draw.Rounded(box, 5))
             {
                 using (SolidBrush b = new SolidBrush(Theme.Inset)) g.FillPath(b, p);
-                using (Pen pen = new Pen(Color.FromArgb(58, 58, 80), 1f)) g.DrawPath(pen, p);
+                using (Pen pen = new Pen(hot ? Theme.Muted : Color.FromArgb(58, 58, 80), 1f))
+                    g.DrawPath(pen, p);
             }
 
             Rectangle text = new Rectangle(0, 0, Width - SPIN_W, Height);
@@ -474,6 +482,95 @@ namespace RobloxKeeper
 
             using (Pen pen = new Pen(Color.FromArgb(58, 58, 80), 1f))
                 g.DrawRectangle(pen, 0, 0, ClientSize.Width - 1, ClientSize.Height - 1);
+        }
+    }
+
+    // Minimise / close for the custom title bar. Close goes red on hover the way
+    // Windows' own does, so the muscle memory still works.
+    class WindowButton : Control
+    {
+        public bool IsClose;
+        bool hot;
+
+        public WindowButton(bool isClose)
+        {
+            IsClose = isClose;
+            SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint |
+                     ControlStyles.ResizeRedraw | ControlStyles.UserPaint, true);
+            Cursor = Cursors.Hand;
+            TabStop = false;
+            Size = new Size(44, 30);
+            BackColor = Theme.Bg;
+        }
+
+        protected override void OnMouseEnter(EventArgs e) { hot = true; Invalidate(); base.OnMouseEnter(e); }
+        protected override void OnMouseLeave(EventArgs e) { hot = false; Invalidate(); base.OnMouseLeave(e); }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            Graphics g = e.Graphics;
+            Color back = hot ? (IsClose ? Color.FromArgb(232, 72, 85) : Color.FromArgb(52, 52, 74)) : BackColor;
+            using (SolidBrush b = new SolidBrush(back)) g.FillRectangle(b, ClientRectangle);
+
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            Color fg = hot ? Color.White : Theme.Muted;
+            int cx = Width / 2, cy = Height / 2, r = 5;
+            using (Pen pen = new Pen(fg, 1.4f))
+            {
+                pen.StartCap = LineCap.Round;
+                pen.EndCap = LineCap.Round;
+                if (IsClose)
+                {
+                    g.DrawLine(pen, cx - r, cy - r, cx + r, cy + r);
+                    g.DrawLine(pen, cx + r, cy - r, cx - r, cy + r);
+                }
+                else g.DrawLine(pen, cx - r, cy, cx + r, cy);
+            }
+        }
+    }
+
+    // A status light. Drawn rather than typed as "●", because the glyph sits
+    // above its own line box and never quite centres against the text beside it.
+    class Dot : Control
+    {
+        public Dot()
+        {
+            SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint |
+                     ControlStyles.ResizeRedraw | ControlStyles.UserPaint |
+                     ControlStyles.SupportsTransparentBackColor, true);
+            TabStop = false;
+            Size = new Size(12, 19);
+            BackColor = Theme.Card;
+            ForeColor = Theme.Muted;
+        }
+
+        protected override void OnForeColorChanged(EventArgs e) { Invalidate(); base.OnForeColorChanged(e); }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            Graphics g = e.Graphics;
+            using (SolidBrush bg = new SolidBrush(BackColor)) g.FillRectangle(bg, ClientRectangle);
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            const int D = 9;
+            using (SolidBrush b = new SolidBrush(ForeColor))
+                g.FillEllipse(b, (Width - D) / 2f, (Height - D) / 2f, D, D);
+        }
+    }
+
+    // Rounded inset well, used to visually contain the countdown.
+    class InsetPanel : Panel
+    {
+        public InsetPanel()
+        {
+            BackColor = Theme.Inset;
+            SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+        }
+
+        protected override void OnResize(EventArgs e)
+        {
+            base.OnResize(e);
+            using (GraphicsPath p = Draw.Rounded(new Rectangle(0, 0, Width, Height), 8))
+                Region = new Region(p);
         }
     }
 

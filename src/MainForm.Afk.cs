@@ -143,7 +143,7 @@ namespace RobloxKeeper
             if (!ReferenceEquals(lblCountdown.Font, want))
             {
                 lblCountdown.Font = want;
-                lblCountdown.Location = new Point(17, clock ? 106 : 114);
+                lblCountdown.Location = new Point(12, clock ? COUNTDOWN_CLOCK_Y : COUNTDOWN_WORD_Y);
             }
             if (lblCountdown.Text != text) lblCountdown.Text = text;
         }
