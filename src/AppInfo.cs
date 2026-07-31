@@ -1,4 +1,4 @@
-namespace RobloxKeeper
+﻿namespace RobloxKeeper
 {
     // Single source of truth for the version. release.bat and the GitHub
     // Actions release workflow both rewrite APP_VERSION in this file, so the
@@ -11,3 +11,4 @@ namespace RobloxKeeper
         public const string RELEASE_API = "https://api.github.com/repos/" + REPO + "/releases/latest";
     }
 }
+
