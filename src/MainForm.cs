@@ -40,6 +40,7 @@ namespace RobloxKeeper
 
         readonly MutexKeeper keeper = new MutexKeeper();
         readonly GhostCleaner ghostCleaner = new GhostCleaner();
+        readonly GhostWatch ghostWatch = new GhostWatch();
         readonly PerformanceManager perf = new PerformanceManager();
         Updater updater;
         AppSettings settings = new AppSettings();
@@ -242,23 +243,27 @@ namespace RobloxKeeper
 
         void TickWithSnapshot(Process[] snapshot)
         {
-            GhostCount ghosts;
-            List<ClientInfo> clients = ClientTracker.ClientsFrom(snapshot, out ghosts);
+            int windowless;
+            List<ClientInfo> clients = ClientTracker.ClientsFrom(snapshot, out windowless);
             lastClients = clients;
 
+            // Fed the same snapshot, so what the counter says and what the
+            // cleaner acts on can never disagree.
+            ghostWatch.Observe(snapshot);
+
             lblClientsTitle.Text = "CLIENTS · " + clients.Count;
-            lblGhosts.Text = GhostLabel(ghosts);
-            // Only offered for genuinely stuck processes. Showing it while a
+            lblGhosts.Text = GhostLabel(ghostWatch);
+            // Only offered for genuinely leaked processes. Showing it while a
             // client is still launching invites the user to kill the client they
             // just opened.
-            btnZombie.Visible = ghosts.Stuck > 0;
+            btnZombie.Visible = ghostWatch.Stuck.Count > 0;
 
-            // A window-less client that has outlived the launch grace period is
-            // leaked memory whether or not multi-instance is on and whether or not
-            // we hold the mutex, so nothing else gates this. Younger processes are
-            // still drawing their first frame and are never touched.
-            if (chkAutoGhost.Checked && ghosts.Stuck > 0)
-                ghostCleaner.ClearStuck();
+            // A process whose window has been gone this long is leaked memory
+            // whether or not multi-instance is on and whether or not we hold the
+            // mutex, so nothing else gates this. Anything that has shown a window
+            // recently is not in the list.
+            if (chkAutoGhost.Checked && ghostWatch.Stuck.Count > 0)
+                ghostCleaner.Clear(ghostWatch.Stuck, ghostWatch);
 
             perf.Prune(clients);
             perf.ApplyPending(clients);
@@ -348,9 +353,9 @@ namespace RobloxKeeper
             else UpdateRamLabels(clients);
         }
 
-        static string GhostLabel(GhostCount g)
+        static string GhostLabel(GhostWatch g)
         {
-            if (g.Stuck > 0) return "+" + g.Stuck + " stuck";
+            if (g.Stuck.Count > 0) return "+" + g.Stuck.Count + " stuck";
             if (g.Starting > 0) return "+" + g.Starting + " starting";
             return "";
         }

@@ -242,7 +242,9 @@ namespace RobloxKeeper
             btnZombie = Ui.AccentButton("End background", BTN_X, row, BTN_W, ROW_H);
             btnZombie.Font = new Font("Segoe UI", 8.25f, FontStyle.Bold);
             btnZombie.Visible = false;
-            btnZombie.Click += delegate { ghostCleaner.KillAll(); };
+            // Ends exactly what the counter beside it says is leaked, nothing
+            // more. "Close all Roblox" is the button for ending everything.
+            btnZombie.Click += delegate { ghostCleaner.Clear(ghostWatch.Stuck, ghostWatch); };
             card.Controls.Add(btnZombie);
         }
 

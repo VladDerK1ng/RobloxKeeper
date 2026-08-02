@@ -16,21 +16,21 @@ namespace RobloxKeeper
     {
         void CloseAllRoblox()
         {
-            GhostCount ghosts;
-            List<ClientInfo> clients = ClientTracker.GetClients(out ghosts);
-            if (clients.Count == 0 && ghosts.Total == 0)
+            int windowless;
+            List<ClientInfo> clients = ClientTracker.GetClients(out windowless);
+            if (clients.Count == 0 && windowless == 0)
             {
                 Log("No Roblox processes to close.");
                 return;
             }
             string msg = "Close " + clients.Count + " Roblox client(s)" +
-                (ghosts.Total > 0 ? " and end " + ghosts.Total + " background process(es)" : "") +
+                (windowless > 0 ? " and end " + windowless + " background process(es)" : "") +
                 "?\n\nYou'll need to rejoin your games, but multi-instance activates the moment they're gone.";
             if (MessageBox.Show(this, msg, "RobloxKeeper", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
                 return;
             foreach (ClientInfo ci in clients)
                 Native.PostMessage(ci.Hwnd, Native.WM_CLOSE, IntPtr.Zero, IntPtr.Zero);
-            if (ghosts.Total > 0) ghostCleaner.KillAll();
+            if (windowless > 0) ghostCleaner.KillEveryWindowless();
             lastCloseRequest = DateTime.Now;
             Log("Close request sent to " + clients.Count + " client(s) - taking the mutex as soon as they exit.");
         }
@@ -261,15 +261,15 @@ namespace RobloxKeeper
                 return;
             }
 
-            GhostCount ghosts;
-            List<ClientInfo> clients = ClientTracker.GetClients(out ghosts);
+            int windowless;
+            List<ClientInfo> clients = ClientTracker.GetClients(out windowless);
             string tp = RobloxInstall.ThirdPartyLaunchers();
 
             StringBuilder msg = new StringBuilder();
             msg.AppendLine("This repairs a Roblox install whose copies keep fighting and closing your clients.");
             msg.AppendLine();
             msg.AppendLine("It will:");
-            msg.AppendLine("  - close " + clients.Count + " running client(s) and " + ghosts.Total + " background process(es)");
+            msg.AppendLine("  - close " + clients.Count + " running client(s) and " + windowless + " background process(es)");
             msg.AppendLine("  - KEEP the version Roblox currently uses:  " + (keep ?? "(none)"));
             msg.AppendLine("  - DELETE " + dirs.Length + " leftover version folder(s) from:");
             msg.AppendLine("    " + versionsRoot);

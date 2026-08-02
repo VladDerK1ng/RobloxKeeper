@@ -6,11 +6,9 @@ namespace RobloxKeeper
 {
     // Terminates leaked window-less Roblox clients.
     //
-    // Auto-clearing used to be gated on multi-instance being enabled AND the
-    // singleton mutex NOT being held by us - which is exactly the state the app
-    // spends almost none of its time in, so the setting effectively did nothing.
-    // A leaked client wastes a gigabyte of RAM no matter who owns the mutex, so
-    // the age check is now the only thing standing between a process and a kill.
+    // This never decides what is leaked. GhostWatch does that, from how long a
+    // window has been gone rather than how old the process is, and hands over a
+    // list of PIDs. Everything here does is double-check that list and kill it.
     class GhostCleaner
     {
         public Action<string> Log;
@@ -24,69 +22,81 @@ namespace RobloxKeeper
         const int RETRY_COOLDOWN_SECONDS = 10;
         const int FAILURE_LOG_COOLDOWN_SECONDS = 120;
 
-        public void ClearStuck()
+        public void Clear(IList<int> pids, GhostWatch watch)
         {
-            Sweep(false);
-        }
-
-        // The manual "End background" button. No age check: the user is looking
-        // at the count and asking for all of them, including one that started
-        // ten seconds ago.
-        public void KillAll()
-        {
-            Sweep(true);
-        }
-
-        void Sweep(bool includeStarting)
-        {
+            if (pids == null || pids.Count == 0) return;
             Prune();
 
-            int killed = 0, failed = 0;
+            List<string> killed = new List<string>();
+            int failed = 0;
             string lastError = null;
-            Process[] procs = Process.GetProcessesByName(ClientTracker.ROBLOX_PROCESS);
 
-            foreach (Process p in procs)
+            foreach (int pid in pids)
             {
+                if (recentlyKilled.ContainsKey(pid)) continue;
+
+                // Re-checked against a fresh handle immediately before the kill.
+                // The decision was made from a snapshot taken earlier in the
+                // tick, and a client that drew its window in between must not be
+                // ended on the strength of a stale reading.
+                if (!StillWindowless(pid)) { if (watch != null) watch.Forget(pid); continue; }
+
                 try
                 {
-                    bool target = includeStarting
-                        ? ClientTracker.IsWindowless(p)
-                        : ClientTracker.IsStuckGhost(p);
-                    if (!target) continue;
-
-                    int pid = p.Id;
-                    if (!includeStarting && recentlyKilled.ContainsKey(pid)) continue;
-
-                    try
+                    using (Process p = Process.GetProcessById(pid))
                     {
+                        int seconds = watch != null ? watch.SecondsWindowless(pid) : 0;
                         p.Kill();
                         recentlyKilled[pid] = DateTime.Now;
-                        killed++;
-                    }
-                    catch (Exception ex)
-                    {
-                        failed++;
-                        lastError = "PID " + pid + " - " + ex.Message;
+                        killed.Add("PID " + pid + " (no window for " + seconds + "s)");
                     }
                 }
-                catch { }
-                finally { try { p.Dispose(); } catch { } }
+                catch (Exception ex)
+                {
+                    failed++;
+                    lastError = "PID " + pid + " - " + ex.Message;
+                }
             }
 
-            if (killed > 0)
-                Log("Cleared " + killed + " stuck background Roblox process(es) - their memory is back.");
+            if (killed.Count > 0)
+                Log("Ended " + killed.Count + " leaked Roblox process(es): " +
+                    string.Join(", ", killed.ToArray()) + ".");
 
             // Retrying every second and complaining every second are different
             // problems; the second one makes the log unreadable.
             if (failed > 0 && (DateTime.Now - lastFailureLogged).TotalSeconds > FAILURE_LOG_COOLDOWN_SECONDS)
             {
                 lastFailureLogged = DateTime.Now;
-                Log("Could not end " + failed + " stuck Roblox process(es): " + lastError +
+                Log("Could not end " + failed + " leaked Roblox process(es): " + lastError +
                     ". Try running RobloxKeeper as administrator if this keeps happening.");
             }
+        }
 
-            if (includeStarting && killed == 0 && failed == 0)
-                Log("No background Roblox processes to end.");
+        static bool StillWindowless(int pid)
+        {
+            try
+            {
+                using (Process p = Process.GetProcessById(pid))
+                    return ClientTracker.IsClient(p) && p.MainWindowHandle == IntPtr.Zero;
+            }
+            catch { return false; }   // already gone, or not ours to judge
+        }
+
+        // Only for "Close all Roblox", where the user has asked for everything to
+        // go and a client that is still drawing its window is meant to go too.
+        public void KillEveryWindowless()
+        {
+            int killed = 0;
+            foreach (Process p in Process.GetProcessesByName(ClientTracker.ROBLOX_PROCESS))
+            {
+                try
+                {
+                    if (ClientTracker.IsWindowless(p)) { p.Kill(); killed++; }
+                }
+                catch { }
+                finally { try { p.Dispose(); } catch { } }
+            }
+            if (killed > 0) Log("Ended " + killed + " background Roblox process(es).");
         }
 
         void Prune()

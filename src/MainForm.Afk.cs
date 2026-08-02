@@ -37,8 +37,8 @@ namespace RobloxKeeper
         void NudgeAll(string reason)
         {
             nextNudge = DateTime.Now.AddMinutes((double)numInterval.Value);
-            GhostCount ghosts;
-            List<ClientInfo> clients = ClientTracker.GetClients(out ghosts);
+            int windowless;
+            List<ClientInfo> clients = ClientTracker.GetClients(out windowless);
             int count = 0, skipped = 0;
             IntPtr previous = Native.GetForegroundWindow();
 
@@ -94,9 +94,9 @@ namespace RobloxKeeper
         // rather than ticking away against nothing.
         int NudgeableClientCount()
         {
-            GhostCount ghosts;
+            int windowless;
             int n = 0;
-            foreach (ClientInfo ci in ClientTracker.GetClients(out ghosts))
+            foreach (ClientInfo ci in ClientTracker.GetClients(out windowless))
             {
                 bool wanted;
                 if (!nudgePrefs.TryGetValue(ci.Pid, out wanted)) wanted = true;
