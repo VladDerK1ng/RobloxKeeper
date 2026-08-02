@@ -148,6 +148,8 @@ namespace RobloxKeeper
                 if (pendingArgs == lastRedirectArgs ||
                     (DateTime.Now - lastRedirectAt).TotalSeconds < 20)
                 {
+                    LogInstallerKill(ups, "a launch was already redirected moments ago - " +
+                        "redirecting the same join ticket twice burns it");
                     foreach (Process p in ups) { try { p.Kill(); } catch { } }
                     return;
                 }
@@ -178,13 +180,23 @@ namespace RobloxKeeper
 
             // No launch waiting: this is a background update, so keep it away from
             // the running clients. It will install once everything is closed.
+            LogInstallerKill(ups, "background update while " + openClients + " client(s) were open");
             foreach (Process p in ups) { try { p.Kill(); } catch { } }
-            if (!updateHeldLogged)
-            {
-                updateHeldLogged = true;
-                Log("Roblox tried to update while you were playing - held it back so your clients stay open. " +
-                    "It will update by itself once you close them all.");
-            }
+        }
+
+        // Every installer we terminate gets a line. This used to be a one-shot
+        // bool that logged the first occurrence and stayed silent forever after,
+        // so a Roblox installer could appear, close a client, and be killed by us
+        // with nothing in the log to explain the client that just vanished.
+        // Rate-limited rather than one-shot: repeated attempts are the symptom.
+        void LogInstallerKill(List<Process> ups, string why)
+        {
+            if (ups.Count == 0) return;
+            if ((DateTime.Now - lastInstallerKillLog).TotalSeconds < 30) return;
+            lastInstallerKillLog = DateTime.Now;
+            Log("Stopped " + ups.Count + " Roblox installer process(es) - " + why +
+                ". Roblox's installer closes every open client, so if one just disappeared, this was why. " +
+                "It will update by itself once you close all clients.");
         }
 
         // The duplicate-install ping-pong can only be broken by removing the

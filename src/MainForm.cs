@@ -28,6 +28,14 @@ namespace RobloxKeeper
         public const string HINT_UPDATING = "Roblox is UPDATING - it closes every client once. Reopen after.";
     }
 
+    // A client we are following. The open handle is the point: it outlives the
+    // process, which is the only way to read how it died.
+    class TrackedClient
+    {
+        public DateTime Opened;
+        public Process Handle;
+    }
+
     // Window state, the one-second housekeeping loop, and the glue between the
     // UI and the workers. The pieces that do real work live in their own files:
     // MainForm.Ui.cs builds the layout, MainForm.Afk.cs runs the nudges, and
@@ -47,7 +55,7 @@ namespace RobloxKeeper
 
         EventWaitHandle singletonEvent;
         bool heldLogged;
-        bool updateHeldLogged;
+        DateTime lastInstallerKillLog = DateTime.MinValue;
         string lastRedirectArgs;
         DateTime lastRedirectAt = DateTime.MinValue;
 
@@ -80,7 +88,7 @@ namespace RobloxKeeper
         bool versionConflictLogged;
         string lastRegisteredVersion;
         readonly List<string> seenClientVersions = new List<string>();
-        readonly Dictionary<int, DateTime> knownClients = new Dictionary<int, DateTime>();
+        readonly Dictionary<int, TrackedClient> knownClients = new Dictionary<int, TrackedClient>();
         DateTime lastClientOpened = DateTime.MinValue;
         bool clientTrackingReady;
 
@@ -294,11 +302,18 @@ namespace RobloxKeeper
             // running it is left alone, so Roblox still updates normally.
             List<Process> installers = ClientTracker.ByName(snapshot, "RobloxPlayerInstaller");
             List<Process> launchers = ClientTracker.ByName(snapshot, "RobloxPlayerLauncher");
-            HandleVersionSwitch(clients.Count, installers, snapshot);
 
+            // Described BEFORE HandleVersionSwitch, which kills these. Asking
+            // afterwards re-enumerates live processes, finds the ones we just
+            // terminated are gone, and the old "(none)" guard then swallowed the
+            // warning entirely - so an installer could close every client and
+            // leave nothing in the log to say it had ever been there.
             bool installerRunning = installers.Count > 0 || launchers.Count > 0;
             string helpers = installerRunning ? RobloxInstall.DescribeHelpers() : "(none)";
-            if (installerRunning && !installerSeen && helpers != "(none)")
+
+            HandleVersionSwitch(clients.Count, installers, snapshot);
+
+            if (installerRunning && !installerSeen)
             {
                 updaterSeenAt = DateTime.Now;
                 Log("Roblox helper running: " + helpers +
@@ -370,7 +385,17 @@ namespace RobloxKeeper
             foreach (ClientInfo ci in clients)
             {
                 if (knownClients.ContainsKey(ci.Pid)) continue;
-                knownClients[ci.Pid] = DateTime.Now;
+
+                TrackedClient t = new TrackedClient();
+                t.Opened = DateTime.Now;
+                // The handle is held open for the client's whole life. Once a
+                // process exits, its exit code is only readable through a handle
+                // that was already open - and that code is the difference between
+                // "you closed it" and "something terminated it", which the log
+                // could previously only guess at.
+                t.Handle = OpenForExitCode(ci.Pid);
+                knownClients[ci.Pid] = t;
+
                 if (!clientTrackingReady) continue;   // don't narrate clients already open at startup
                 lastClientOpened = DateTime.Now;
                 string clientVer = RobloxInstall.VersionOfPid(ci.Pid);
@@ -393,11 +418,13 @@ namespace RobloxKeeper
 
             foreach (int pid in gone)
             {
-                DateTime opened = knownClients[pid];
+                TrackedClient t = knownClients[pid];
                 knownClients.Remove(pid);
+                string exit = DescribeExit(t);
+                if (t.Handle != null) { try { t.Handle.Dispose(); } catch { } }
                 if (!clientTrackingReady) continue;
 
-                double lived = (DateTime.Now - opened).TotalSeconds;
+                double lived = (DateTime.Now - t.Opened).TotalSeconds;
                 double sinceOther = (DateTime.Now - lastClientOpened).TotalSeconds;
                 string why;
                 if (installerRunning)
@@ -411,11 +438,55 @@ namespace RobloxKeeper
                 else if (!mutexHeld)
                     why = "closed while the mutex was NOT held by RobloxKeeper - check the multi-instance light.";
                 else
-                    why = "closed normally - RobloxKeeper held the mutex, so this was NOT a singleton kill (you or the game closed it).";
-                Log("Client PID " + pid + " ended after " + ((int)lived) + "s - " + why);
+                    why = "RobloxKeeper held the mutex, so this was NOT a singleton kill.";
+                Log("Client PID " + pid + " ended after " + ((int)lived) + "s - " + exit + " " + why);
             }
 
             clientTrackingReady = true;
+        }
+
+        // Windows reports how a process died, and it is the only hard evidence
+        // available after the fact. A clean shutdown returns 0. TerminateProcess
+        // returns whatever the caller passed - .NET's Process.Kill uses -1, and
+        // Roblox's own installer uses its own codes - so anything non-zero means
+        // something ended it rather than it choosing to exit.
+        // Process.GetProcessById on its own is not enough. That object re-opens
+        // the process by PID whenever it needs one, which fails the moment the
+        // process is gone - precisely when the exit code matters. Touching
+        // Handle forces .NET to open and cache a real kernel handle now, and
+        // that handle keeps the exit code readable after the process dies.
+        internal static Process OpenForExitCode(int pid)
+        {
+            Process p = null;
+            try
+            {
+                p = Process.GetProcessById(pid);
+                IntPtr forced = p.Handle;
+                GC.KeepAlive(forced);
+                return p;
+            }
+            catch
+            {
+                if (p != null) { try { p.Dispose(); } catch { } }
+                return null;
+            }
+        }
+
+        internal static string DescribeExit(TrackedClient t)
+        {
+            if (t.Handle == null) return "[exit code unavailable]";
+            int code;
+            try { code = t.Handle.ExitCode; }
+            catch { return "[exit code unreadable]"; }
+
+            if (code == 0) return "[exit 0: shut itself down cleanly, so you or the game closed it]";
+            if (code == -1) return "[exit -1: TERMINATED by another process, not a clean shutdown]";
+
+            uint u = unchecked((uint)code);
+            if (u == 0xC0000005) return "[exit 0xC0000005: CRASHED (access violation)]";
+            if ((u & 0xF0000000) == 0xC0000000)
+                return "[exit 0x" + u.ToString("X8") + ": CRASHED]";
+            return "[exit " + code + " (0x" + u.ToString("X8") + "): did not shut down cleanly]";
         }
 
         // ---------- Multi-instance ----------
