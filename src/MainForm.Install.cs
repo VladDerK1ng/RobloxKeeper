@@ -43,11 +43,68 @@ namespace RobloxKeeper
                     "closing and Roblox keeps reinstalling, use only ONE launcher - remove the " +
                     "others, then reinstall Roblox once.");
 
+            // Registered, but pointing at a version folder that no longer
+            // exists. Windows then runs a missing exe, Roblox's installer fires
+            // to repair the install, and that installer closes every open
+            // client - which reads as clients closing at random.
+            if (RobloxInstall.HandlerTargetMissing())
+                Log("BROKEN LAUNCH HANDLER: Play on roblox.com points at " +
+                    RobloxInstall.LaunchPathVersion() + ", which is not installed. " +
+                    "Every launch therefore starts Roblox's installer, and that installer closes " +
+                    "every open client. Click Repair in the Multi-instance card to point it at an " +
+                    "installed version.");
+
             if (RobloxInstall.UsesLegacyBootstrapper())
                 Log("WARNING: Roblox launches through the legacy bootstrapper " +
                     "(RobloxPlayerLauncher). It closes running clients on every launch, " +
                     "even while RobloxKeeper holds the mutex. Fix: reinstall Roblox from " +
                     "roblox.com so Play opens RobloxPlayerBeta.exe directly.");
+        }
+
+        // Shows or hides the repair row, and keeps its wording current.
+        void UpdateLaunchHandlerRow()
+        {
+            bool broken = RobloxInstall.HandlerTargetMissing();
+            if (broken != handlerBrokenShown)
+            {
+                handlerBrokenShown = broken;
+                lblHandler.Visible = broken;
+                btnFixHandler.Visible = broken;
+                if (broken)
+                    lblHandler.Text = "Play points at " + RobloxInstall.LaunchPathVersion() +
+                                      ", which isn't installed - every launch closes your clients.";
+            }
+        }
+
+        // Points the roblox-player registration back at a version that is
+        // actually on disk. This is exactly what Roblox does for itself; doing
+        // it here means the next Play click launches a client directly instead
+        // of triggering the installer that closes everything.
+        void RepairLaunchHandler()
+        {
+            string broken = RobloxInstall.LaunchPathVersion();
+            string target = RobloxInstall.NewestInstalledVersion();
+
+            if (target == null)
+            {
+                Log("Nothing to repair the launch handler to - no installed Roblox version has a " +
+                    "player executable. Reinstall Roblox from roblox.com once; this will then stay fixed.");
+                return;
+            }
+
+            if (!RobloxInstall.SetRegisteredVersion(target))
+            {
+                Log("Could not rewrite the launch handler. Try running RobloxKeeper again, " +
+                    "or reinstall Roblox from roblox.com.");
+                return;
+            }
+
+            lastRegisteredVersion = target;
+            RobloxInstall.RetargetShortcuts(target, RobloxInstall.VersionsRoot, Log);
+            Log("Launch handler repaired: " + broken + " -> " + target +
+                ". Play on roblox.com now opens a client directly, so it no longer runs the " +
+                "installer that was closing your other clients.");
+            UpdateLaunchHandlerRow();
         }
 
         // Desktop/Start-menu shortcuts hard-code a version path, so they bypass

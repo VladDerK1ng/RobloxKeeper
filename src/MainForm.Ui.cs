@@ -13,20 +13,37 @@ namespace RobloxKeeper
     // centre on the same line instead of drifting apart by a pixel or two.
     partial class MainForm
     {
-        // Card geometry
+        // Card geometry. Cards are a fixed width and lay out their own contents
+        // in card-relative coordinates, so which column a card sits in is purely
+        // its Location.X - nothing inside a card knows or cares.
         const int CARD_X = 16;
+        const int CARD_X2 = 458;   // second column: CARD_X + CARD_W + GUTTER
         const int CARD_W = 428;
+        const int GUTTER = 14;     // the gap between cards, horizontally and vertically
         const int RIGHT = 408;    // right edge of every button and toggle
         const int BTN_X = 292;
         const int BTN_W = 116;
 
-        // Vertical stack
+        // Two columns.
+        //
+        // The single stack ran out of screen: at 992px it left 32px of headroom
+        // on a 1080p display, and the remaining features needed five more rows.
+        // The window was 460px wide on a 1920px screen, so the space was there
+        // horizontally the whole time. Splitting the stack roughly halves the
+        // height and gives the client list room to show more than three rows.
+        //
+        // Left column:  what you watch     - anti-AFK, clients
+        // Right column: what you configure - performance, multi-instance, log
         const int TITLEBAR_H = 44;
-        const int AFK_Y = 54, AFK_H = 156;
-        const int CLIENTS_Y = 224, CLIENTS_H = 208;
-        const int PERF_Y = 446, PERF_H = 130;
-        const int MULTI_Y = 590, MULTI_H = 120;
-        const int LOG_Y = 724, LOG_H = 184;
+        const int AFK_Y = 54, AFK_H = 224;
+        const int CLIENTS_Y = 292, CLIENTS_H = 428;
+        const int PERF_Y = 54, PERF_H = 232;
+        const int MULTI_Y = 300, MULTI_H = 188;
+        const int LOG_Y = 502, LOG_H = 184;
+
+        // The left column now ends lower than the right; FULL_HEIGHT follows
+        // the taller one and adds the bottom margin.
+        const int COLUMN_BOTTOM = 720;
 
         const int ROW_H = 26;
         const int WELL_W = 248;   // the countdown well, left of the Nudge now button
@@ -34,7 +51,8 @@ namespace RobloxKeeper
         // Title bar columns. TITLE_X + TITLE_W must not reach VER_X.
         internal const int TITLE_X = 18, TITLE_W = 138;
         internal const int VER_X = 156, VER_W = 60;
-        internal const int AUTOSTART_RIGHT = 356;
+        // Clear of the minimise/close buttons, which sit at BASE_WIDTH - 88.
+        internal const int AUTOSTART_RIGHT = BASE_WIDTH - 104;
 
         Panel titleBar;
 
@@ -148,13 +166,12 @@ namespace RobloxKeeper
             card.Controls.Add(Ui.RowLabel("min", 162, row, ROW_H, 30, 9.75f, Theme.Muted));
 
             cmbKeys = Ui.DarkCombo(196, row, 212);
-            cmbKeys.Items.Add("Zoom out + in  (O, I)");
-            cmbKeys.Items.Add("Turn camera  (← →)");
-            cmbKeys.Items.Add("Jump  (Space)");
-            cmbKeys.SelectedIndex = 1;   // default: turn camera (arrow keys)
+            cmbKeys.Items.AddRange(NudgeMethod.AllNames());
+            cmbKeys.SelectedIndex = NudgeMethod.CAMERA;
             cmbKeys.SelectedIndexChanged += delegate
             {
-                if (!initializing) Log("Nudge keys set: " + cmbKeys.Text);
+                if (!initializing) Log("Nudge method set: " + cmbKeys.Text);
+                UpdateCustomKeyRow();
                 SaveSettings();
             };
             card.Controls.Add(cmbKeys);
@@ -198,6 +215,89 @@ namespace RobloxKeeper
             btnNudge = Ui.AccentButton("Nudge now", BTN_X, 87, BTN_W, 48);
             btnNudge.Click += delegate { NudgeAll("manual"); };
             card.Controls.Add(btnNudge);
+
+            // A nudge takes the foreground for about a second per client, which
+            // in a competitive game is a lost fight. With this on it waits for a
+            // lull instead, and only overrides that when a client is close
+            // enough to the idle kick that waiting would cost the account.
+            const int idleRow = 148;
+            chkIdleOnly = Ui.DarkCheck("Only nudge while I'm away from the keyboard", Ui.PAD, idleRow, 8.25f);
+            Ui.CenterIn(chkIdleOnly, idleRow, ROW_H);
+            chkIdleOnly.CheckedChanged += delegate
+            {
+                if (!initializing)
+                    Log(chkIdleOnly.Checked
+                        ? "Nudges will wait for a lull - your game won't be interrupted unless a client is about to be kicked."
+                        : "Nudges will happen on the interval regardless of what you're doing.");
+                SaveSettings();
+            };
+            card.Controls.Add(chkIdleOnly);
+
+            // Used by the "Custom key" method. Offered as a list of keys known
+            // to be safe, plus a capture box for anything else - which still
+            // refuses chat, menu, focus and modifier keys, because this fires
+            // unattended and a bad key would be sending it into a live game.
+            const int keyRow = 182;
+            lblCustomKey = Ui.RowLabel("Custom key", Ui.PAD, keyRow, ROW_H, 80, 8.25f, Theme.Muted);
+            card.Controls.Add(lblCustomKey);
+
+            cmbCustomKey = Ui.DarkCombo(104, keyRow, 176);
+            cmbCustomKey.Items.AddRange(NudgeKeys.SafeKeyNames());
+            cmbCustomKey.SelectedIndex = 0;
+            cmbCustomKey.SelectedIndexChanged += delegate
+            {
+                capturedVk = 0;   // the list overrides an earlier capture
+                if (!initializing) Log("Custom nudge key set to " + cmbCustomKey.Text + ".");
+                SaveSettings();
+            };
+            card.Controls.Add(cmbCustomKey);
+
+            btnCaptureKey = Ui.AccentButton("Press a key", BTN_X, keyRow, BTN_W, ROW_H);
+            btnCaptureKey.Font = new Font("Segoe UI", 8.25f, FontStyle.Bold);
+            btnCaptureKey.Click += delegate { CaptureCustomKey(); };
+            card.Controls.Add(btnCaptureKey);
+        }
+
+        // The custom key only matters for the Custom method; the row stays put
+        // either way so the card does not change shape as you switch methods.
+        void UpdateCustomKeyRow()
+        {
+            bool custom = cmbKeys.SelectedIndex == NudgeMethod.CUSTOM;
+            lblCustomKey.ForeColor = custom ? Theme.Text : Theme.Muted;
+        }
+
+        void CaptureCustomKey()
+        {
+            using (KeyCaptureDialog d = new KeyCaptureDialog())
+            {
+                if (d.ShowDialog(this) != DialogResult.OK || d.Captured == 0) return;
+
+                string name = NudgeKeys.NameFor(d.Captured);
+                if (name != null)
+                {
+                    // A key the list already offers - select it there, so the
+                    // two controls never disagree about what is set.
+                    int i = cmbCustomKey.Items.IndexOf(name);
+                    if (i >= 0) cmbCustomKey.SelectedIndex = i;
+                }
+                else
+                {
+                    capturedVk = d.Captured;
+                    Log("Custom nudge key captured: " + (char)d.Captured + ".");
+                    SaveSettings();
+                }
+
+                if (cmbKeys.SelectedIndex != NudgeMethod.CUSTOM)
+                    Log("Pick the Custom key method above to start using it.");
+            }
+        }
+
+        // What the Custom method sends: a captured key if there is one, else
+        // whatever the list is showing.
+        byte CustomNudgeVk()
+        {
+            if (capturedVk != 0) return capturedVk;
+            return NudgeKeys.VkFor(cmbCustomKey.Text);
         }
 
         // ---------- Clients ----------
@@ -215,12 +315,12 @@ namespace RobloxKeeper
 
             clientsPanel = new ScrollPanel();
             clientsPanel.Location = new Point(Ui.PAD, 54);
-            clientsPanel.Size = new Size(388, 104);
+            clientsPanel.Size = new Size(388, CLIENTS_H - 138);
             clientsPanel.BackColor = Theme.Card;
             clientsPanel.AutoScroll = true;
             card.Controls.Add(clientsPanel);
 
-            const int row = 166;
+            const int row = CLIENTS_H - 76;
             chkAutoGhost = Ui.DarkCheck("Auto-clear ghosts", 18, row, 8.25f);
             chkAutoGhost.Checked = true;
             Ui.CenterIn(chkAutoGhost, row, ROW_H);
@@ -246,6 +346,54 @@ namespace RobloxKeeper
             // more. "Close all Roblox" is the button for ending everything.
             btnZombie.Click += delegate { ghostCleaner.Clear(ghostWatch.Stuck, ghostWatch); };
             card.Controls.Add(btnZombie);
+
+            // Roblox stores five accounts and makes you sign out to switch.
+            // This is the way past that, and it lives beside the client list
+            // because launching an account is how a client gets here.
+            const int accRow = CLIENTS_H - 42;
+            lblAccounts = Ui.RowLabel("", Ui.PAD, accRow, ROW_H, 250, 8.25f, Theme.Muted);
+            card.Controls.Add(lblAccounts);
+
+            btnAccounts = Ui.AccentButton("Accounts", BTN_X, accRow, BTN_W, ROW_H);
+            btnAccounts.Font = new Font("Segoe UI", 8.25f, FontStyle.Bold);
+            btnAccounts.Click += delegate { OpenAccounts(); };
+            card.Controls.Add(btnAccounts);
+        }
+
+        // Opens the account manager. The store is loaded lazily, so a user
+        // who never touches accounts never pays for reading or decrypting it.
+        void OpenAccounts()
+        {
+            if (!WebView2Runtime.RuntimeAvailable())
+            {
+                MessageBox.Show(this,
+                    "The account manager needs the Microsoft Edge WebView2 runtime, which isn't installed.\r\n\r\n"
+                    + "It ships with Windows 11 and with current versions of Edge. Installing Edge, or the "
+                    + "WebView2 runtime from Microsoft, will enable it.",
+                    "WebView2 runtime missing", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            EnsureAccounts();
+            using (AccountsDialog d = new AccountsDialog(accounts, Log)) d.ShowDialog(this);
+            UpdateAccountsLabel();
+        }
+
+        void EnsureAccounts()
+        {
+            if (accounts != null) return;
+            accounts = new AccountStore(AccountStore.DefaultPath);
+            accounts.Load();
+        }
+
+        void UpdateAccountsLabel()
+        {
+            int n = accounts == null ? -1 : accounts.Accounts.Count;
+            string text;
+            if (n < 0) text = "Launch accounts without signing out";
+            else if (n == 0) text = "No accounts saved yet";
+            else text = n + " account" + (n == 1 ? "" : "s") + " saved";
+            if (lblAccounts.Text != text) lblAccounts.Text = text;
         }
 
         // ---------- Performance ----------
@@ -253,7 +401,7 @@ namespace RobloxKeeper
         void BuildPerformanceCard()
         {
             Card card = new Card();
-            card.Location = new Point(CARD_X, PERF_Y);
+            card.Location = new Point(CARD_X2, PERF_Y);
             card.Size = new Size(CARD_W, PERF_H);
             Controls.Add(card);
 
@@ -311,6 +459,69 @@ namespace RobloxKeeper
             btnTrimAll.Font = new Font("Segoe UI", 8.25f, FontStyle.Bold);
             btnTrimAll.Click += delegate { OnTrimAllClicked(); };
             card.Controls.Add(btnTrimAll);
+
+            // "New clients:" above means exactly that - a client that is already
+            // playing keeps what it started with. Retuning everything is a
+            // deliberate action, not a side effect of changing the default,
+            // because the usual reason to change it is to set up the NEXT AFK
+            // client without disturbing the one being played.
+            const int row3 = 122;
+            card.Controls.Add(Ui.RowLabel("Running clients keep their current settings",
+                Ui.PAD, row3, ROW_H, 250, 8.25f, Theme.Muted));
+
+            btnApplyAll = Ui.AccentButton("Apply to all", BTN_X, row3, BTN_W, ROW_H);
+            btnApplyAll.Font = new Font("Segoe UI", 8.25f, FontStyle.Bold);
+            btnApplyAll.Click += delegate { OnApplyToAllClicked(); };
+            card.Controls.Add(btnApplyAll);
+
+            // Capping a client's FPS is not reachable from outside the process -
+            // the only lever is a Roblox config file, and it is global to every
+            // client. Dropping priority and switching on EcoQoS for the clients
+            // you are not looking at is, and it touches nothing on disk.
+            const int row4 = 156;
+            chkThrottleBg = Ui.DarkCheck("Throttle clients I'm not using", Ui.PAD, row4, 8.25f);
+            Ui.CenterIn(chkThrottleBg, row4, ROW_H);
+            chkThrottleBg.CheckedChanged += delegate
+            {
+                perf.ThrottleBackground = chkThrottleBg.Checked;
+                if (!initializing)
+                    Log(chkThrottleBg.Checked
+                        ? "Background clients will drop a priority step and run in efficiency mode; the one you're using stays at full speed."
+                        : "Background throttling off.");
+                SaveSettings();
+            };
+            card.Controls.Add(chkThrottleBg);
+
+            btnAfkMode = Ui.AccentButton("AFK mode", BTN_X, row4, BTN_W, ROW_H);
+            btnAfkMode.Font = new Font("Segoe UI", 8.25f, FontStyle.Bold);
+            btnAfkMode.Click += delegate { OnAfkModeClicked(); };
+            card.Controls.Add(btnAfkMode);
+
+            // A ceiling trims on the spot rather than waiting for the timer, for
+            // the client that has quietly grown to three gigabytes.
+            const int row5 = 190;
+            chkCeiling = Ui.DarkCheck("Trim any client over", Ui.PAD, row5, 8.25f);
+            Ui.CenterIn(chkCeiling, row5, ROW_H);
+            chkCeiling.CheckedChanged += delegate
+            {
+                if (!initializing)
+                    Log(chkCeiling.Checked
+                        ? "Memory ceiling on - clients over " + numCeiling.Value + " MB are trimmed."
+                        : "Memory ceiling off.");
+                SaveSettings();
+            };
+            card.Controls.Add(chkCeiling);
+
+            numCeiling = Ui.DarkNumeric(150, row5, 62, 256, 16384, 2000);
+            numCeiling.ValueChanged += delegate
+            {
+                if (!initializing && chkCeiling.Checked)
+                    Log("Memory ceiling set to " + numCeiling.Value + " MB.");
+                SaveSettings();
+            };
+            card.Controls.Add(numCeiling);
+
+            card.Controls.Add(Ui.RowLabel("MB", 218, row5, ROW_H, 30, 8.25f, Theme.Muted));
         }
 
         // ---------- Multi-instance ----------
@@ -318,7 +529,7 @@ namespace RobloxKeeper
         void BuildMultiCard()
         {
             Card card = new Card();
-            card.Location = new Point(CARD_X, MULTI_Y);
+            card.Location = new Point(CARD_X2, MULTI_Y);
             card.Size = new Size(CARD_W, MULTI_H);
             Controls.Add(card);
 
@@ -349,6 +560,33 @@ namespace RobloxKeeper
 
             lblUpdating = Ui.MutedLabel(MultiStatus.HINT_NORMAL, Ui.PAD, 86, 8.25f);
             card.Controls.Add(lblUpdating);
+
+            // The session lock lives here rather than under Performance because
+            // it exists for the same reason multi-instance does: it is what
+            // keeps two clients from evicting each other's Roblox session.
+            const int lockRow = 116;
+            lblSessionLock = Ui.MutedLabel("", Ui.PAD, lockRow + 6, 8.25f);
+            lblSessionLock.MaximumSize = new Size(BTN_X - Ui.PAD - 8, 0);
+            card.Controls.Add(lblSessionLock);
+
+            btnPauseLock = Ui.AccentButton("Pause 60s", BTN_X, lockRow, BTN_W, ROW_H);
+            btnPauseLock.Font = new Font("Segoe UI", 8.25f, FontStyle.Bold);
+            btnPauseLock.Click += delegate { OnPauseSessionLock(); };
+            card.Controls.Add(btnPauseLock);
+
+            // Only ever visible when the registration is actually dangling.
+            // Amber, because this one silently closes every open client every
+            // time Play is pressed, and it will keep doing so until it is fixed.
+            const int fixRow = 150;
+            lblHandler = Ui.RowLabel("", Ui.PAD, fixRow, ROW_H, BTN_X - Ui.PAD - 8, 8.25f, Theme.Amber);
+            lblHandler.Visible = false;
+            card.Controls.Add(lblHandler);
+
+            btnFixHandler = Ui.AccentButton("Repair", BTN_X, fixRow, BTN_W, ROW_H);
+            btnFixHandler.Font = new Font("Segoe UI", 8.25f, FontStyle.Bold);
+            btnFixHandler.Visible = false;
+            btnFixHandler.Click += delegate { RepairLaunchHandler(); };
+            card.Controls.Add(btnFixHandler);
         }
 
         // ---------- Activity ----------
@@ -357,7 +595,7 @@ namespace RobloxKeeper
         {
             Card card = new Card();
             card.BackColor = Theme.Inset;
-            card.Location = new Point(CARD_X, LOG_Y);
+            card.Location = new Point(CARD_X2, LOG_Y);
             card.Size = new Size(CARD_W, LOG_H);
             Controls.Add(card);
 
@@ -549,6 +787,67 @@ namespace RobloxKeeper
                     perf.SetOverride(pid, d.Result);
                 }
             }
+        }
+
+        // The opt-in that changing the default deliberately is not.
+        void OnApplyToAllClicked()
+        {
+            if (lastClients.Count == 0)
+            {
+                Log("No Roblox clients to apply settings to.");
+                return;
+            }
+            perf.ApplyToAllRunning(lastClients);
+            Log("Applied " + perf.Defaults + " to " + lastClients.Count +
+                " running client(s). Per-client Tune settings were left alone.");
+        }
+
+        void OnPauseSessionLock()
+        {
+            sessionLock.Pause(TimeSpan.FromSeconds(60));
+            UpdateSessionLockStatus();
+        }
+
+        // Says what the lock is doing and, when it is off, why - "needs two
+        // clients" is a normal state, not a fault, and should not read like one.
+        void UpdateSessionLockStatus()
+        {
+            string text;
+            if (sessionLock.Held)
+                text = "Session lock on - clients can't evict each other's Roblox session.";
+            else if (lastClients.Count < 2)
+                text = "Session lock idle - it arms itself at two clients.";
+            else
+                text = "Session lock paused - sign in now; it re-arms by itself.";
+
+            if (lblSessionLock.Text != text) lblSessionLock.Text = text;
+            btnPauseLock.Enabled = sessionLock.Held;
+        }
+
+        // One switch instead of tuning each client by hand: everything except
+        // what you are actually playing gets parked.
+        void OnAfkModeClicked()
+        {
+            if (lastClients.Count == 0) { Log("No Roblox clients to park."); return; }
+
+            if (afkModeOn)
+            {
+                perf.LeaveAfkMode(lastClients);
+                afkModeOn = false;
+                btnAfkMode.Text = "AFK mode";
+                Log("AFK mode off - every client is back on its normal profile.");
+                return;
+            }
+
+            int fg = PerformanceManager.ForegroundPid();
+            perf.EnterAfkMode(lastClients, fg);
+            afkModeOn = true;
+            btnAfkMode.Text = "Exit AFK";
+            bool anyForeground = false;
+            foreach (ClientInfo ci in lastClients) if (ci.Pid == fg) anyForeground = true;
+            Log(anyForeground
+                ? "AFK mode on - every client parked except the one in front (PID " + fg + ")."
+                : "AFK mode on - all " + lastClients.Count + " client(s) parked; no Roblox window is in front.");
         }
 
         void OnTrimAllClicked()

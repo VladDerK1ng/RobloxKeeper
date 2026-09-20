@@ -93,6 +93,73 @@ namespace RobloxKeeper
             return ok;
         }
 
+        // The executable out of a registry command string, which is the path
+        // followed by %1 - quoted if it contains spaces, which it always does
+        // under AppData.
+        public static string ExeFromCommand(string command)
+        {
+            if (string.IsNullOrEmpty(command)) return null;
+            if (command == "(not registered)") return null;
+
+            command = command.Trim();
+            if (command.StartsWith("\""))
+            {
+                int close = command.IndexOf('"', 1);
+                return close > 1 ? command.Substring(1, close - 1) : null;
+            }
+
+            int sp = command.IndexOf(' ');
+            string path = sp < 0 ? command : command.Substring(0, sp);
+            return path.Length == 0 ? null : path;
+        }
+
+        // Registered, but pointing at something that is not there.
+        //
+        // This is the failure that reads as "clients randomly close and Roblox
+        // keeps updating": Windows runs a missing exe, Roblox's installer fires
+        // to repair the install, and that installer closes every open client.
+        // Nothing registered at all is a different problem, and deliberately
+        // does not count here.
+        public static bool HandlerTargetMissing(string command, Func<string, bool> fileExists)
+        {
+            string exe = ExeFromCommand(command);
+            if (string.IsNullOrEmpty(exe)) return false;
+            try { return !fileExists(exe); }
+            catch { return false; }
+        }
+
+        public static bool HandlerTargetMissing()
+        {
+            return HandlerTargetMissing(RobloxLaunchCommand(), File.Exists);
+        }
+
+        // The version to repair a broken registration to: the most recently
+        // installed one, because that is the one Roblox most recently decided
+        // it wanted. Candidates come from InstalledVersionList, which already
+        // excludes folders with no player executable.
+        public static string NewestVersion(IList<string> versions, Func<string, DateTime> stamp)
+        {
+            string best = null;
+            DateTime bestAt = DateTime.MinValue;
+            foreach (string v in versions)
+            {
+                DateTime at;
+                try { at = stamp(v); }
+                catch { continue; }
+                if (best == null || at > bestAt) { best = v; bestAt = at; }
+            }
+            return best;
+        }
+
+        public static string NewestInstalledVersion()
+        {
+            return NewestVersion(InstalledVersionList(), delegate(string v)
+            {
+                try { return File.GetLastWriteTimeUtc(Path.Combine(VersionsRoot, v, "RobloxPlayerBeta.exe")); }
+                catch { return DateTime.MinValue; }
+            });
+        }
+
         public static bool UsesLegacyBootstrapper()
         {
             string cmd = RobloxLaunchCommand().ToLowerInvariant();

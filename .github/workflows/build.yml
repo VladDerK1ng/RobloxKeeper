@@ -25,6 +25,12 @@ jobs:
         shell: cmd
         run: build.bat
 
+      # Compiles the same sources against tests\ and runs them. A red test fails
+      # the build, so a tag cut from a branch that does not pass cannot ship.
+      - name: Run the tests
+        shell: cmd
+        run: test.bat
+
       - name: Report what was built
         shell: pwsh
         run: |

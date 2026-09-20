@@ -7,6 +7,7 @@ One tiny executable. Zero dependencies. No injection, no memory access, no file 
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D6)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Dependencies](https://img.shields.io/badge/dependencies-none-blueviolet)
+![Size](https://img.shields.io/badge/size-1%20MB%2C%20one%20file-blue)
 
 <p align="center">
   <img src="assets/hero.png" alt="RobloxKeeper" width="620">
@@ -19,12 +20,18 @@ One tiny executable. Zero dependencies. No injection, no memory access, no file 
 | | |
 |---|---|
 | **Anti-AFK** | Nudges every selected Roblox client on a timer (default 15 min, adjustable 1-19) so the 20-minute idle kick never fires. Briefly focuses each client, sends the input, and returns focus to whatever you were doing. Minimized clients are restored, nudged, and re-minimized. The countdown only runs while a selected client is actually open. |
-| **Nudge key profiles** | Choose what the nudge sends: **Turn camera** (`←`, `→` - default), **Zoom out + in** (`O`, `I`), or **Jump** (`Space`). Pick whichever is safe for your game's keybinds. |
+| **Nudge methods** | Choose what the nudge sends: **Zoom out + in** (`O`, `I`), **Turn camera** (`←`, `→` - default), **Jump** (`Space`), **Step forward + back** (`W`, `S`) for games that check the character actually moved, **Mouse jiggle** for games that ignore the keyboard, or **Custom key** - picked from a list or captured by pressing it. Every two-part method sends a movement and its opposite, so a client parked for eight hours ends where it started. Keys that open chat or a menu, move focus, or stick down as a modifier are refused, including ones you pick yourself: this fires unattended, and a stray key goes into a live game. |
+| **Never interrupt you** | A nudge has to take the foreground - Roblox only counts input delivered to the focused window, which is measured, not assumed. So the goal is for it to cost as little as possible. Each client is held for **230-430ms**, not the ~1.4s it used to be. With **Only nudge while I'm away** on (the default) it waits for a five-second lull first, and a **fullscreen window in front is protected outright** - a game counts as being played even after ten minutes without a keypress, which is exactly the case `GetLastInputInfo` alone cannot tell from being away from the desk. The one override is a client within a minute of Roblox's 20-minute idle kick: then it nudges anyway, after a tray warning, because losing the account beats losing a round. |
 | **Per-client selection** | Every running client appears as a row in the Clients panel (scrollable, so any number of clients works). Untick one and the nudger leaves it alone - run anti-AFK on two accounts while a third stays untouched. **Show** brings that client's window to the front so you can tell which is which. New clients default to enabled. |
+| **Launch handler repair** | Windows launches Roblox through the `roblox-player://` registration, and Roblox rewrites it whenever it switches versions. If it ends up pointing at a version folder that is no longer installed, every Play click runs a missing executable, Roblox's installer fires to repair the install, and **that installer closes every open client** - which reads as clients closing at random while Roblox seems to update over and over. Nothing used to check the target existed. Now it is checked every second, named in the Activity log, and **Repair** points it back at an installed version. Found live on a real machine with both `roblox-player` and `roblox` dangling. |
 | **Multi-Instance** | Holds Roblox's `ROBLOX_singletonMutex` (and `ROBLOX_singletonEvent`) so multiple clients can run simultaneously. A dedicated thread queue-waits on the mutex the same way Roblox clients do, so ownership transfers to RobloxKeeper at the kernel level the instant it frees - a launching client can never win the race. If clients already own it, one click on **Close all Roblox** clears them (ghost processes included) and takeover is immediate. |
-| **Client monitor** | Live count of open Roblox clients with each one's memory use, plus detection of window-less "ghost" Roblox processes (they can silently block multi-instance) with a one-click **End background** button. Processes still starting up are shown as *starting* rather than *stuck*, so a normal launch never looks like a fault. |
+| **Client monitor** | Live count of open Roblox clients with each one's memory use, plus detection of window-less "ghost" Roblox processes (they can silently block multi-instance) with a one-click **End background** button. Roblox's own tray process - the window-less one it relaunches with `--launch-to-tray` when you close a client - is recognised as such and never killed, though it is counted, because it does hold the singleton mutex. Processes still starting up are shown as *starting* rather than *stuck*, so a normal launch never looks like a fault. |
 | **Per-client resources** | Each client row has a **Tune** link: set its **CPU priority**, pin it to a number of **cores**, switch on **efficiency mode** (EcoQoS - the same throttling as Task Manager's), or **trim its memory** on the spot. Successive clients are given non-overlapping core blocks, so "4 cores" on two clients means two sets of four that genuinely don't fight. |
-| **Client defaults + auto-trim** | The **Performance** card sets the profile every newly launched client gets, so the foreground account can outrank the AFK ones without touching anything per-launch. **Auto-trim** hands idle memory back to Windows on a timer, skipping whichever client you're actually looking at. **Trim all now** does it immediately, from the window or the tray menu. |
+| **Throttle what you aren't using** | **Throttle clients I'm not using** drops every background client a priority step and puts it in efficiency mode, restoring it the moment you switch back. **AFK mode** is the one-click version: everything parked except the client in front of you. **Trim any client over N MB** hands memory back the moment a client grows past your ceiling rather than waiting for the timer. There is deliberately no FPS cap: capping Roblox's FPS is only reachable by editing its own config file, it applies to every client at once, and this tool does not touch Roblox's files. |
+| **Client defaults + auto-trim** | The **Performance** card sets the profile every newly launched client gets, so the foreground account can outrank the AFK ones without touching anything per-launch. Clients already running keep what they started with - the account you are playing is never retuned behind your back - and **Apply to all** is there when you do want everything changed at once. **Auto-trim** hands idle memory back to Windows on a timer, skipping whichever client you're actually looking at. **Trim all now** does it immediately, from the window or the tray menu. |
+| **Session lock** | Every Roblox client on a machine shares one cookie jar (`LocalStorage\RobloxCookies.dat`) and one `BrowserTrackerId`. Run two accounts for a few hours and they overwrite each other's session until Roblox evicts one as a duplicate device login - error **273**, *"joined from another device"*, which the client then reports to you as an internet problem. From two clients up, RobloxKeeper holds that file open for reading and denies writing: clients keep the read access they need to sign in and lose the write access that causes the eviction. It releases itself below two clients, and **Pause 60s** hands it back if you need to sign in while clients are open. |
+| **Account manager** | Roblox stores five accounts and makes you sign out to switch. This stores as many as you like. **Add account** opens Roblox's own login page in an embedded browser - you type your own credentials into Roblox's page, solve Roblox's own CAPTCHA and handle your own 2FA; nothing here reads a password, fills a login form or works around a CAPTCHA. Each account gets its **own browser profile**, so each has its own cookie jar and its own device identity rather than sharing one. **Launch** puts any account straight into a game by asking Roblox for a launch ticket, exactly as pressing Play on the website does. |
+| **Where credentials live** | `%APPDATA%\RobloxKeeperccounts.dat`, encrypted with DPAPI at CurrentUser scope - Windows ties the key to your user on this machine, so the file is useless if it is copied anywhere else. A `.ROBLOSECURITY` cookie IS the account: hold one and you are signed in as that user, no password involved. Nothing is sent anywhere except to roblox.com, and no code path prints a cookie to the log, a tooltip or an error message. Removing an account deletes its stored session and browser profile from this PC. |
 | **Single instance** | Launching RobloxKeeper while it's already running won't open a second copy - it surfaces the existing window instead, restoring it from the tray if needed. |
 | **Start with Windows** | Optional autostart toggle (top-right). With it on, RobloxKeeper starts **minimized to the tray** at boot and holds the mutex before any Roblox client can exist, which makes the launch-order problem impossible. |
 | **Saved settings** | Every setting - anti-AFK on/off, interval, nudge profile, multi-instance, auto-clear ghosts, client defaults, auto-trim - is written to `%APPDATA%\RobloxKeeper\settings.txt` and restored on the next launch. Per-client **Tune** overrides are deliberately session-only: Windows recycles PIDs, so a saved override would eventually land on an unrelated process. |
@@ -102,6 +109,16 @@ That's it. The script generates the app icon (`make-icon.ps1`) and produces `Rob
 `csc.exe` from the .NET Framework already on your machine. It is the single build command in the
 repository - CI runs this same script, so a local build and a published build never drift apart.
 
+### Running the tests
+
+```bat
+test.bat
+```
+
+That compiles the production sources together with `tests\` into a console runner and executes it, using
+the same `csc.exe` as `build.bat` - so the code under test is the code that ships, and there is no
+framework or package to install. CI runs it on every push, and a failing test fails the build.
+
 To publish a new version (maintainers):
 
 ```bat
@@ -123,15 +140,27 @@ src/
   MainForm.Afk.cs        the anti-AFK nudge
   MainForm.Install.cs    Roblox reinstall detection, version switching, repair
   MutexKeeper.cs         the queue-wait that holds ROBLOX_singletonMutex
+  SessionLock.cs         the read-only hold on the shared Roblox cookie jar
   ClientTracker.cs       finds clients, tells "starting" from "stuck"
   GhostCleaner.cs        ends leaked window-less clients
   PerformanceManager.cs  per-client priority, affinity, EcoQoS, memory trim
+  NudgeMethod.cs         what each nudge sends, and which keys are safe to send
+  NudgePolicy.cs         when a nudge may take the foreground
+  KeyCaptureDialog.cs    "press a key" capture for the custom nudge key
   ClientTuneDialog.cs    the per-client Tune window
   RobloxInstall.cs       version folders, protocol registration, shortcuts, launchers
   AppSettings.cs         settings.txt load/save
   Updater.cs             self-update against the GitHub releases API
   Native.cs              every P/Invoke, in one place
   InputSender.cs         SendInput scan codes and focus handling
+  AccountStore.cs        the DPAPI-encrypted account list
+  RobloxAuth.cs          cookie -> launch ticket -> roblox-player:// URL
+  AccountsDialog.cs      the account manager window
+  AccountLoginForm.cs    Roblox's login page in a per-account browser profile
+  WebView2Runtime.cs     unpacks the embedded browser DLLs on first use
+tests/
+  Harness.cs             the dependency-free test runner (test.bat)
+  *Tests.cs              one file per unit under test
   Controls.cs            Card, ScrollPanel, dark-theme widget builders
   ThemedControls.cs      owner-drawn checkbox, toggle, stepper and picker
   Theme.cs               colours
@@ -145,9 +174,10 @@ bar is bright chrome no dark theme can reach, so `BuildTitleBar` draws its own a
 the OS via `WM_NCLBUTTONDOWN`, which keeps snapping and multi-monitor behaviour intact.
 
 Cards use a 20px gutter, a heading at y=14 with any explanatory line stacked beneath it, and fixed-height
-rows so labels and inputs centre on the same line. Because the layout is hand-placed rather than driven by
-a layout engine, the geometry is covered by tests that measure the real strings in the real fonts -
-rewording a status line is a layout change here, and the tests treat it as one.
+rows so labels and inputs centre on the same line. The layout is hand-placed rather than driven by a
+layout engine, so adding a row to a card means growing that card, moving every card below it, and growing
+`FULL_HEIGHT` by the same amount - the 14px gutter between cards is the invariant to preserve. Geometry is
+checked by eye against a running build; the test suite covers logic, not pixels.
 
 ## RobloxKeeper's own footprint
 

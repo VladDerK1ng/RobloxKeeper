@@ -63,7 +63,9 @@ namespace RobloxKeeper
         [StructLayout(LayoutKind.Sequential)]
         public struct INPUT { public uint type; public InputUnion U; }
 
+        public const uint INPUT_MOUSE = 0;
         public const uint INPUT_KEYBOARD = 1;
+        public const uint MOUSEEVENTF_MOVE = 0x0001;   // relative, not absolute
         public const uint KEYEVENTF_EXTENDEDKEY = 0x0001;
         public const uint KEYEVENTF_KEYUP = 0x0002;
         public const uint KEYEVENTF_SCANCODE = 0x0008;
@@ -80,6 +82,24 @@ namespace RobloxKeeper
         public const uint WM_CLOSE = 0x0010;
 
         // ---------- Process resource control ----------
+
+        // How long since the user last touched keyboard or mouse, machine-wide.
+        // The only way to see input that went to somebody else's window.
+        [StructLayout(LayoutKind.Sequential)]
+        public struct LASTINPUTINFO
+        {
+            public uint cbSize;
+            public uint dwTime;
+        }
+
+        [DllImport("user32.dll")]
+        public static extern bool GetLastInputInfo(ref LASTINPUTINFO info);
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct RECT { public int Left, Top, Right, Bottom; }
+
+        [DllImport("user32.dll")]
+        public static extern bool GetWindowRect(IntPtr hwnd, out RECT rect);
 
         [DllImport("kernel32.dll", SetLastError = true)]
         public static extern IntPtr OpenProcess(uint access, bool inherit, int pid);

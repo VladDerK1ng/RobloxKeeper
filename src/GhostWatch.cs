@@ -32,8 +32,16 @@ namespace RobloxKeeper
         // Swapped out by the tests so grace periods don't take real minutes.
         public Func<DateTime> Clock = delegate { return DateTime.Now; };
 
+        // Tells Roblox's own tray process from a leaked one. Closing a client
+        // makes Roblox relaunch itself window-less with --launch-to-tray; that
+        // process is legitimate, so condemning it means killing something the
+        // user's Roblox deliberately started. Unset, everything behaves as it
+        // did before.
+        public Func<int, bool> IsTray;
+
         public IList<int> Stuck { get { return stuck; } }
         public int Starting { get; private set; }
+        public int Tray { get; private set; }
         public int Total { get { return stuck.Count + Starting; } }
 
         // Called once per tick with the process snapshot the rest of the loop
@@ -62,6 +70,7 @@ namespace RobloxKeeper
         {
             stuck.Clear();
             Starting = 0;
+            Tray = 0;
 
             // A window right now voids whatever we believed a moment ago.
             foreach (int pid in withWindow) windowless.Remove(pid);
@@ -76,6 +85,11 @@ namespace RobloxKeeper
                     windowless[pid] = s;
                 }
                 s.Ticks++;
+
+                // Resident by design, not launching and not leaked. Counted
+                // separately because it does hold the singleton mutex, which is
+                // why multi-instance looks stuck after closing every client.
+                if (IsTray != null && IsTray(pid)) { Tray++; continue; }
 
                 if (IsLeaked(s)) stuck.Add(pid);
                 else Starting++;

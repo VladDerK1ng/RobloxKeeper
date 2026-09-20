@@ -20,6 +20,18 @@ namespace RobloxKeeper
         public int PerfCores;            // 0 = all cores
         public bool PerfEco;
 
+        // Wait for a lull before nudging, so a nudge never lands mid-match.
+        public bool IdleOnly = true;
+
+        // The Custom nudge key: a name from the offered list, or a raw
+        // virtual-key captured straight from the keyboard.
+        public string CustomKeyName;
+        public byte CustomKeyVk;
+
+        public bool ThrottleBackground;
+        public bool MemoryCeiling;
+        public int MemoryCeilingMb = 2000;
+
         public bool AutoTrim;
         public int AutoTrimMinutes = 10;
 
@@ -70,6 +82,12 @@ namespace RobloxKeeper
                     else if (key == "perfpriority") { if (int.TryParse(val, out tmp)) s.PerfPriority = tmp; }
                     else if (key == "perfcores") { if (int.TryParse(val, out tmp)) s.PerfCores = tmp; }
                     else if (key == "perfeco") s.PerfEco = val == "1";
+                    else if (key == "idleonly") s.IdleOnly = val == "1";
+                    else if (key == "customkeyname") s.CustomKeyName = val;
+                    else if (key == "customkeyvk") { if (int.TryParse(val, out tmp)) s.CustomKeyVk = (byte)tmp; }
+                    else if (key == "throttlebg") s.ThrottleBackground = val == "1";
+                    else if (key == "memceiling") s.MemoryCeiling = val == "1";
+                    else if (key == "memceilingmb") { if (int.TryParse(val, out tmp)) s.MemoryCeilingMb = tmp; }
                     else if (key == "autotrim") s.AutoTrim = val == "1";
                     else if (key == "autotrimmin") { if (int.TryParse(val, out tmp)) s.AutoTrimMinutes = tmp; }
                 }
@@ -89,6 +107,12 @@ namespace RobloxKeeper
                 s.PerfPriority = PerformanceManager.PRIORITY_NORMAL;
             if (s.PerfCores < 0) s.PerfCores = 0;
             if (s.PerfCores >= Environment.ProcessorCount) s.PerfCores = 0;
+            // A hand-edited or stale settings file must never arm an unsafe
+            // key or a method index that no longer exists.
+            if (s.CustomKeyVk != 0 && !NudgeKeys.IsSafe(s.CustomKeyVk)) s.CustomKeyVk = 0;
+            if (s.KeysIndex < 0 || s.KeysIndex >= NudgeMethod.Count) s.KeysIndex = NudgeMethod.CAMERA;
+            if (s.MemoryCeilingMb < 256) s.MemoryCeilingMb = 256;
+            if (s.MemoryCeilingMb > 16384) s.MemoryCeilingMb = 16384;
             if (s.AutoTrimMinutes < 1) s.AutoTrimMinutes = 1;
             if (s.AutoTrimMinutes > 120) s.AutoTrimMinutes = 120;
         }
@@ -107,6 +131,12 @@ namespace RobloxKeeper
                 lines.Add("perfpriority=" + PerfPriority);
                 lines.Add("perfcores=" + PerfCores);
                 lines.Add("perfeco=" + (PerfEco ? "1" : "0"));
+                lines.Add("idleonly=" + (IdleOnly ? "1" : "0"));
+                lines.Add("customkeyname=" + (CustomKeyName ?? ""));
+                lines.Add("customkeyvk=" + CustomKeyVk);
+                lines.Add("throttlebg=" + (ThrottleBackground ? "1" : "0"));
+                lines.Add("memceiling=" + (MemoryCeiling ? "1" : "0"));
+                lines.Add("memceilingmb=" + MemoryCeilingMb);
                 lines.Add("autotrim=" + (AutoTrim ? "1" : "0"));
                 lines.Add("autotrimmin=" + AutoTrimMinutes);
                 File.WriteAllLines(Path, lines.ToArray());

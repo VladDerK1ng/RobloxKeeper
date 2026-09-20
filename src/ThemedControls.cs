@@ -347,8 +347,11 @@ namespace RobloxKeeper
                 Rectangle screen = Screen.FromControl(this).WorkingArea;
                 if (pop.Bottom > screen.Bottom)
                     pop.Location = PointToScreen(new Point(0, -pop.Height - 2));
-                if (pop.ShowDialog(FindForm()) == DialogResult.OK && pop.Chosen >= 0)
-                    SelectedIndex = pop.Chosen;
+                // Chosen is the authority, not DialogResult: a row was either
+                // clicked or it wasn't, and that fact cannot be undone by
+                // whatever the form's result ends up being as it closes.
+                pop.ShowDialog(FindForm());
+                if (pop.Chosen >= 0) SelectedIndex = pop.Chosen;
             }
             Invalidate();
         }
@@ -410,8 +413,24 @@ namespace RobloxKeeper
             ClientSize = new Size(width, items.Count * ROW + PAD * 2);
             SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint |
                      ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true);
-            Deactivate += delegate { DialogResult = DialogResult.Cancel; Close(); };
+            // Dismiss the list when the user clicks elsewhere - but NOT when the
+            // deactivation is simply this form closing because a row was picked.
+            // Setting DialogResult starts the close, closing deactivates, and
+            // this handler used to overwrite the OK with a Cancel, throwing the
+            // selection away. It depended on activation timing, so a dropdown
+            // accepted roughly half the clicks made in it.
+            Deactivate += delegate
+            {
+                if (!ShouldCancelOnDeactivate) return;
+                DialogResult = DialogResult.Cancel;
+                Close();
+            };
         }
+
+        // A choice has been recorded, so losing activation is the close we asked
+        // for rather than the user clicking away. Index 0 is a real choice,
+        // which is why this tests against -1 and not against zero.
+        internal bool ShouldCancelOnDeactivate { get { return Chosen < 0; } }
 
         protected override bool ShowWithoutActivation { get { return false; } }
 

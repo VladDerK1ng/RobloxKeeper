@@ -14,7 +14,7 @@ if "%OUT%"=="" set OUT=RobloxKeeper.exe
 
 if not exist app.ico powershell -NoProfile -ExecutionPolicy Bypass -File make-icon.ps1
 
-C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe /nologo /optimize+ /target:winexe /out:"%OUT%" /win32icon:app.ico /r:System.dll /r:System.Drawing.dll /r:System.Windows.Forms.dll /r:System.Management.dll src\*.cs
+C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe /nologo /optimize+ /target:winexe /out:"%OUT%" /win32icon:app.ico /r:System.dll /r:System.Drawing.dll /r:System.Windows.Forms.dll /r:System.Management.dll /r:System.Security.dll /r:lib\Microsoft.Web.WebView2.Core.dll /r:lib\Microsoft.Web.WebView2.WinForms.dll /resource:lib\Microsoft.Web.WebView2.Core.dll,Microsoft.Web.WebView2.Core.dll /resource:lib\Microsoft.Web.WebView2.WinForms.dll,Microsoft.Web.WebView2.WinForms.dll /resource:lib\WebView2Loader.dll,WebView2Loader.dll src\*.cs
 
 rem Propagate the compiler's exit code - without this the script always reports
 rem success and a broken build sails straight through CI.

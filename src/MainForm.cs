@@ -50,6 +50,9 @@ namespace RobloxKeeper
         readonly GhostCleaner ghostCleaner = new GhostCleaner();
         readonly GhostWatch ghostWatch = new GhostWatch();
         readonly PerformanceManager perf = new PerformanceManager();
+        readonly SessionLock sessionLock = new SessionLock(
+            SessionLock.DefaultJarPath(),
+            System.IO.Path.GetDirectoryName(AppSettings.Path));
         Updater updater;
         AppSettings settings = new AppSettings();
 
@@ -60,11 +63,12 @@ namespace RobloxKeeper
         DateTime lastRedirectAt = DateTime.MinValue;
 
         ThemedToggle chkAfk, chkMulti;
-        ThemedCheckBox chkAutostart, chkAutoGhost, chkAutoTrim, chkPerfEco;
-        ThemedNumeric numInterval, numTrimEvery;
-        ThemedPicker cmbKeys, cmbPerfPriority, cmbPerfCores;
-        Button btnNudge, btnZombie, btnCloseRbx, btnTrimAll;
-        Label lblCountdown, lblMultiStatus, lblClientsTitle, lblGhosts, lblUpdating;
+        ThemedCheckBox chkAutostart, chkAutoGhost, chkAutoTrim, chkPerfEco, chkIdleOnly,
+                       chkThrottleBg, chkCeiling;
+        ThemedNumeric numInterval, numTrimEvery, numCeiling;
+        ThemedPicker cmbKeys, cmbPerfPriority, cmbPerfCores, cmbCustomKey;
+        Button btnNudge, btnZombie, btnCloseRbx, btnTrimAll, btnApplyAll, btnPauseLock, btnCaptureKey, btnAfkMode, btnFixHandler, btnAccounts;
+        Label lblCountdown, lblMultiStatus, lblClientsTitle, lblGhosts, lblUpdating, lblSessionLock, lblCustomKey, lblHandler, lblAccounts;
         Dot statusDot;
         ScrollPanel clientsPanel;
         RichTextBox rtbLog;
@@ -72,6 +76,19 @@ namespace RobloxKeeper
         NotifyIcon tray;
 
         DateTime nextNudge;
+        DateTime lastNudgeAt = DateTime.Now;
+        bool deferLogged;
+        byte capturedVk;
+        bool afkModeOn;
+        bool handlerBrokenShown;
+        // Loaded on first use - decrypting the account store costs
+        // nothing for someone who never opens the manager.
+        AccountStore accounts;
+        // Command lines come from WMI, which is far too slow to ask per tick.
+        readonly Dictionary<int, bool> trayPids = new Dictionary<int, bool>();
+        // Set on the UI thread, cleared by the nudge worker. Volatile because
+        // two threads read it and neither takes a lock for a single bool.
+        volatile bool nudgeRunning;
         Font countdownClock, countdownWord;
         readonly Dictionary<int, bool> nudgePrefs = new Dictionary<int, bool>();
         readonly List<int> shownPids = new List<int>();
@@ -111,6 +128,8 @@ namespace RobloxKeeper
 
             ghostCleaner.Log = Log;
             perf.Log = Log;
+            sessionLock.Log = Log;
+            ghostWatch.IsTray = IsTrayProcess;
             updater = new Updater(this, Log);
 
             nudgeTimer = new System.Windows.Forms.Timer();
@@ -133,6 +152,17 @@ namespace RobloxKeeper
             Ui.SelectCoreCount(cmbPerfCores, settings.PerfCores);
             chkPerfEco.Checked = settings.PerfEco;
             chkAutoTrim.Checked = settings.AutoTrim;
+            chkThrottleBg.Checked = settings.ThrottleBackground;
+            chkCeiling.Checked = settings.MemoryCeiling;
+            numCeiling.Value = settings.MemoryCeilingMb;
+            chkIdleOnly.Checked = settings.IdleOnly;
+            capturedVk = settings.CustomKeyVk;
+            if (!string.IsNullOrEmpty(settings.CustomKeyName))
+            {
+                int ck = cmbCustomKey.Items.IndexOf(settings.CustomKeyName);
+                if (ck >= 0) cmbCustomKey.SelectedIndex = ck;
+            }
+            UpdateCustomKeyRow();
             numTrimEvery.Value = settings.AutoTrimMinutes;
             perf.Defaults = settings.ToProfile();
             chkAfk.Checked = settings.Afk;
@@ -145,6 +175,7 @@ namespace RobloxKeeper
             if (!perf.Defaults.SameAs(new ClientProfile()))
                 Log("New clients will run at " + perf.Defaults + ".");
 
+            UpdateAccountsLabel();
             CheckLaunchPath();
             FixStaleShortcuts();
             EnsureStartMenuShortcut();
@@ -157,8 +188,8 @@ namespace RobloxKeeper
         // would simply be off-screen and unreachable, so the window is capped to
         // the working area and scrolls instead. The extra width covers the
         // scrollbar so it never sits on top of a card.
-        internal const int FULL_HEIGHT = 924;
-        internal const int BASE_WIDTH = 460;
+        internal const int FULL_HEIGHT = COLUMN_BOTTOM + 16;
+        internal const int BASE_WIDTH = CARD_X2 + CARD_W + CARD_X;
 
         void SetHeightToFitScreen()
         {
@@ -273,10 +304,31 @@ namespace RobloxKeeper
             if (chkAutoGhost.Checked && ghostWatch.Stuck.Count > 0)
                 ghostCleaner.Clear(ghostWatch.Stuck, ghostWatch);
 
+            // Asked once and reused: ForegroundPid is a pair of Win32 calls,
+            // and three features below all want the same answer.
+            int foregroundPid = PerformanceManager.ForegroundPid();
+
             perf.Prune(clients);
-            perf.ApplyPending(clients);
+            perf.ApplyPending(clients, foregroundPid);
             if (chkAutoTrim.Checked)
-                perf.AutoTrimTick(clients, numTrimEvery.Value, PerformanceManager.ForegroundPid());
+                perf.AutoTrimTick(clients, numTrimEvery.Value, foregroundPid);
+            if (chkCeiling.Checked)
+            {
+                long over = perf.CeilingTick(clients, numCeiling.Value, foregroundPid);
+                if (over > 1048576)
+                    Log("Memory ceiling released " + ClientTracker.FormatBytes(over) + ".");
+            }
+
+            // Two or more clients share one cookie jar and start overwriting
+            // each other's session, which is what Roblox eventually evicts as a
+            // duplicate device login. Holding the jar read-only stops that.
+            sessionLock.Update(clients.Count);
+            UpdateSessionLockStatus();
+
+            // Roblox rewrites this registration itself when it switches
+            // versions, so a handler that was fine a minute ago can be dangling
+            // now. Checked every tick rather than only at startup.
+            UpdateLaunchHandlerRow();
 
             // When Roblox installs an update, ITS OWN installer terminates every
             // running client (old version) - no tool can prevent that. Surface it
@@ -368,9 +420,26 @@ namespace RobloxKeeper
             else UpdateRamLabels(clients);
         }
 
+        // Was this process started by Roblox as its tray helper? Closing a
+        // client makes Roblox relaunch itself window-less with --launch-to-tray,
+        // and that is not a leak. The answer never changes for a given process,
+        // so it is asked once - CommandLineOf is a WMI query.
+        bool IsTrayProcess(int pid)
+        {
+            bool tray;
+            if (trayPids.TryGetValue(pid, out tray)) return tray;
+
+            string cmd = RobloxInstall.CommandLineOf(pid);
+            tray = cmd != null &&
+                   cmd.IndexOf("--launch-to-tray", StringComparison.OrdinalIgnoreCase) >= 0;
+            trayPids[pid] = tray;
+            return tray;
+        }
+
         static string GhostLabel(GhostWatch g)
         {
             if (g.Stuck.Count > 0) return "+" + g.Stuck.Count + " stuck";
+            if (g.Tray > 0) return "+" + g.Tray + " in tray";
             if (g.Starting > 0) return "+" + g.Starting + " starting";
             return "";
         }
@@ -637,6 +706,12 @@ namespace RobloxKeeper
             if (initializing) return;
             settings.Afk = chkAfk.Checked;
             settings.KeysIndex = cmbKeys.SelectedIndex;
+            settings.IdleOnly = chkIdleOnly.Checked;
+            settings.CustomKeyVk = capturedVk;
+            settings.CustomKeyName = cmbCustomKey.Text;
+            settings.ThrottleBackground = chkThrottleBg.Checked;
+            settings.MemoryCeiling = chkCeiling.Checked;
+            settings.MemoryCeilingMb = numCeiling.Value;
             settings.IntervalMinutes = numInterval.Value;
             settings.Multi = chkMulti.Checked;
             settings.AutoGhost = chkAutoGhost.Checked;
@@ -740,6 +815,7 @@ namespace RobloxKeeper
             SaveSettings();
             uiTimer.Stop();
             nudgeTimer.Stop();
+            sessionLock.Release();
             tray.Visible = false;
             tray.Dispose();
             StopMulti();

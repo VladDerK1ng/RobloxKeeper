@@ -35,6 +35,32 @@ namespace RobloxKeeper
         }
     }
 
+    // Hands each client a block of cores and lets it keep that block.
+    //
+    // The obvious version - number the clients and give client N the Nth block -
+    // is wrong, because the numbering comes from a list sorted by start time.
+    // Close the oldest client and every later client's number shifts by one,
+    // while the masks already applied to them do not. Two clients then believe
+    // they own blocks that overlap, which is precisely what pinning was meant to
+    // prevent. A block belongs to a PID until that PID goes away.
+    class CoreBlocks
+    {
+        readonly Dictionary<int, int> blocks = new Dictionary<int, int>();
+
+        public int BlockFor(int pid)
+        {
+            int block;
+            if (blocks.TryGetValue(pid, out block)) return block;
+
+            block = 0;
+            while (blocks.ContainsValue(block)) block++;
+            blocks[pid] = block;
+            return block;
+        }
+
+        public void Release(int pid) { blocks.Remove(pid); }
+    }
+
     // Per-client CPU and memory allocation.
     //
     // Roblox gives every instance the same slice of the machine, which is wrong
@@ -54,18 +80,66 @@ namespace RobloxKeeper
         static readonly string[] PriorityNames =
             { "Low", "Below normal", "Normal", "Above normal", "High" };
 
-        public Action<string> Log;
+        // Applying a profile to a process. Swapped out by the tests so the retry
+        // ladder and the "new clients only" rule can be driven without a real
+        // Roblox client to tune.
+        public delegate bool ApplyFunc(int pid, ClientProfile profile, int coreBlock, out string error);
 
-        // The profile handed to every client that appears from now on.
+        public Action<string> Log;
+        public ApplyFunc Applier;
+
+        // Swapped out by the tests so backoffs don't take real seconds.
+        public Func<DateTime> Clock = delegate { return DateTime.Now; };
+
+        // The profile handed to every client that appears from now on. Changing
+        // this does NOT reach clients that are already running - the card says
+        // "New clients:" and must mean it. ApplyToAllRunning is the opt-in.
         public ClientProfile Defaults = new ClientProfile();
+
+        // Throttle every client except the one being looked at. This is what
+        // replaced a per-client FPS cap: capping FPS is only reachable through a
+        // Roblox config file, which is global to all clients and would mean
+        // modifying Roblox's own files. Priority and EcoQoS are outside the
+        // process entirely and cost nothing in compatibility.
+        public bool ThrottleBackground;
 
         // Per-client overrides. Keyed by PID, which Windows recycles across
         // launches, so these are deliberately session-only - a saved override
         // would eventually land on an unrelated process.
         readonly Dictionary<int, ClientProfile> overrides = new Dictionary<int, ClientProfile>();
+
+        // The default as it stood when each client was first seen. Snapshotting
+        // it here is what stops a later change to Defaults from retuning a
+        // client that is already playing.
+        readonly Dictionary<int, ClientProfile> assigned = new Dictionary<int, ClientProfile>();
+
+        // What Windows has confirmed, not what we asked for.
         readonly Dictionary<int, ClientProfile> applied = new Dictionary<int, ClientProfile>();
 
+        readonly Dictionary<int, Retry> retries = new Dictionary<int, Retry>();
+        readonly CoreBlocks blocks = new CoreBlocks();
+
         DateTime lastAutoTrim = DateTime.Now;
+
+        public PerformanceManager() { Applier = Apply; }
+
+        // A tune Windows refused, and when to try it again. Recording a refusal
+        // as though it had worked - which is what the old code did - left
+        // clients that were merely still starting up untuned forever.
+        class Retry
+        {
+            public int Attempts;
+            public DateTime NextAt;
+        }
+
+        // 1s, 2s, 4s ... capped, so a process that will never accept the call
+        // costs one attempt a minute rather than one a second.
+        internal static int BackoffSeconds(int attempts)
+        {
+            int seconds = 1;
+            for (int i = 1; i < attempts && seconds < 60; i++) seconds *= 2;
+            return seconds > 60 ? 60 : seconds;
+        }
 
         public static string PriorityName(int index)
         {
@@ -74,87 +148,223 @@ namespace RobloxKeeper
 
         public static string[] AllPriorityNames() { return (string[])PriorityNames.Clone(); }
 
+        // The profile this client runs under: its own override if it has one,
+        // otherwise the default as it stood when the client first appeared.
+        // Taking that snapshot here is deliberate - it is the whole mechanism
+        // behind "new clients only".
         public ClientProfile ProfileFor(int pid)
         {
             ClientProfile p;
             if (overrides.TryGetValue(pid, out p)) return p;
-            return Defaults;
+            if (assigned.TryGetValue(pid, out p)) return p;
+
+            p = Defaults.Clone();
+            assigned[pid] = p;
+            return p;
         }
 
         public bool HasOverride(int pid) { return overrides.ContainsKey(pid); }
 
+        // What a client should actually be running at right now: its profile,
+        // throttled if it is in the background and throttling is on.
+        public ClientProfile EffectiveFor(int pid, int foregroundPid)
+        {
+            ClientProfile want = ProfileFor(pid);
+            if (!ThrottleBackground || pid == foregroundPid) return want;
+            return Throttled(want);
+        }
+
+        // One step down and efficiency mode on. Returns a new profile - the
+        // stored one has to survive untouched or the client could never be
+        // restored when it comes back to the foreground.
+        public static ClientProfile Throttled(ClientProfile p)
+        {
+            ClientProfile t = p.Clone();
+            if (t.Priority > PRIORITY_LOW) t.Priority--;
+            t.Eco = true;
+            return t;                 // core pinning is the user's choice, left alone
+        }
+
+        // A client sitting on more memory than the user is willing to give it.
+        // Zero means no ceiling at all.
+        public static bool OverCeiling(long workingSet, int ceilingMb)
+        {
+            if (ceilingMb <= 0) return false;
+            return workingSet > (long)ceilingMb * 1024 * 1024;
+        }
+
+        // Park every client except the one being played. Written as per-client
+        // overrides so it survives a default change and can be undone exactly.
+        public void EnterAfkMode(List<ClientInfo> clients, int foregroundPid)
+        {
+            foreach (ClientInfo ci in clients)
+            {
+                ClientProfile p;
+                if (ci.Pid == foregroundPid)
+                {
+                    p = new ClientProfile();
+                    p.Priority = PRIORITY_NORMAL;
+                    p.Cores = 0;
+                    p.Eco = false;
+                }
+                else
+                {
+                    p = new ClientProfile();
+                    p.Priority = PRIORITY_BELOW;
+                    p.Cores = 0;
+                    p.Eco = true;
+                }
+                SetOverride(ci.Pid, p);
+            }
+        }
+
+        public void LeaveAfkMode(List<ClientInfo> clients)
+        {
+            foreach (ClientInfo ci in clients) Forget(ci.Pid);
+        }
+
+        // Trims any client over the ceiling, skipping the one in the foreground
+        // so the game being played never takes the paging hitch.
+        public long CeilingTick(List<ClientInfo> clients, int ceilingMb, int foregroundPid)
+        {
+            if (ceilingMb <= 0) return 0;
+            long freed = 0;
+            foreach (ClientInfo ci in clients)
+            {
+                if (ci.Pid == foregroundPid) continue;
+                if (!OverCeiling(ci.WorkingSet, ceilingMb)) continue;
+                if (!Trim(ci.Pid)) continue;
+                try
+                {
+                    using (Process p = Process.GetProcessById(ci.Pid))
+                    {
+                        long after = p.WorkingSet64;
+                        if (ci.WorkingSet > after) freed += ci.WorkingSet - after;
+                    }
+                }
+                catch { }
+            }
+            return freed;
+        }
+
         public void SetOverride(int pid, ClientProfile profile)
         {
             overrides[pid] = profile;
+            retries.Remove(pid);        // a fresh request deserves a fresh attempt
         }
 
         public void Forget(int pid)
         {
             overrides.Remove(pid);
-            applied.Remove(pid);
+            assigned.Remove(pid);       // re-snapshots from the current default
+            retries.Remove(pid);
         }
 
         // Drops state for clients that have closed, so a recycled PID never
         // inherits the previous owner's settings.
         public void Prune(List<ClientInfo> alive)
         {
+            // Every pid we track, not just the ones that applied cleanly. A
+            // client that kept failing lives only in assigned/retries, and
+            // walking applied alone would leak its backoff onto the next
+            // process to reuse that PID.
+            List<int> tracked = new List<int>();
+            foreach (int pid in applied.Keys) tracked.Add(pid);
+            foreach (int pid in assigned.Keys) if (!tracked.Contains(pid)) tracked.Add(pid);
+            foreach (int pid in overrides.Keys) if (!tracked.Contains(pid)) tracked.Add(pid);
+
             List<int> gone = new List<int>();
-            foreach (int pid in applied.Keys)
+            foreach (int pid in tracked)
             {
                 bool found = false;
                 foreach (ClientInfo ci in alive) if (ci.Pid == pid) { found = true; break; }
                 if (!found) gone.Add(pid);
             }
-            foreach (int pid in gone) { applied.Remove(pid); overrides.Remove(pid); }
+            foreach (int pid in gone)
+            {
+                applied.Remove(pid);
+                overrides.Remove(pid);
+                assigned.Remove(pid);
+                retries.Remove(pid);
+                blocks.Release(pid);
+            }
         }
 
         // Called once per tick. Anything whose live settings don't match its
         // profile gets them (re)applied - which covers newly launched clients
         // without needing to watch for launches separately.
-        public void ApplyPending(List<ClientInfo> clients)
+        public void ApplyPending(List<ClientInfo> clients) { ApplyPending(clients, 0); }
+
+        public void ApplyPending(List<ClientInfo> clients, int foregroundPid)
         {
             for (int i = 0; i < clients.Count; i++)
             {
                 int pid = clients[i].Pid;
-                ClientProfile want = ProfileFor(pid);
+                ClientProfile want = EffectiveFor(pid, foregroundPid);
                 ClientProfile have;
                 if (applied.TryGetValue(pid, out have) && want.SameAs(have)) continue;
 
+                // A refused tune waits out its backoff rather than being retried
+                // every tick - or, as before, never retried at all.
+                Retry retry;
+                if (retries.TryGetValue(pid, out retry) && Clock() < retry.NextAt) continue;
+
                 string error;
-                if (Apply(pid, want, i, out error))
+                if (Applier(pid, want, blocks.BlockFor(pid), out error))
                 {
                     bool first = !applied.ContainsKey(pid);
                     applied[pid] = want.Clone();
-                    if (!first || !want.SameAs(new ClientProfile()))
+                    bool recovered = retries.Remove(pid);
+                    if (recovered || !first || !want.SameAs(new ClientProfile()))
                         Log("Client PID " + pid + " set to " + want + ".");
                 }
                 else
                 {
-                    // Record the attempt anyway; retrying every second against a
-                    // process that refuses would flood the log.
-                    applied[pid] = want.Clone();
-                    Log("Could not tune PID " + pid + ": " + error);
+                    int attempts = retry == null ? 1 : retry.Attempts + 1;
+                    int wait = BackoffSeconds(attempts);
+                    Retry next = new Retry();
+                    next.Attempts = attempts;
+                    next.NextAt = Clock().AddSeconds(wait);
+                    retries[pid] = next;
+
+                    // Only the first refusal and every fourth after it, so a
+                    // process that will never accept the call cannot fill the log.
+                    if (attempts == 1 || attempts % 4 == 0)
+                        Log("Could not tune PID " + pid + ": " + error +
+                            " (attempt " + attempts + ", trying again in " + wait + "s).");
                 }
             }
         }
 
-        public bool Apply(int pid, ClientProfile profile, int clientIndex, out string error)
+        // The explicit "I mean all of them" action. Changing the default is
+        // deliberately not this, because the common case is setting what the
+        // next AFK client should get while the one being played stays put.
+        public void ApplyToAllRunning(List<ClientInfo> clients)
+        {
+            foreach (ClientInfo ci in clients)
+            {
+                if (overrides.ContainsKey(ci.Pid)) continue;   // Tune outranks the default
+                assigned[ci.Pid] = Defaults.Clone();
+                retries.Remove(ci.Pid);
+            }
+            ApplyPending(clients);
+        }
+
+        public bool Apply(int pid, ClientProfile profile, int coreBlock, out string error)
         {
             error = null;
             List<string> problems = new List<string>();
+            ProcessPriorityClass wantPriority = ToPriorityClass(profile.Priority);
+            long wantMask = (long)AffinityMask(profile.Cores, coreBlock);
 
             try
             {
                 using (Process p = Process.GetProcessById(pid))
                 {
-                    try { p.PriorityClass = ToPriorityClass(profile.Priority); }
+                    try { p.PriorityClass = wantPriority; }
                     catch (Exception ex) { problems.Add("priority (" + ex.Message + ")"); }
 
-                    try
-                    {
-                        IntPtr mask = AffinityMask(profile.Cores, clientIndex);
-                        p.ProcessorAffinity = mask;
-                    }
+                    try { p.ProcessorAffinity = (IntPtr)wantMask; }
                     catch (Exception ex) { problems.Add("core affinity (" + ex.Message + ")"); }
                 }
             }
@@ -164,12 +374,54 @@ namespace RobloxKeeper
                 return false;
             }
 
-            if (!SetEfficiencyMode(pid, profile.Eco))
-                problems.Add("efficiency mode (needs Windows 10 2004 or newer)");
+            int ecoError;
+            if (!SetEfficiencyMode(pid, profile.Eco, out ecoError))
+                problems.Add("efficiency mode - " + EcoFailureReason(ecoError));
+
+            // Windows can accept a call and leave the process exactly as it was,
+            // so ask it afterwards instead of treating "threw nothing" as proof.
+            // A drift reported here feeds the retry ladder like any other failure.
+            try
+            {
+                using (Process check = Process.GetProcessById(pid))
+                {
+                    string drift = ReadBackProblem(wantPriority, wantMask,
+                        check.PriorityClass, (long)check.ProcessorAffinity);
+                    if (drift != null) problems.Add(drift);
+                }
+            }
+            catch { }   // the client closed mid-tune; the next tick sorts it out
 
             if (problems.Count == 0) return true;
             error = string.Join(", ", problems.ToArray());
             return false;
+        }
+
+        // What the process looks like now versus what was asked for.
+        internal static string ReadBackProblem(ProcessPriorityClass wantPriority, long wantMask,
+                                               ProcessPriorityClass actualPriority, long actualMask)
+        {
+            List<string> drift = new List<string>();
+            if (actualPriority != wantPriority)
+                drift.Add("priority did not stick (Windows left it at " + actualPriority + ")");
+            if (actualMask != wantMask)
+                drift.Add("core affinity did not stick (Windows left it at 0x" +
+                          actualMask.ToString("X") + ")");
+            return drift.Count == 0 ? null : string.Join(", ", drift.ToArray());
+        }
+
+        // Every efficiency-mode failure used to be reported as an old version of
+        // Windows, which sent anyone hitting a permissions problem off to check
+        // their build number.
+        internal static string EcoFailureReason(int win32Error)
+        {
+            switch (win32Error)
+            {
+                case 5:   return "access to the process was denied";
+                case 6:   return "the process handle was rejected";
+                case 87:  return "this build of Windows has no EcoQoS (needs Windows 10 2004 or newer)";
+                default:  return "Windows refused the call (error " + win32Error + ")";
+            }
         }
 
         static ProcessPriorityClass ToPriorityClass(int index)
@@ -203,8 +455,15 @@ namespace RobloxKeeper
 
         public static bool SetEfficiencyMode(int pid, bool on)
         {
+            int ignored;
+            return SetEfficiencyMode(pid, on, out ignored);
+        }
+
+        public static bool SetEfficiencyMode(int pid, bool on, out int win32Error)
+        {
+            win32Error = 0;
             IntPtr h = Native.OpenProcess(Native.PROCESS_SET_INFORMATION, false, pid);
-            if (h == IntPtr.Zero) return false;
+            if (h == IntPtr.Zero) { win32Error = Marshal.GetLastWin32Error(); return false; }
             try
             {
                 Native.PROCESS_POWER_THROTTLING_STATE s = new Native.PROCESS_POWER_THROTTLING_STATE();
@@ -214,10 +473,12 @@ namespace RobloxKeeper
                 // full speed forever".
                 s.ControlMask = on ? Native.PROCESS_POWER_THROTTLING_EXECUTION_SPEED : 0;
                 s.StateMask = on ? Native.PROCESS_POWER_THROTTLING_EXECUTION_SPEED : 0;
-                return Native.SetProcessInformation(h, Native.ProcessPowerThrottling, ref s,
+                bool ok = Native.SetProcessInformation(h, Native.ProcessPowerThrottling, ref s,
                     Marshal.SizeOf(typeof(Native.PROCESS_POWER_THROTTLING_STATE)));
+                if (!ok) win32Error = Marshal.GetLastWin32Error();
+                return ok;
             }
-            catch { return false; }
+            catch { win32Error = Marshal.GetLastWin32Error(); return false; }
             finally { Native.CloseHandle(h); }
         }
 

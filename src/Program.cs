@@ -18,6 +18,11 @@ namespace RobloxKeeper
         [STAThread]
         static void Main()
         {
+            // First, before anything else runs. WebView2's assemblies live
+            // inside this exe, and the resolver that finds them has to be in
+            // place before any method mentioning a WebView2 type is JITted.
+            WebView2Runtime.Install();
+
             string[] args = Environment.GetCommandLineArgs();
             for (int i = 1; i < args.Length; i++)
                 if (args[i] == "--minimized") StartMinimized = true;

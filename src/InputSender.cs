@@ -40,6 +40,28 @@ namespace RobloxKeeper
             SendScan(vk, false);
         }
 
+        // Relative mouse movement, the same way a real mouse reports it.
+        public static void MoveMouse(int dx, int dy)
+        {
+            Native.INPUT[] inp = new Native.INPUT[1];
+            inp[0].type = Native.INPUT_MOUSE;
+            inp[0].U.mi.dx = dx;
+            inp[0].U.mi.dy = dy;
+            inp[0].U.mi.dwFlags = Native.MOUSEEVENTF_MOVE;
+            Native.SendInput(1, inp, Marshal.SizeOf(typeof(Native.INPUT)));
+        }
+
+        // Plays one nudge method against whatever window currently has focus.
+        public static void Perform(NudgeStep[] steps)
+        {
+            foreach (NudgeStep step in steps)
+            {
+                if (step.IsMouse) MoveMouse(step.Dx, step.Dy);
+                else TapKey(step.Vk, step.HoldMs);
+                if (step.AfterMs > 0) Thread.Sleep(step.AfterMs);
+            }
+        }
+
         // Scan-code input: what games reading raw/hardware input actually listen for.
         // Arrow keys are extended keys and need the E0 flag, or they read as numpad.
         public static void SendScan(byte vk, bool down)
