@@ -31,6 +31,7 @@ namespace RobloxKeeper
         readonly string profileDir;
         readonly bool loginMode;
         readonly string accountName;
+        readonly string seedCookie;
 
         WebView2 web;
         Label status;
@@ -45,10 +46,14 @@ namespace RobloxKeeper
         public event Action<string> LaunchRequested;
 
         public AccountBrowserForm(string profileDir, string accountName, bool loginMode)
+            : this(profileDir, accountName, loginMode, null) { }
+
+        public AccountBrowserForm(string profileDir, string accountName, bool loginMode, string seedCookie)
         {
             this.profileDir = profileDir;
             this.accountName = accountName;
             this.loginMode = loginMode;
+            this.seedCookie = seedCookie;
 
             Text = loginMode ? "Sign in to Roblox" : "Roblox - " + accountName;
             StartPosition = FormStartPosition.CenterParent;
@@ -170,6 +175,17 @@ namespace RobloxKeeper
                     Go(e.Uri);
                 };
 
+                // Put the account's saved session into this profile before
+                // loading anything.
+                //
+                // Without this, browsing depends on the profile folder still
+                // holding the sign-in - and that folder gets renamed when an
+                // account is added, a rename that can fail while WebView2's
+                // processes still hold it open. Seeding makes the stored cookie
+                // the source of truth, so Browse works even against a brand new
+                // empty profile, and a rotated session heals itself.
+                SeedSession();
+
                 web.CoreWebView2.Navigate(loginMode ? LOGIN_URL : HOME_URL);
                 status.Text = loginMode
                     ? "Sign in on Roblox's page. This window only goes to roblox.com."
@@ -179,6 +195,25 @@ namespace RobloxKeeper
             {
                 status.ForeColor = Theme.Amber;
                 status.Text = "Could not start the browser: " + ex.Message;
+            }
+        }
+
+        void SeedSession()
+        {
+            if (string.IsNullOrEmpty(seedCookie)) return;
+            try
+            {
+                CoreWebView2Cookie c = web.CoreWebView2.CookieManager.CreateCookie(
+                    ".ROBLOSECURITY", seedCookie, ".roblox.com", "/");
+                c.IsSecure = true;
+                c.IsHttpOnly = true;
+                c.Expires = DateTime.UtcNow.AddYears(1);
+                web.CoreWebView2.CookieManager.AddOrUpdateCookie(c);
+            }
+            catch
+            {
+                // Seeding is a convenience; the profile may already be signed
+                // in, and if it is not the login page is a correct outcome.
             }
         }
 

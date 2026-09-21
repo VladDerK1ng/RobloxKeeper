@@ -110,6 +110,7 @@ namespace RobloxKeeper
             close.Click += delegate { Close(); };
             card.Controls.Add(close);
 
+            TidyOrphanProfiles();
             Rebuild();
         }
 
@@ -122,11 +123,19 @@ namespace RobloxKeeper
                 e.Graphics.DrawRectangle(p, 0, 0, ClientSize.Width - 1, ClientSize.Height - 1);
         }
 
+        static string ProfilesRoot
+        {
+            get
+            {
+                return Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "RobloxKeeper", "profiles");
+            }
+        }
+
         static string ProfileDir(string accountName)
         {
-            return Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "RobloxKeeper", "profiles", AccountStore.SafeFolderName(accountName));
+            return Path.Combine(ProfilesRoot, AccountStore.SafeFolderName(accountName));
         }
 
         // ---------- the list ----------
@@ -234,14 +243,16 @@ namespace RobloxKeeper
                 if (string.IsNullOrEmpty(name)) { TryDelete(tempDir); return; }
             }
 
-            // The profile moves to its permanent home so the sign-in persists.
+            // Move the profile to its permanent home, and record where it
+            // actually ended up.
+            //
+            // WebView2's browser processes outlive the window that started
+            // them and hold the folder open for a moment, so the first attempt
+            // often fails. Retrying handles that; if it still fails the account
+            // remembers the temporary folder rather than pointing at an empty
+            // one, which is what previously produced a login page on Browse.
             string finalDir = ProfileDir(name);
-            try
-            {
-                if (Directory.Exists(finalDir)) Directory.Delete(finalDir, true);
-                Directory.Move(tempDir, finalDir);
-            }
-            catch { /* keep the temp profile rather than lose the sign-in */ }
+            string actualDir = MoveProfile(tempDir, finalDir);
 
             RobloxAccount a = store.Find(name);
             bool isNew = a == null;
@@ -252,6 +263,7 @@ namespace RobloxKeeper
                 a.BrowserTrackerId = AccountStore.NewBrowserTrackerId();
             }
             a.Cookie = cookie;
+            a.ProfilePath = actualDir;
             store.Add(a);
             store.Save();
 
@@ -290,7 +302,7 @@ namespace RobloxKeeper
 
             store.Remove(a.Name);
             store.Save();
-            TryDelete(ProfileDir(a.Name));
+            TryDelete(AccountStore.ProfilePathFor(a, ProfilesRoot));
             log("Account removed: " + a.Name + ".");
             Rebuild();
         }
@@ -299,7 +311,10 @@ namespace RobloxKeeper
 
         void BrowseAs(RobloxAccount a)
         {
-            using (AccountBrowserForm b = new AccountBrowserForm(ProfileDir(a.Name), a.Name, false))
+            // The account's own saved session is handed to the browser, so this
+            // works whether or not the profile folder still holds a sign-in.
+            using (AccountBrowserForm b = new AccountBrowserForm(
+                       AccountStore.ProfilePathFor(a, ProfilesRoot), a.Name, false, a.Cookie))
             {
                 // Play inside that browser already carries a ticket for this
                 // account, so it only needs starting - no second ticket request.
@@ -392,6 +407,49 @@ namespace RobloxKeeper
                 log("Could not launch " + accountName + ": " + ex.Message);
                 return false;
             }
+        }
+
+        // Retries the rename while WebView2 lets go of the folder. Returns
+        // where the profile actually is afterwards.
+        static string MoveProfile(string tempDir, string finalDir)
+        {
+            for (int attempt = 0; attempt < 6; attempt++)
+            {
+                try
+                {
+                    if (string.Equals(tempDir, finalDir, StringComparison.OrdinalIgnoreCase)) return finalDir;
+                    if (Directory.Exists(finalDir)) Directory.Delete(finalDir, true);
+                    Directory.Move(tempDir, finalDir);
+                    return finalDir;
+                }
+                catch
+                {
+                    Thread.Sleep(500);
+                }
+            }
+            return tempDir;   // still in use - remember where the session really is
+        }
+
+        // Profile folders left by a rename that failed for an account that was
+        // then abandoned. Anything an account is using is never touched.
+        void TidyOrphanProfiles()
+        {
+            try
+            {
+                if (!Directory.Exists(ProfilesRoot)) return;
+
+                List<string> folders = new List<string>();
+                foreach (string d in Directory.GetDirectories(ProfilesRoot))
+                    folders.Add(Path.GetFileName(d));
+
+                List<string> inUse = new List<string>();
+                foreach (RobloxAccount a in store.Accounts)
+                    inUse.Add(Path.GetFileName(AccountStore.ProfilePathFor(a, ProfilesRoot)));
+
+                foreach (string orphan in AccountStore.OrphanProfiles(folders, inUse))
+                    TryDelete(Path.Combine(ProfilesRoot, orphan));
+            }
+            catch { }
         }
 
         static void TryDelete(string dir)

@@ -18,6 +18,16 @@ namespace RobloxKeeper
         public string BrowserTrackerId;  // this account's own device identity
         public string GameUrl;           // the place it normally AFKs in
         public string Note;              // whatever the user wants to remember about it
+
+        // Where this account's browser profile actually lives.
+        //
+        // Normally derivable from the name, but the folder is created under a
+        // temporary name (Roblox only says who signed in after the sign-in) and
+        // renamed afterwards. That rename can fail, because WebView2's browser
+        // processes outlive the window and keep the folder open. When it does,
+        // this records where the session really is instead of pointing at an
+        // empty folder and showing a login page.
+        public string ProfilePath;
         public int NudgeMethod = -1;     // -1 = follow the global setting
         public int Priority = -1;        // -1 = follow the Performance defaults
         public int Cores;
@@ -121,6 +131,37 @@ namespace RobloxKeeper
             return cleaned + "_" + hash.ToString("x8");
         }
 
+        // Where to find this account's browser profile: where it actually is
+        // if that is known, otherwise where it ought to be.
+        public static string ProfilePathFor(RobloxAccount a, string profilesRoot)
+        {
+            if (a != null && !string.IsNullOrEmpty(a.ProfilePath)) return a.ProfilePath;
+            return Path.Combine(profilesRoot, SafeFolderName(a == null ? "" : a.Name));
+        }
+
+        // Profile folders left behind by a rename that failed and an account
+        // that was then abandoned.
+        //
+        // Only folders this app named temporarily are candidates, and only
+        // those no account is using - a failed rename can leave an account
+        // pointing AT a temporary folder, and deleting that would throw away
+        // its session.
+        public static IList<string> OrphanProfiles(IList<string> folderNames, IList<string> inUse)
+        {
+            List<string> orphans = new List<string>();
+            foreach (string folder in folderNames)
+            {
+                if (folder == null || !folder.StartsWith("new_", StringComparison.OrdinalIgnoreCase)) continue;
+
+                bool used = false;
+                foreach (string keep in inUse)
+                    if (string.Equals(keep, folder, StringComparison.OrdinalIgnoreCase)) { used = true; break; }
+
+                if (!used) orphans.Add(folder);
+            }
+            return orphans;
+        }
+
         // ---------- serialisation ----------
 
         public static string Serialize(RobloxAccount a)
@@ -134,7 +175,8 @@ namespace RobloxKeeper
             sb.Append(a.Priority).Append(FIELD);
             sb.Append(a.Cores).Append(FIELD);
             sb.Append(a.Eco ? "1" : "0").Append(FIELD);
-            sb.Append(Escape(a.Note));
+            sb.Append(Escape(a.Note)).Append(FIELD);
+            sb.Append(Escape(a.ProfilePath));
             return sb.ToString();
         }
 
@@ -156,6 +198,7 @@ namespace RobloxKeeper
             // Added after the first release; records written before it are
             // shorter and simply have no note.
             if (f.Length > 8) a.Note = Unescape(f[8]);
+            if (f.Length > 9) a.ProfilePath = Unescape(f[9]);
             return a;
         }
 
