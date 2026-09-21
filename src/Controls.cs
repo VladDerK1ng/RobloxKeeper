@@ -106,11 +106,48 @@ namespace RobloxKeeper
             return l;
         }
 
-        // Vertically centres an auto-sized control inside a row.
+        // Vertically centres a control inside a row.
+        //
+        // Two things here were quietly wrong and put most of the window a
+        // couple of pixels out of true.
+        //
+        // Height is not final on an auto-sized control at the moment this is
+        // called - it settles when the control is laid out - so the offset was
+        // computed from whatever Height happened to be at construction.
+        //
+        // And the division truncated toward zero. A fixed-height RowLabel sits
+        // at rowTop with the full row height, so its centre is rowTop +
+        // rowHeight/2; a control whose height differs from the row by an odd
+        // number landed a pixel off that every time, and one TALLER than its
+        // row was pushed the wrong way entirely.
+        //
+        // Prefer a row participant that needs no measuring at all - RowLabel
+        // and the four-argument RowLink both fill the row and centre their own
+        // text. This is for the ones that size themselves, like a TextBox.
         public static void CenterIn(Control c, int rowTop, int rowHeight)
         {
-            c.Location = new Point(c.Location.X, rowTop + (rowHeight - c.Height) / 2);
+            // An auto-sized control still reports its pre-layout Height here,
+            // so ask it what size it wants instead. GetPreferredSize is a
+            // measurement; PerformLayout is not - calling that from here
+            // recurses during construction and the window never appears at all.
+            int h = c.Height;
+            if (c.AutoSize)
+            {
+                Size want = c.GetPreferredSize(Size.Empty);
+                if (want.Height > 0) h = want.Height;
+            }
+
+            // Floor(diff/2 + 0.5) rather than integer division: C# truncates
+            // toward zero, which rounds the wrong way for the rows where the
+            // control is TALLER than the row it sits in - the status dot is
+            // 19px in a 17px line of text.
+            int offset = (int)Math.Floor((rowHeight - h) / 2.0 + 0.5);
+            c.Location = new Point(c.Location.X, rowTop + offset);
         }
+
+        // The height a SectionTitle actually renders at, which the control
+        // beside it has to centre against.
+        public const int TITLE_H = 15;
 
         public static Label CaptionLabel(string text, int x, int y)
         {
@@ -229,6 +266,24 @@ namespace RobloxKeeper
             c.Items.Clear();
             foreach (string n in PerformanceManager.AllPriorityNames()) c.Items.Add(n);
             c.SelectedIndex = PerformanceManager.PRIORITY_NORMAL;
+        }
+
+        // A link centred in a row, instead of at a guessed offset. Every call
+        // site used to add its own "+8" or "+9", which is where the one-pixel
+        // drift between links and the labels beside them came from.
+        public static LinkLabel RowLink(string text, int x, int rowTop, int rowHeight)
+        {
+            LinkLabel l = RowLink(text, x, rowTop);
+
+            // Given the row's full height with its text centred inside, rather
+            // than auto-sized and then nudged. Deterministic: there is nothing
+            // to measure and nothing to get wrong, which is how ColumnLink has
+            // always done it.
+            Size t = TextRenderer.MeasureText(text, l.Font);
+            l.AutoSize = false;
+            l.Size = new Size(t.Width + 4, rowHeight);
+            l.TextAlign = ContentAlignment.MiddleLeft;
+            return l;
         }
 
         public static LinkLabel RowLink(string text, int x, int y)

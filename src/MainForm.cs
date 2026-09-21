@@ -634,6 +634,13 @@ namespace RobloxKeeper
                 statusDot.ForeColor = Theme.Amber;
                 lblMultiStatus.Text = MultiStatus.WAITING;
             }
+
+            // The status wraps to one line or two depending on which message is
+            // showing, so the row's height is only known now. Re-centre the dot
+            // and the button against it rather than against a fixed offset that
+            // can only be right in one of the two states.
+            Ui.CenterIn(statusDot, MULTI_ROW, lblMultiStatus.Height);
+            Ui.CenterIn(btnCloseRbx, MULTI_ROW, lblMultiStatus.Height);
         }
 
         // ---------- Autostart / Start menu ----------

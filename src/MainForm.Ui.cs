@@ -39,13 +39,19 @@ namespace RobloxKeeper
         const int CLIENTS_Y = 292, CLIENTS_H = 428;
         const int PERF_Y = 54, PERF_H = 232;
         const int MULTI_Y = 300, MULTI_H = 188;
-        const int LOG_Y = 502, LOG_H = 184;
+        // The log takes the slack so both columns end level at COLUMN_BOTTOM;
+        // otherwise the right column stopped 34px short and left a gap.
+        const int LOG_Y = 502, LOG_H = COLUMN_BOTTOM - LOG_Y;
 
-        // The left column now ends lower than the right; FULL_HEIGHT follows
-        // the taller one and adds the bottom margin.
+        // Both columns end here; FULL_HEIGHT adds the bottom margin.
         const int COLUMN_BOTTOM = 720;
 
         const int ROW_H = 26;
+        // The multi-instance status row. Its height is whatever the status
+        // label wraps to, so the dot and button are centred against that rather
+        // than against a fixed number - the text is one line or two depending
+        // on state, and a fixed offset is wrong in one of them.
+        const int MULTI_ROW = 44;
         const int WELL_W = 248;   // the countdown well, left of the Nudge now button
 
         // Title bar columns. TITLE_X + TITLE_W must not reach VER_X.
@@ -115,14 +121,17 @@ namespace RobloxKeeper
             chkAutostart.CheckedChanged += OnAutostartToggled;
             titleBar.Controls.Add(chkAutostart);
 
+            // 32px tall in a 44px bar: without centring they sat 6px above the
+            // title text beside them.
+            const int winBtnY = (TITLEBAR_H - 32) / 2;
             WindowButton btnMin = new WindowButton(false);
-            btnMin.Location = new Point(BASE_WIDTH - 88, 0);
+            btnMin.Location = new Point(BASE_WIDTH - 88, winBtnY);
             btnMin.Size = new Size(44, 32);
             btnMin.Click += delegate { WindowState = FormWindowState.Minimized; };
             titleBar.Controls.Add(btnMin);
 
             WindowButton btnClose = new WindowButton(true);
-            btnClose.Location = new Point(BASE_WIDTH - 44, 0);
+            btnClose.Location = new Point(BASE_WIDTH - 44, winBtnY);
             btnClose.Size = new Size(44, 32);
             btnClose.Click += delegate { Close(); };
             titleBar.Controls.Add(btnClose);
@@ -540,20 +549,19 @@ namespace RobloxKeeper
             chkMulti.CheckedChanged += OnMultiToggled;
             card.Controls.Add(chkMulti);
 
-            const int row = 44;
             statusDot = new Dot();
-            statusDot.Location = new Point(Ui.PAD, row);
+            statusDot.Location = new Point(Ui.PAD, MULTI_ROW);
             card.Controls.Add(statusDot);
 
             lblMultiStatus = new Label();
             lblMultiStatus.AutoSize = true;
             lblMultiStatus.MaximumSize = new Size(MultiStatus.WIDTH_ALONE, 0);
-            lblMultiStatus.Location = new Point(40, row);
+            lblMultiStatus.Location = new Point(40, MULTI_ROW);
             lblMultiStatus.ForeColor = Theme.Text;
             lblMultiStatus.BackColor = Theme.Card;
             card.Controls.Add(lblMultiStatus);
 
-            btnCloseRbx = Ui.AccentButton("Close all Roblox", BTN_X, row - 1, BTN_W, 28);
+            btnCloseRbx = Ui.AccentButton("Close all Roblox", BTN_X, MULTI_ROW, BTN_W, 28);
             btnCloseRbx.Font = new Font("Segoe UI", 8.25f, FontStyle.Bold);
             btnCloseRbx.Visible = false;
             btnCloseRbx.Click += delegate { CloseAllRoblox(); };
@@ -604,15 +612,16 @@ namespace RobloxKeeper
             lblAct.BackColor = Theme.Inset;
             card.Controls.Add(lblAct);
 
-            LinkLabel lnkCopy = Ui.RowLink("Copy log", 352, 13);
+            LinkLabel lnkCopy = Ui.RowLink("Copy log", 352, Ui.TITLE_Y);
             lnkCopy.Font = new Font("Segoe UI", 8.25f);
+            Ui.CenterIn(lnkCopy, Ui.TITLE_Y, Ui.TITLE_H);
             lnkCopy.BackColor = Theme.Inset;
             lnkCopy.Click += delegate { CopyLog(); };
             card.Controls.Add(lnkCopy);
 
             rtbLog = new RichTextBox();
             rtbLog.Location = new Point(18, 36);
-            rtbLog.Size = new Size(392, 134);
+            rtbLog.Size = new Size(392, LOG_H - 50);
             rtbLog.ReadOnly = true;
             rtbLog.BorderStyle = BorderStyle.None;
             rtbLog.BackColor = Theme.Inset;
@@ -654,7 +663,10 @@ namespace RobloxKeeper
             c.Text = "Enabled";
             c.ForeColor = Theme.Text;
             c.BackColor = Theme.Card;
-            c.Location = new Point(RIGHT - c.PreferredSize.Width, 12);
+            // Centred on the section title beside it rather than nudged to a
+            // number that looked about right.
+            c.Location = new Point(RIGHT - c.PreferredSize.Width, Ui.TITLE_Y);
+            Ui.CenterIn(c, Ui.TITLE_Y, Ui.TITLE_H);
             return c;
         }
 

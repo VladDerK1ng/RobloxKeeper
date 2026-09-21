@@ -66,14 +66,22 @@ namespace RobloxKeeper
             list.Controls.Add(empty);
 
             const int gameRow = 316;
-            card.Controls.Add(Ui.RowLabel("Game link", Ui.PAD, gameRow, 26, 70, 8.25f, Theme.Muted));
+            card.Controls.Add(Ui.RowLabel("Game link", Ui.PAD, gameRow, ROW_H_ROW, 70, 8.25f, Theme.Muted));
             gameBox = new TextBox();
-            gameBox.Location = new Point(92, gameRow + 3);
+            gameBox.Location = new Point(92, gameRow);
             gameBox.Size = new Size(W - 24 - 92 - Ui.PAD, 22);
             gameBox.BorderStyle = BorderStyle.FixedSingle;
             gameBox.BackColor = Theme.Inset;
             gameBox.ForeColor = Theme.Text;
             card.Controls.Add(gameBox);
+
+            // Centred once the window is up, not here.
+            //
+            // A single-line TextBox ignores the height it is given and
+            // recomputes it from its font when its handle is created, so its
+            // Height is still wrong at this point - which is exactly why the
+            // label beside it sat two pixels high. By Shown it is final.
+            Shown += delegate { Ui.CenterIn(gameBox, gameRow, ROW_H_ROW); };
 
             card.Controls.Add(Ui.MutedLabel(
                 "Optional. Blank uses each account's own saved game - or use Browse to find one in Roblox itself.",
@@ -86,11 +94,11 @@ namespace RobloxKeeper
             selectedCount = Ui.RowLabel("", Ui.PAD, selRow, ROW_H_BTN, 222, 8.25f, Theme.Muted);
             card.Controls.Add(selectedCount);
 
-            LinkLabel all = Ui.RowLink("Select all", 246, selRow + 8);
+            LinkLabel all = Ui.RowLink("Select all", 246, selRow, ROW_H_BTN);
             all.Click += delegate { SetAll(true); };
             card.Controls.Add(all);
 
-            LinkLabel none = Ui.RowLink("Clear", 330, selRow + 8);
+            LinkLabel none = Ui.RowLink("Clear", 330, selRow, ROW_H_BTN);
             none.Click += delegate { SetAll(false); };
             card.Controls.Add(none);
 
@@ -115,6 +123,8 @@ namespace RobloxKeeper
         }
 
         const int ROW_H_BTN = 28;
+        // The standard row height shared with the main window.
+        const int ROW_H_ROW = 26;
 
         protected override void OnPaint(PaintEventArgs e)
         {
@@ -174,19 +184,19 @@ namespace RobloxKeeper
                 Label note = Ui.RowLabel(second, 172, y, ROW, 226, 8.25f, Theme.Muted);
                 list.Controls.Add(note);
 
-                LinkLabel play = Ui.RowLink("Play", 406, y + 8);
+                LinkLabel play = Ui.RowLink("Play", 406, y, ROW);
                 play.Click += delegate { LaunchOne(a, true); };
                 list.Controls.Add(play);
 
-                LinkLabel browse = Ui.RowLink("Browse", 452, y + 8);
+                LinkLabel browse = Ui.RowLink("Browse", 452, y, ROW);
                 browse.Click += delegate { BrowseAs(a); };
                 list.Controls.Add(browse);
 
-                LinkLabel edit = Ui.RowLink("Edit", 518, y + 8);
+                LinkLabel edit = Ui.RowLink("Edit", 518, y, ROW);
                 edit.Click += delegate { EditAccount(a); };
                 list.Controls.Add(edit);
 
-                LinkLabel remove = Ui.RowLink("Remove", 564, y + 8);
+                LinkLabel remove = Ui.RowLink("Remove", 564, y, ROW);
                 remove.Click += delegate { RemoveAccount(a); };
                 list.Controls.Add(remove);
 
