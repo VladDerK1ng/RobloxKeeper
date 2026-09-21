@@ -347,12 +347,12 @@ namespace RobloxKeeper
 
             clientsPanel = new ScrollPanel();
             clientsPanel.Location = new Point(Ui.PAD, 54);
-            clientsPanel.Size = new Size(388, CLIENTS_H - 138);
+            clientsPanel.Size = new Size(388, CLIENTS_H - 172);
             clientsPanel.BackColor = Theme.Card;
             clientsPanel.AutoScroll = true;
             card.Controls.Add(clientsPanel);
 
-            const int row = CLIENTS_H - 76;
+            const int row = CLIENTS_H - 110;
             chkAutoGhost = Ui.DarkCheck("Auto-close leftovers", 18, row, 8.25f);
             chkAutoGhost.Checked = true;
             Ui.CenterIn(chkAutoGhost, row, ROW_H);
@@ -386,7 +386,7 @@ namespace RobloxKeeper
             // Roblox stores five accounts and makes you sign out to switch.
             // This is the way past that, and it lives beside the client list
             // because launching an account is how a client gets here.
-            const int accRow = CLIENTS_H - 42;
+            const int accRow = CLIENTS_H - 76;
             lblAccounts = Ui.RowLabel("", Ui.PAD, accRow, ROW_H, 250, 8.25f, Theme.Muted);
             card.Controls.Add(lblAccounts);
 
@@ -397,6 +397,19 @@ namespace RobloxKeeper
                 "Save as many Roblox accounts as you like and launch them without signing out. "
                 + "Roblox itself only holds five.");
             card.Controls.Add(btnAccounts);
+
+            // Watching lives here too: what it watches is these clients.
+            const int watchRow = CLIENTS_H - 42;
+            lblWatchers = Ui.RowLabel("", Ui.PAD, watchRow, ROW_H, 262, 8.25f, Theme.Muted);
+            card.Controls.Add(lblWatchers);
+
+            btnWatchers = Ui.AccentButton("Watchers", BTN_X, watchRow, BTN_W, ROW_H);
+            btnWatchers.Font = new Font("Segoe UI", 8.25f, FontStyle.Bold);
+            btnWatchers.Click += delegate { OpenWatchers(); };
+            Explain(btnWatchers,
+                "Get told on Discord, with a pop-up or a sound when a word, a new chat line or a picture "
+                + "turns up on a client's screen. Clients are only looked at - never focused, clicked or typed into.");
+            card.Controls.Add(btnWatchers);
         }
 
         // Opens the account manager. The store is loaded lazily, so a user

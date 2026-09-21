@@ -25,6 +25,12 @@ namespace RobloxKeeper
         // Which client a log belongs to, when that is known. Optional.
         public Func<string, string> NameForLog;
 
+        // A client joined a game: the log it is in, and the join. Also raised
+        // once for every log already open when watching starts, with the last
+        // join in it - so a client that was in a game before the app started
+        // is known too, without that history being replayed into the log.
+        public Action<string, RobloxLogEvent> Joined;
+
         readonly Dictionary<string, long> offsets = new Dictionary<string, long>();
         readonly string dir;
 
@@ -54,8 +60,14 @@ namespace RobloxKeeper
             bool known = offsets.TryGetValue(f.FullName, out from);
 
             // First sight: start at the end. Anything already written happened
-            // before the app was watching and is not news.
-            if (!known) { offsets[f.FullName] = f.Length; return; }
+            // before the app was watching and is not news - except where the
+            // client is now, which the watchers need to know.
+            if (!known)
+            {
+                offsets[f.FullName] = f.Length;
+                AnnounceLastJoin(f);
+                return;
+            }
 
             // Roblox rotates a log by truncating it; start over rather than
             // seeking past the end.
@@ -83,6 +95,35 @@ namespace RobloxKeeper
             }
         }
 
+        // The last join already in a log, told once when the log is first seen.
+        // Read line by line and only parsed where a join could be, because a
+        // long session's log runs to tens of megabytes.
+        void AnnounceLastJoin(FileInfo f)
+        {
+            if (Joined == null) return;
+
+            RobloxLogEvent last = new RobloxLogEvent();
+            bool found = false;
+            try
+            {
+                using (FileStream fs = new FileStream(f.FullName, FileMode.Open,
+                           FileAccess.Read, FileShare.ReadWrite))
+                using (StreamReader r = new StreamReader(fs))
+                {
+                    string line;
+                    while ((line = r.ReadLine()) != null)
+                    {
+                        if (line.IndexOf("Joining game", StringComparison.OrdinalIgnoreCase) < 0) continue;
+                        RobloxLogEvent e = RobloxLog.Parse(line);
+                        if (e.Type == RobloxLogEvent.Kind.Joined) { last = e; found = true; }
+                    }
+                }
+            }
+            catch { return; }   // locked or gone; the next join will be seen as it happens
+
+            if (found) Joined(f.Name, last);
+        }
+
         void Report(string fileName, string line)
         {
             RobloxLogEvent e = RobloxLog.Parse(line);
@@ -96,6 +137,7 @@ namespace RobloxKeeper
             {
                 case RobloxLogEvent.Kind.Joined:
                     Log(prefix + "joined place " + e.PlaceId + ".");
+                    if (Joined != null) Joined(fileName, e);
                     break;
 
                 case RobloxLogEvent.Kind.Hung:

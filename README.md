@@ -32,6 +32,8 @@ One tiny executable. Zero dependencies. No injection, no memory access, no file 
 | **Session lock** | Every Roblox client on a machine shares one cookie jar (`LocalStorage\RobloxCookies.dat`) and one `BrowserTrackerId`. Run two accounts for a few hours and they overwrite each other's session until Roblox evicts one as a duplicate device login - error **273**, *"joined from another device"*, which the client then reports to you as an internet problem. From two clients up, RobloxKeeper holds that file open for reading and denies writing: clients keep the read access they need to sign in and lose the write access that causes the eviction. It releases itself below two clients, and **Pause 60s** hands it back if you need to sign in while clients are open. |
 | **Account manager** | Roblox stores five accounts and makes you sign out to switch. This stores as many as you like. **Add account** opens Roblox's own login page in an embedded browser - you type your own credentials into Roblox's page, solve Roblox's own CAPTCHA and handle your own 2FA; nothing here reads a password, fills a login form or works around a CAPTCHA. Each account gets its **own browser profile**, so each has its own cookie jar and its own device identity rather than sharing one. **Launch** puts any account straight into a game by asking Roblox for a launch ticket, exactly as pressing Play on the website does. |
 | **Where credentials live** | `%APPDATA%\RobloxKeeperccounts.dat`, encrypted with DPAPI at CurrentUser scope - Windows ties the key to your user on this machine, so the file is useless if it is copied anywhere else. A `.ROBLOSECURITY` cookie IS the account: hold one and you are signed in as that user, no password involved. Nothing is sent anywhere except to roblox.com, and no code path prints a cookie to the log, a tooltip or an error message. Removing an account deletes its stored session and browser profile from this PC. |
+| **Watchers** | Get told when something turns up on a client's screen: a **word** (say, *spawned*), a **new chat line** (you get the whole line, not just the word), or a **picture** you cut out of the game with its background painted out. Each watched client is looked at up to four times a second **without being focused, clicked or typed into** - it works behind other windows and on another virtual desktop, though not while minimized, and the Watchers window says which clients can't be read and why. You're told on **Discord** (with the picture and a link straight back into that server), with a **pop-up**, a **sound** or a line in the activity list - chosen per watcher. Draw a **box** around the part of the screen that matters and it is read about nine times faster than the whole window; boxes belong to a game, so every client in that game uses them. **Test against client now** shows exactly what was read, or how alike a picture was, before you rely on it. |
+| **Where watchers live** | `%LOCALAPPDATA%\RobloxKeeper\watchers.dat`, encrypted with DPAPI like the account list: the Discord webhook link in it is enough for anyone who has it to post into your channel, so it is never shown or logged either. The pictures watchers look for are ordinary PNG files in `%LOCALAPPDATA%\RobloxKeeper\templates` - open the folder and look. |
 | **Single instance** | Launching RobloxKeeper while it's already running won't open a second copy - it surfaces the existing window instead, restoring it from the tray if needed. |
 | **Start with Windows** | Optional autostart toggle (top-right). With it on, RobloxKeeper starts **minimized to the tray** at boot and holds the mutex before any Roblox client can exist, which makes the launch-order problem impossible. |
 | **Saved settings** | Every setting - anti-AFK on/off, interval, nudge profile, multi-instance, auto-clear ghosts, client defaults, auto-trim - is written to `%APPDATA%\RobloxKeeper\settings.txt` and restored on the next launch. Per-client **Tune** overrides are deliberately session-only: Windows recycles PIDs, so a saved override would eventually land on an unrelated process. |
@@ -158,6 +160,24 @@ src/
   AccountsDialog.cs      the account manager window
   AccountLoginForm.cs    Roblox's login page in a per-account browser profile
   WebView2Runtime.cs     unpacks the embedded browser DLLs on first use
+  WatchRegion.cs         a watched box, kept on the same spot when the window resizes
+  MatchRule.cs           when a word on screen counts as a hit
+  FireControl.cs         tell once when something arrives, not every scan it is still there
+  ChatFeed.cs            which chat lines are new, allowing for misreads
+  Pixels.cs              an image as a plain array, so image code is testable
+  ImageMatch.cs          finding a picture again, with its background painted out
+  Watcher.cs             one watcher, and what it reports when it finds something
+  WatchStore.cs          watchers, boxes and the webhook link, DPAPI-encrypted
+  WebhookPost.cs         the Discord message, built, sent and retried
+  ScreenText.cs          Windows' own text recogniser, awaited without the SDK
+  WindowCapture.cs       a picture of a client without touching it
+  WatchEngine.cs         the pass: one picture per client, every watcher off it
+  RegionPickerForm.cs    drawing a box on a still picture of a client
+  WatcherEditDialog.cs   editing one watcher, and trying it on a client
+  WatchersDialog.cs      the watchers list
+  MainForm.Watch.cs      watching, wired into the main window
+  RobloxLog.cs           reading what Roblox writes about itself
+  RobloxLogWatch.cs      following the logs as clients join and drop
 tests/
   Harness.cs             the dependency-free test runner (test.bat)
   *Tests.cs              one file per unit under test
@@ -185,6 +205,8 @@ Measured on Windows 11 while idle: about **0.8% of one CPU core** and **67 MB** 
 
 Running two Roblox clients costs whatever two Roblox clients cost on your machine (mostly GPU and RAM), and the number of installed Roblox versions makes no difference. The per-client work added by the Performance card is a memory reading per client per tick, plus a priority/affinity call only when a client's settings have actually drifted from its profile - so it is proportional to the number of clients, not to time.
 
+Watching costs what it reads. Measured on a live client: a picture of the window takes about 25ms, reading a box about 10ms, and reading the whole window about 90-110ms - so one client watched through its whole window settles at around three scans a second, and boxes are what get it to four. With no watcher switched on, the watch thread isn't running at all.
+
 The only moment it touches your desktop is a nudge: it focuses each selected client for roughly half a second, sends the keys, and hands focus back. If you are typing at that moment you will notice it. Nothing else it does steals focus.
 
 ## How it works
@@ -195,6 +217,8 @@ The only moment it touches your desktop is a nudge: it focuses each selected cli
 
 The most common reason multi-instance "sometimes doesn't work" with any tool: closing a Roblox window doesn't always end its process. A window-less ghost process lingers and **keeps owning the mutex**. RobloxKeeper surfaces these as "background" processes and removes them via **Close all Roblox** / **End background**.
 
+**Watchers** never send the game anything. A picture of the client is taken with `PrintWindow` and `PW_RENDERFULLCONTENT`, which asks the desktop compositor for the frame it is already holding - Roblox draws with Direct3D, and without that flag the picture comes back as an empty rectangle. That is also why it works behind other windows and on another virtual desktop, and why it can't on a minimized window: Windows stops composing those. Each client is captured once per pass and every watcher on it reads that one picture. Text is read by `Windows.Media.Ocr`, which is part of Windows - nothing is downloaded, and if the English text pack is missing the Watchers window offers to install it (Windows asks for administrator rights) while picture watchers keep working without it. The pass aims for four a second and slows itself down when there is more to read than that allows.
+
 ## Byfron / Hyperion compatibility
 
 RobloxKeeper is designed to stay entirely **outside** the Roblox process:
@@ -203,10 +227,14 @@ RobloxKeeper is designed to stay entirely **outside** the Roblox process:
 - **No memory reads or writes** - the game's process memory is never opened.
 - **No file modification** - the Roblox installation is untouched.
 - **OS-level only** - a named kernel mutex (a Windows object, not a Roblox one) and synthesized keyboard input, identical in mechanism to a hardware keyboard.
+- **Watching reads pixels, not memory** - a picture of the window from the desktop compositor, the same one a screenshot tool gets.
 
 This is the same externally-held-mutex technique used by established multi-instance managers, and it does not interact with the anti-cheat's protected surface. That said, automation and multi-instancing are against the [Roblox Terms of Use](https://en.help.roblox.com/hc/en-us/articles/115004647846) - use at your own risk.
 
 ## FAQ
+
+**A watcher never fires, but I can see the word on screen.**
+Open the watcher and press **Test against this client now** - it says exactly what it read. Windows' text recogniser reads light text on a plain background well and struggles with dark lettering on a dark outline: on a live egg-spawn banner it read *spawned in* every time and never the dark egg name next to it. Watch for a word it does read, such as *spawned* - the picture sent with the alert shows the rest - or use a **picture** watcher, which compares pixels and doesn't care what colour the text is. Chat can only be read while the chat is open on that client.
 
 **Does it work while Roblox is minimized?**
 Yes - the client is restored for about a second, nudged, and re-minimized.

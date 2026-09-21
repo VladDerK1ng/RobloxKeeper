@@ -161,5 +161,78 @@ namespace RobloxKeeper.Tests
             Assert.False(WebhookPost.LooksLikeDiscordWebhook(
                 "https://discord.com.evil.net/api/webhooks/123/abc"), "a subdomain of somewhere else");
         }
+
+        // ---------- trying again ----------
+
+        // Sends are scripted here: a list of what each attempt returns, and a
+        // record of every wait, so the schedule is tested without a network
+        // or a clock.
+        static string Retry(string[] results, System.Collections.Generic.List<int> waits, out int attempts)
+        {
+            int n = 0;
+            string last = WebhookPost.SendWithRetry(
+                delegate { return results[Math.Min(n++, results.Length - 1)]; },
+                WebhookPost.RetryDelaysMs,
+                delegate(int ms) { waits.Add(ms); });
+            attempts = n;
+            return last;
+        }
+
+        public static void TestASendThatWorksIsNotRepeated()
+        {
+            System.Collections.Generic.List<int> waits = new System.Collections.Generic.List<int>();
+            int attempts;
+            Assert.Equal(null, Retry(new string[] { null }, waits, out attempts), "delivered");
+            Assert.Equal(1, attempts, "once");
+            Assert.Equal(0, waits.Count, "without waiting");
+        }
+
+        public static void TestADiscordThatCannotBeReachedIsTriedAgain()
+        {
+            System.Collections.Generic.List<int> waits = new System.Collections.Generic.List<int>();
+            int attempts;
+            string last = Retry(new string[] { WebhookPost.Unreachable, WebhookPost.RateLimited, null }, waits, out attempts);
+            Assert.Equal(null, last, "got through on the third try");
+            Assert.Equal(3, attempts, "three tries");
+            Assert.Equal(2, waits.Count, "two waits between them");
+            Assert.True(waits[1] > waits[0], "each wait longer than the last");
+        }
+
+        // A deleted webhook will never work, so it is not hammered.
+        public static void TestADeletedWebhookIsNotTriedAgain()
+        {
+            System.Collections.Generic.List<int> waits = new System.Collections.Generic.List<int>();
+            int attempts;
+            Assert.Equal(WebhookPost.Gone, Retry(new string[] { WebhookPost.Gone }, waits, out attempts), "the reason");
+            Assert.Equal(1, attempts, "tried once");
+        }
+
+        public static void TestItGivesUpAfterTheLastWait()
+        {
+            System.Collections.Generic.List<int> waits = new System.Collections.Generic.List<int>();
+            int attempts;
+            Assert.Equal(WebhookPost.Unreachable, Retry(new string[] { WebhookPost.Unreachable }, waits, out attempts),
+                "and says why");
+            Assert.Equal(WebhookPost.RetryDelaysMs.Length + 1, attempts, "once, then once after each wait");
+        }
+
+        public static void TestServerTroubleIsRetriedButARefusalIsNot()
+        {
+            Assert.True(WebhookPost.WorthRetrying("Discord refused it (502)"), "Discord having a bad moment");
+            Assert.False(WebhookPost.WorthRetrying("Discord refused it (400)"), "Discord saying no");
+            Assert.False(WebhookPost.WorthRetrying(null), "nothing went wrong");
+        }
+
+        // The picture goes up as a real PNG, the format the embed points at.
+        public static void TestThePictureIsSentAsAPng()
+        {
+            Pixels p = new Pixels(3, 2);
+            p.Fill(unchecked((int)0xFF336699));
+            byte[] png = WebhookPost.Png(p);
+            Assert.True(png != null && png.Length > 8, "some bytes");
+            Assert.Equal(0x89, (int)png[0], "PNG signature");
+            Assert.Equal((int)'P', (int)png[1], "P");
+            Assert.Equal(null, WebhookPost.Png(null), "no picture, no bytes");
+        }
     }
 }

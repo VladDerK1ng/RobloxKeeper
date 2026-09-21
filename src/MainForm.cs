@@ -187,6 +187,7 @@ namespace RobloxKeeper
                 Log("New clients will run at " + perf.Defaults + ".");
 
             UpdateAccountsLabel();
+            StartWatching();
             CheckLaunchPath();
             FixStaleShortcuts();
             EnsureStartMenuShortcut();
@@ -340,6 +341,7 @@ namespace RobloxKeeper
             // duplicate device login. Holding the jar read-only stops that.
             // What Roblox itself says happened to each client.
             logWatch.Tick();
+            WatchTick(clients);
 
             sessionLock.Update(clients.Count);
             UpdateSessionLockStatus();
@@ -859,6 +861,7 @@ namespace RobloxKeeper
             SaveSettings();
             uiTimer.Stop();
             nudgeTimer.Stop();
+            StopWatching();
             sessionLock.Release();
             tray.Visible = false;
             tray.Dispose();

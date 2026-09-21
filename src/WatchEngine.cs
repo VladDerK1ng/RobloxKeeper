@@ -285,6 +285,7 @@ namespace RobloxKeeper
             d.Score = k.Score;
             d.When = now;
             d.Crop = k.Crop;
+            d.Watcher = w;
 
             Action<DetectionEvent> found = Found;
             if (found != null) found(d);

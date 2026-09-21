@@ -159,6 +159,17 @@ namespace RobloxKeeper.Tests
             Assert.True(d.Crop != null && !d.Crop.IsEmpty, "and the picture it was seen in");
         }
 
+        // Each watcher's own settings - where to send it, whether to make a
+        // sound - travel with what it found.
+        public static void TestADetectionKnowsWhichWatcherRaisedIt()
+        {
+            Rig r = new Rig();
+            r.Reader.Text = "a SECRET egg";
+            Watcher w = Words("Secret Egg", "secret");
+            r.Pass(Client(100, "a"), w);
+            Assert.True(ReferenceEquals(w, r.Found[0].Watcher), "the very watcher");
+        }
+
         public static void TestNothingIsReportedWhenNothingMatches()
         {
             Rig r = new Rig();

@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Drawing;
+using System.Drawing.Imaging;
 using System.IO;
 using System.Net;
 using System.Text;
@@ -23,6 +25,12 @@ namespace RobloxKeeper
     // does nothing but post what it is handed.
     static class WebhookPost
     {
+        // What Send says when it fails. Named, because whether to try again
+        // depends on which one it was.
+        public const string Unreachable = "couldn't reach Discord";
+        public const string RateLimited = "Discord is rate-limiting us";
+        public const string Gone = "that webhook no longer exists";
+
         public static string PayloadJson(DetectionEvent d)
         {
             StringBuilder sb = new StringBuilder();
@@ -175,12 +183,53 @@ namespace RobloxKeeper
             catch (WebException ex)
             {
                 HttpWebResponse resp = ex.Response as HttpWebResponse;
-                if (resp == null) return "couldn't reach Discord";
-                if ((int)resp.StatusCode == 429) return "Discord is rate-limiting us";
-                if ((int)resp.StatusCode == 404) return "that webhook no longer exists";
+                if (resp == null) return Unreachable;
+                if ((int)resp.StatusCode == 429) return RateLimited;
+                if ((int)resp.StatusCode == 404) return Gone;
                 return "Discord refused it (" + (int)resp.StatusCode + ")";
             }
             catch { return "couldn't send it"; }
+        }
+
+        // How long to wait before each retry: soon, then later, then a good
+        // while - about forty seconds all told.
+        public static readonly int[] RetryDelaysMs = { 2000, 10000, 30000 };
+
+        // A server that could not be reached, that asked us to slow down, or
+        // that had a moment of trouble may well work shortly. A webhook that
+        // has been deleted, or a request Discord refused, never will.
+        public static bool WorthRetrying(string reason)
+        {
+            if (reason == null) return false;
+            return reason == Unreachable || reason == RateLimited
+                || reason.StartsWith("Discord refused it (5", StringComparison.Ordinal);
+        }
+
+        // Sends, and tries again after each delay while it is worth trying.
+        // Null on success, otherwise the last reason. The attempt and the wait
+        // are passed in, so the schedule is tested without a network or a clock.
+        public static string SendWithRetry(Func<string> attempt, int[] delaysMs, Action<int> wait)
+        {
+            string reason = attempt();
+            foreach (int ms in delaysMs)
+            {
+                if (!WorthRetrying(reason)) return reason;
+                wait(ms);
+                reason = attempt();
+            }
+            return reason;
+        }
+
+        // The picture as the PNG the embed points at, or null for none.
+        public static byte[] Png(Pixels p)
+        {
+            if (p == null || p.IsEmpty) return null;
+            using (Bitmap b = p.ToBitmap())
+            using (MemoryStream ms = new MemoryStream())
+            {
+                b.Save(ms, ImageFormat.Png);
+                return ms.ToArray();
+            }
         }
     }
 }

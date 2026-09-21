@@ -103,6 +103,10 @@ namespace RobloxKeeper
         public DateTime When = DateTime.Now;
         public Pixels Crop;            // what it saw, for the attachment
 
+        // Which watcher raised it, so that watcher's own settings - where to
+        // send it, whether to make a sound - go with what it found.
+        public Watcher Watcher;
+
         public string JoinLink { get { return RobloxLog.JoinLink(PlaceId, JobId); } }
 
         // One line saying what was found and where. Names both the window and
