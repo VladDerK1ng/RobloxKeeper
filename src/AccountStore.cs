@@ -17,6 +17,7 @@ namespace RobloxKeeper
         public string Cookie;            // .ROBLOSECURITY - never log, never display
         public string BrowserTrackerId;  // this account's own device identity
         public string GameUrl;           // the place it normally AFKs in
+        public string Note;              // whatever the user wants to remember about it
         public int NudgeMethod = -1;     // -1 = follow the global setting
         public int Priority = -1;        // -1 = follow the Performance defaults
         public int Cores;
@@ -132,7 +133,8 @@ namespace RobloxKeeper
             sb.Append(a.NudgeMethod).Append(FIELD);
             sb.Append(a.Priority).Append(FIELD);
             sb.Append(a.Cores).Append(FIELD);
-            sb.Append(a.Eco ? "1" : "0");
+            sb.Append(a.Eco ? "1" : "0").Append(FIELD);
+            sb.Append(Escape(a.Note));
             return sb.ToString();
         }
 
@@ -151,6 +153,9 @@ namespace RobloxKeeper
             if (f.Length > 5) a.Priority = ParseInt(f[5], -1);
             if (f.Length > 6) a.Cores = ParseInt(f[6], 0);
             if (f.Length > 7) a.Eco = f[7] == "1";
+            // Added after the first release; records written before it are
+            // shorter and simply have no note.
+            if (f.Length > 8) a.Note = Unescape(f[8]);
             return a;
         }
 

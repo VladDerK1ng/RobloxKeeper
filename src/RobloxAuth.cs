@@ -98,6 +98,24 @@ namespace RobloxKeeper
             catch { return null; }   // expired or offline; the caller names it manually
         }
 
+        // Is this navigation the browser trying to start a Roblox client?
+        //
+        // Pressing Play on the website navigates to a roblox-player:// URL
+        // carrying a launch ticket. Inside the account manager's browser that
+        // has to be caught rather than handed to Windows: the system handler
+        // would start a client against the shared cookie jar instead of the
+        // account whose browser profile is being used.
+        //
+        // Matched by scheme only, and only Roblox's own two. Anything else a
+        // page tries to open is somebody else's protocol and none of our
+        // business.
+        public static bool IsLaunchUrl(string uri)
+        {
+            if (string.IsNullOrEmpty(uri)) return false;
+            return uri.StartsWith("roblox-player:", StringComparison.OrdinalIgnoreCase)
+                || uri.StartsWith("roblox:", StringComparison.OrdinalIgnoreCase);
+        }
+
         public static long NowMs()
         {
             return (long)(DateTime.UtcNow - new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc)).TotalMilliseconds;

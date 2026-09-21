@@ -106,6 +106,10 @@ namespace RobloxKeeper
         string lastRegisteredVersion;
         readonly List<string> seenClientVersions = new List<string>();
         readonly Dictionary<int, TrackedClient> knownClients = new Dictionary<int, TrackedClient>();
+        // Which running client belongs to which account. Only ever populated
+        // for clients this app launched, because that is the one moment the
+        // account and the process id are both known.
+        readonly ClientLabels clientLabels = new ClientLabels();
         DateTime lastClientOpened = DateTime.MinValue;
         bool clientTrackingReady;
 
@@ -307,6 +311,11 @@ namespace RobloxKeeper
             // Asked once and reused: ForegroundPid is a pair of Win32 calls,
             // and three features below all want the same answer.
             int foregroundPid = PerformanceManager.ForegroundPid();
+
+            // PIDs are recycled, so a label must not outlive its process.
+            List<int> alivePids = new List<int>();
+            foreach (ClientInfo ci in clients) alivePids.Add(ci.Pid);
+            clientLabels.Prune(alivePids);
 
             perf.Prune(clients);
             perf.ApplyPending(clients, foregroundPid);

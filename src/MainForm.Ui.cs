@@ -375,7 +375,8 @@ namespace RobloxKeeper
             }
 
             EnsureAccounts();
-            using (AccountsDialog d = new AccountsDialog(accounts, Log)) d.ShowDialog(this);
+            using (AccountsDialog d = new AccountsDialog(accounts, Log, clientLabels.Assign))
+                d.ShowDialog(this);
             UpdateAccountsLabel();
         }
 
@@ -701,7 +702,11 @@ namespace RobloxKeeper
                 if (!nudgePrefs.ContainsKey(ci.Pid)) nudgePrefs[ci.Pid] = true;
 
                 ThemedCheckBox chk = new ThemedCheckBox();
-                chk.Text = "Client " + idx + " · PID " + ci.Pid;
+                // Named by account when this app launched it; a client
+                // started from the website is still just a number,
+                // because there is no honest way to know whose it is.
+                string account = clientLabels.NameFor(ci.Pid);
+                chk.Text = ClientLabels.RowTitle(account, idx) + " · PID " + ci.Pid;
                 chk.Checked = nudgePrefs[ci.Pid];
                 chk.ForeColor = Theme.Text;
                 chk.BackColor = Theme.Card;
@@ -723,7 +728,7 @@ namespace RobloxKeeper
                 clientsPanel.Controls.Add(ram);
                 ramLabels[ci.Pid] = ram;
 
-                string label = "Client " + idx;
+                string label = ClientLabels.RowTitle(account, idx);
                 int index = idx - 1;
                 LinkLabel tune = Ui.ColumnLink("Tune", COL_TUNE_X, y, ROW_INNER, COL_LINK_W);
                 tune.Click += delegate { OpenTune(pid, index, label); };

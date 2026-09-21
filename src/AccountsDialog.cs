@@ -1,6 +1,9 @@
 using System;
+using System.Collections.Generic;
+using System.Diagnostics;
 using System.Drawing;
 using System.IO;
+using System.Threading;
 using System.Windows.Forms;
 
 namespace RobloxKeeper
@@ -9,56 +12,60 @@ namespace RobloxKeeper
     //
     // Roblox's own account switcher holds five and makes you sign out to
     // change. This holds as many as you like, keeps each one's session in its
-    // own browser profile, and launches any of them straight into a game
-    // without touching the others.
+    // own browser profile, launches any of them - or several at once - and can
+    // hand you a browser signed in as any of them so you can find a game
+    // yourself instead of pasting a link.
     class AccountsDialog : Form
     {
-        const int W = 620;
-        const int ROW = 34;
+        const int W = 700;
+        const int ROW = 32;
 
         readonly AccountStore store;
         readonly Action<string> log;
-        ScrollPanel list;
-        Label empty;
-        TextBox gameBox;
+        readonly Action<int, string> onLaunched;   // pid -> account, for client labelling
 
-        public AccountsDialog(AccountStore store, Action<string> log)
+        ScrollPanel list;
+        Label empty, selectedCount;
+        TextBox gameBox;
+        Button launchSelected;
+        readonly Dictionary<string, ThemedCheckBox> picks =
+            new Dictionary<string, ThemedCheckBox>(StringComparer.OrdinalIgnoreCase);
+
+        public AccountsDialog(AccountStore store, Action<string> log, Action<int, string> onLaunched)
         {
             this.store = store;
             this.log = log;
+            this.onLaunched = onLaunched;
 
             Text = "Accounts";
             FormBorderStyle = FormBorderStyle.None;
             StartPosition = FormStartPosition.CenterParent;
-            ClientSize = new Size(W, 430);
+            ClientSize = new Size(W, 500);
             BackColor = Theme.Bg;
             ForeColor = Theme.Text;
             Font = new Font("Segoe UI", 9f);
 
             Card card = new Card();
             card.Location = new Point(12, 12);
-            card.Size = new Size(W - 24, 406);
+            card.Size = new Size(W - 24, 476);
             Controls.Add(card);
 
             card.Controls.Add(Ui.SectionTitle("ACCOUNTS"));
-            card.Controls.Add(Ui.Subtitle("Each account keeps its own sign-in - no five-account limit, no signing out"));
+            card.Controls.Add(Ui.Subtitle("Each keeps its own sign-in - no five-account limit, no signing out"));
 
             list = new ScrollPanel();
             list.Location = new Point(Ui.PAD, 54);
-            list.Size = new Size(W - 24 - Ui.PAD * 2, 210);
+            list.Size = new Size(W - 24 - Ui.PAD * 2, 250);
             list.BackColor = Theme.Card;
             list.AutoScroll = true;
             card.Controls.Add(list);
 
-            // Inside the list, not behind it: WinForms puts a later-added
-            // control at the BACK of the z-order, so a sibling placed over the
-            // panel would be invisible.
+            // Inside the list rather than over it: WinForms puts a later-added
+            // sibling at the BACK of the z-order, where it would be invisible.
             empty = Ui.MutedLabel("No accounts yet - Add account opens Roblox's login page.", 6, 10, 9f);
             list.Controls.Add(empty);
 
-            // Where a launch goes. Left blank, each account uses its own saved
-            // game; this box overrides it for one launch.
-            const int gameRow = 276;
+            const int gameRow = 316;
             card.Controls.Add(Ui.RowLabel("Game link", Ui.PAD, gameRow, 26, 70, 8.25f, Theme.Muted));
             gameBox = new TextBox();
             gameBox.Location = new Point(92, gameRow + 3);
@@ -69,10 +76,30 @@ namespace RobloxKeeper
             card.Controls.Add(gameBox);
 
             card.Controls.Add(Ui.MutedLabel(
-                "Paste a roblox.com/games/... link or just the place id. Blank uses each account's saved game.",
+                "Optional. Blank uses each account's own saved game - or use Browse to find one in Roblox itself.",
                 Ui.PAD, gameRow + 30, 8.25f));
 
-            const int btnRow = 340;
+            const int selRow = 376;
+            // Width stops short of the links beside it: RowLabel is opaque and
+            // sits in front of anything added later, so an oversized box here
+            // silently paints over the first characters of "Select all".
+            selectedCount = Ui.RowLabel("", Ui.PAD, selRow, ROW_H_BTN, 222, 8.25f, Theme.Muted);
+            card.Controls.Add(selectedCount);
+
+            LinkLabel all = Ui.RowLink("Select all", 246, selRow + 8);
+            all.Click += delegate { SetAll(true); };
+            card.Controls.Add(all);
+
+            LinkLabel none = Ui.RowLink("Clear", 330, selRow + 8);
+            none.Click += delegate { SetAll(false); };
+            card.Controls.Add(none);
+
+            launchSelected = Ui.AccentButton("Launch selected", W - 24 - Ui.PAD - 150, selRow, 150, 28);
+            launchSelected.Font = new Font("Segoe UI", 8.25f, FontStyle.Bold);
+            launchSelected.Click += delegate { LaunchSelected(); };
+            card.Controls.Add(launchSelected);
+
+            const int btnRow = 420;
             Button add = Ui.AccentButton("Add account", Ui.PAD, btnRow, 120, 28);
             add.Font = new Font("Segoe UI", 8.25f, FontStyle.Bold);
             add.Click += delegate { AddAccount(); };
@@ -85,6 +112,8 @@ namespace RobloxKeeper
 
             Rebuild();
         }
+
+        const int ROW_H_BTN = 28;
 
         protected override void OnPaint(PaintEventArgs e)
         {
@@ -100,19 +129,19 @@ namespace RobloxKeeper
                 "RobloxKeeper", "profiles", AccountStore.SafeFolderName(accountName));
         }
 
+        // ---------- the list ----------
+
         void Rebuild()
         {
             list.SuspendLayout();
-            // The empty-state label lives in this panel too, so it is kept
-            // rather than disposed along with the account rows.
             while (list.Controls.Count > 0)
             {
                 Control c = list.Controls[0];
                 list.Controls.Remove(c);
                 if (!ReferenceEquals(c, empty)) c.Dispose();
             }
+            picks.Clear();
             list.Controls.Add(empty);
-
             empty.Visible = store.Accounts.Count == 0;
 
             int y = 4;
@@ -120,62 +149,99 @@ namespace RobloxKeeper
             {
                 RobloxAccount a = account;   // captured per row, not per loop
 
-                Label name = Ui.RowLabel(a.Name, 4, y, ROW, 200, 9f, Theme.Text);
-                list.Controls.Add(name);
+                ThemedCheckBox pick = Ui.DarkCheck("", 4, y, 8.25f);
+                Ui.CenterIn(pick, y, ROW);
+                pick.CheckedChanged += delegate { UpdateSelectedCount(); };
+                list.Controls.Add(pick);
+                picks[a.Name] = pick;
 
-                string where = string.IsNullOrEmpty(a.GameUrl) ? "no game set" : "has a saved game";
-                list.Controls.Add(Ui.RowLabel(where, 208, y, ROW, 110, 8.25f, Theme.Muted));
+                list.Controls.Add(Ui.RowLabel(a.Name, 28, y, ROW, 140, 9f, Theme.Text));
 
-                LinkLabel launch = Ui.RowLink("Launch", 326, y + 9);
-                launch.Click += delegate { Launch(a); };
-                list.Controls.Add(launch);
+                // The note is the user's own description; the saved game is
+                // shown only when there is no note to show instead.
+                string second = !string.IsNullOrEmpty(a.Note)
+                    ? a.Note
+                    : (string.IsNullOrEmpty(a.GameUrl) ? "no game set" : "has a saved game");
+                Label note = Ui.RowLabel(second, 172, y, ROW, 226, 8.25f, Theme.Muted);
+                list.Controls.Add(note);
 
-                LinkLabel setGame = Ui.RowLink("Set game", 386, y + 9);
-                setGame.Click += delegate { SetGame(a); };
-                list.Controls.Add(setGame);
+                LinkLabel play = Ui.RowLink("Play", 406, y + 8);
+                play.Click += delegate { LaunchOne(a, true); };
+                list.Controls.Add(play);
 
-                LinkLabel remove = Ui.RowLink("Remove", 462, y + 9);
+                LinkLabel browse = Ui.RowLink("Browse", 452, y + 8);
+                browse.Click += delegate { BrowseAs(a); };
+                list.Controls.Add(browse);
+
+                LinkLabel edit = Ui.RowLink("Edit", 518, y + 8);
+                edit.Click += delegate { EditAccount(a); };
+                list.Controls.Add(edit);
+
+                LinkLabel remove = Ui.RowLink("Remove", 564, y + 8);
                 remove.Click += delegate { RemoveAccount(a); };
                 list.Controls.Add(remove);
 
                 y += ROW;
             }
             list.ResumeLayout();
+            UpdateSelectedCount();
         }
+
+        void SetAll(bool on)
+        {
+            foreach (ThemedCheckBox c in picks.Values) c.Checked = on;
+            UpdateSelectedCount();
+        }
+
+        List<RobloxAccount> Selected()
+        {
+            List<RobloxAccount> picked = new List<RobloxAccount>();
+            foreach (RobloxAccount a in store.Accounts)
+            {
+                ThemedCheckBox c;
+                if (picks.TryGetValue(a.Name, out c) && c.Checked) picked.Add(a);
+            }
+            return picked;
+        }
+
+        void UpdateSelectedCount()
+        {
+            int n = Selected().Count;
+            selectedCount.Text = n == 0 ? "Tick accounts to launch several at once"
+                                        : n + " selected";
+            launchSelected.Enabled = n > 0;
+        }
+
+        // ---------- adding, editing, removing ----------
 
         void AddAccount()
         {
-            // Named by a placeholder first so the browser profile has somewhere
-            // to live; renamed to the real account once Roblox tells us who it
-            // is, and the profile folder moves with it.
-            string temp = "new-" + DateTime.Now.Ticks;
-            string tempDir = ProfileDir(temp);
+            string tempDir = ProfileDir("new-" + DateTime.Now.Ticks);
 
             string cookie, detected;
-            using (AccountLoginForm login = new AccountLoginForm(tempDir))
+            using (AccountBrowserForm login = new AccountBrowserForm(tempDir, null, true))
             {
                 if (login.ShowDialog(this) != DialogResult.OK) { TryDelete(tempDir); return; }
                 cookie = login.Cookie;
                 detected = login.DetectedName;
             }
-
             if (string.IsNullOrEmpty(cookie)) { TryDelete(tempDir); return; }
 
             string name = detected;
             if (string.IsNullOrEmpty(name))
             {
-                name = Prompt("Roblox didn't say which account that was. What should it be called?");
+                name = Prompt("Roblox didn't say which account that was. What should it be called?", "");
                 if (string.IsNullOrEmpty(name)) { TryDelete(tempDir); return; }
             }
 
-            // Move the profile to its permanent home so the sign-in persists.
+            // The profile moves to its permanent home so the sign-in persists.
             string finalDir = ProfileDir(name);
             try
             {
                 if (Directory.Exists(finalDir)) Directory.Delete(finalDir, true);
                 Directory.Move(tempDir, finalDir);
             }
-            catch { /* keep the temp profile rather than losing the sign-in */ }
+            catch { /* keep the temp profile rather than lose the sign-in */ }
 
             RobloxAccount a = store.Find(name);
             bool isNew = a == null;
@@ -190,6 +256,27 @@ namespace RobloxKeeper
             store.Save();
 
             log(isNew ? "Account added: " + name + "." : "Account " + name + " signed in again.");
+            Rebuild();
+        }
+
+        void EditAccount(RobloxAccount a)
+        {
+            string note = Prompt("What is " + a.Name + " for? (e.g. \"farms blox fruits overnight\")", a.Note);
+            if (note == null) return;          // cancelled
+            a.Note = note;
+
+            string game = Prompt("Game link for " + a.Name + ", or blank for none:", a.GameUrl);
+            if (game != null)
+            {
+                if (game.Length > 0 && RobloxAuth.PlaceIdFromUrl(game) == null)
+                    MessageBox.Show(this, "That doesn't look like a Roblox game link or place id - leaving the old one.",
+                        "Not a game link", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                else
+                    a.GameUrl = game;
+            }
+
+            store.Save();
+            log(a.Name + " updated.");
             Rebuild();
         }
 
@@ -208,40 +295,57 @@ namespace RobloxKeeper
             Rebuild();
         }
 
-        void SetGame(RobloxAccount a)
+        // ---------- browsing ----------
+
+        void BrowseAs(RobloxAccount a)
         {
-            string typed = gameBox.Text;
-            if (string.IsNullOrEmpty(typed))
+            using (AccountBrowserForm b = new AccountBrowserForm(ProfileDir(a.Name), a.Name, false))
             {
-                MessageBox.Show(this, "Put a game link in the box first, then click Set game.",
-                    "No game link", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return;
-            }
+                // Play inside that browser already carries a ticket for this
+                // account, so it only needs starting - no second ticket request.
+                b.LaunchRequested += delegate (string url) { StartClient(url, a.Name); };
+                b.ShowDialog(this);
 
-            if (RobloxAuth.PlaceIdFromUrl(typed) == null)
-            {
-                MessageBox.Show(this, "That doesn't look like a Roblox game link or place id.",
-                    "Not a game link", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
+                // Roblox rotates sessions; keep whatever the browser ended with.
+                if (!string.IsNullOrEmpty(b.Cookie) && b.Cookie != a.Cookie)
+                {
+                    a.Cookie = b.Cookie;
+                    store.Save();
+                }
             }
-
-            a.GameUrl = typed;
-            store.Save();
-            log(a.Name + " will launch into " + RobloxAuth.PlaceIdFromUrl(typed) + ".");
-            Rebuild();
         }
 
-        void Launch(RobloxAccount a)
+        // ---------- launching ----------
+
+        void LaunchSelected()
+        {
+            List<RobloxAccount> picked = Selected();
+            if (picked.Count == 0) return;
+
+            int started = 0;
+            foreach (RobloxAccount a in picked)
+            {
+                if (LaunchOne(a, false)) started++;
+
+                // Staggered deliberately. Several clients starting at the same
+                // instant race each other over the singleton and over Roblox's
+                // launcher, and each needs its own ticket anyway.
+                if (started > 0 && a != picked[picked.Count - 1]) Thread.Sleep(3000);
+            }
+            log("Launched " + started + " of " + picked.Count + " selected account(s).");
+        }
+
+        bool LaunchOne(RobloxAccount a, bool alone)
         {
             string link = !string.IsNullOrEmpty(gameBox.Text) ? gameBox.Text : a.GameUrl;
             string placeId = RobloxAuth.PlaceIdFromUrl(link);
             if (placeId == null)
             {
-                MessageBox.Show(this,
-                    "No game to launch " + a.Name + " into.\r\n\r\nPaste a game link in the box, "
-                    + "or use Set game to give this account one.",
-                    "No game", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return;
+                string msg = "No game to launch " + a.Name + " into. Paste a game link, "
+                           + "set one with Edit, or use Browse to pick one in Roblox.";
+                log(msg);
+                if (alone) MessageBox.Show(this, msg, "No game", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return false;
             }
 
             Cursor = Cursors.WaitCursor;
@@ -252,30 +356,42 @@ namespace RobloxKeeper
                 if (ticket == null)
                 {
                     log("Could not launch " + a.Name + ": " + error);
-                    MessageBox.Show(this, "Could not launch " + a.Name + ":\r\n\r\n" + error,
+                    if (alone) MessageBox.Show(this, "Could not launch " + a.Name + ":\r\n\r\n" + error,
                         "Launch failed", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                    return;
+                    return false;
                 }
 
                 string url = RobloxAuth.BuildLaunchUrl(ticket, placeId, a.BrowserTrackerId, RobloxAuth.NowMs());
-                string exe = RobloxInstall.NewestInstalledVersion();
-                if (exe == null)
+                return StartClient(url, a.Name);
+            }
+            finally { Cursor = Cursors.Default; }
+        }
+
+        // Starts the client and reports which account it belongs to, so the
+        // Clients list can name it instead of numbering it.
+        bool StartClient(string launchUrl, string accountName)
+        {
+            try
+            {
+                string version = RobloxInstall.NewestInstalledVersion();
+                if (version == null)
                 {
-                    log("Could not launch " + a.Name + ": no installed Roblox client found.");
-                    return;
+                    log("Could not launch " + accountName + ": no installed Roblox client found.");
+                    return false;
                 }
 
-                string path = Path.Combine(RobloxInstall.VersionsRoot, exe, "RobloxPlayerBeta.exe");
-                System.Diagnostics.Process.Start(
-                    new System.Diagnostics.ProcessStartInfo(path, url) { UseShellExecute = false });
+                string exe = Path.Combine(RobloxInstall.VersionsRoot, version, "RobloxPlayerBeta.exe");
+                Process p = Process.Start(new ProcessStartInfo(exe, launchUrl) { UseShellExecute = false });
+                if (p != null && onLaunched != null) onLaunched(p.Id, accountName);
 
-                log("Launched " + a.Name + " into place " + placeId + ".");
+                log("Launched " + accountName + ".");
+                return true;
             }
             catch (Exception ex)
             {
-                log("Could not launch " + a.Name + ": " + ex.Message);
+                log("Could not launch " + accountName + ": " + ex.Message);
+                return false;
             }
-            finally { Cursor = Cursors.Default; }
         }
 
         static void TryDelete(string dir)
@@ -284,34 +400,40 @@ namespace RobloxKeeper
             catch { }
         }
 
-        // A small themed replacement for InputBox, which WinForms has no
-        // equivalent of.
-        string Prompt(string question)
+        // WinForms has no InputBox. Returns null when cancelled, so "cleared to
+        // empty" and "left alone" stay distinguishable.
+        string Prompt(string question, string initial)
         {
             using (Form f = new Form())
             {
                 f.FormBorderStyle = FormBorderStyle.None;
                 f.StartPosition = FormStartPosition.CenterParent;
-                f.ClientSize = new Size(380, 130);
+                f.ClientSize = new Size(420, 140);
                 f.BackColor = Theme.Card;
 
                 Label q = Ui.MutedLabel(question, 16, 18, 8.25f);
-                q.MaximumSize = new Size(348, 0);
+                q.MaximumSize = new Size(388, 0);
                 f.Controls.Add(q);
 
                 TextBox t = new TextBox();
-                t.Location = new Point(16, 60);
-                t.Size = new Size(348, 22);
+                t.Location = new Point(16, 68);
+                t.Size = new Size(388, 22);
                 t.BorderStyle = BorderStyle.FixedSingle;
                 t.BackColor = Theme.Inset;
                 t.ForeColor = Theme.Text;
+                t.Text = initial ?? "";
                 f.Controls.Add(t);
 
-                Button ok = Ui.AccentButton("OK", 274, 92, 90, 26);
+                Button ok = Ui.AccentButton("OK", 224, 102, 90, 26);
                 ok.Font = new Font("Segoe UI", 8.25f, FontStyle.Bold);
                 ok.Click += delegate { f.DialogResult = DialogResult.OK; f.Close(); };
                 f.Controls.Add(ok);
                 f.AcceptButton = ok;
+
+                Button cancelBtn = Ui.AccentButton("Cancel", 314, 102, 90, 26);
+                cancelBtn.Font = new Font("Segoe UI", 8.25f, FontStyle.Bold);
+                cancelBtn.Click += delegate { f.DialogResult = DialogResult.Cancel; f.Close(); };
+                f.Controls.Add(cancelBtn);
 
                 return f.ShowDialog(this) == DialogResult.OK ? t.Text.Trim() : null;
             }
