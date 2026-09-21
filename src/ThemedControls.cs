@@ -300,9 +300,17 @@ namespace RobloxKeeper
 
         int selected = -1;
         bool hot;
-        // When the list last closed, so the click that closed it cannot
-        // immediately reopen it.
+
+        // The list currently on screen, if any. It is modeless: a modal one
+        // disables the owner window, which means a click on this control never
+        // arrives and the list can only be dismissed by picking a row.
+        PickerPopup openList;
+
+        // When a list last closed, so the click that closed it is not mistaken
+        // for a click asking to open a new one.
         DateTime closedAt = DateTime.MinValue;
+
+        static readonly TimeSpan ReopenGuard = TimeSpan.FromMilliseconds(250);
 
         public event EventHandler SelectedIndexChanged;
 
@@ -339,36 +347,59 @@ namespace RobloxKeeper
         protected override void OnMouseEnter(EventArgs e) { hot = true; Invalidate(); base.OnMouseEnter(e); }
         protected override void OnMouseLeave(EventArgs e) { hot = false; Invalidate(); base.OnMouseLeave(e); }
 
+        // Should this click open the list?
+        //
+        // No if one is already open - that click should close it. And no if a
+        // list closed a moment ago, because that is this same click arriving
+        // after the list dismissed itself on losing focus; acting on it would
+        // reopen the list instantly and it would never appear to close.
+        public static bool ShouldOpenOnClick(bool listOpen, TimeSpan sinceClosed, TimeSpan guard)
+        {
+            if (listOpen) return false;
+            return sinceClosed >= guard;
+        }
+
+        public bool IsListOpen { get { return openList != null; } }
+
+        void CloseList()
+        {
+            if (openList == null) return;
+            PickerPopup p = openList;
+            openList = null;
+            closedAt = DateTime.Now;
+            try { p.Close(); } catch { }
+            Invalidate();
+        }
+
         protected override void OnMouseDown(MouseEventArgs e)
         {
             base.OnMouseDown(e);
             if (Items.Count == 0) return;
 
-            // Clicking the picker while its list is open should shut it, the
-            // way every other dropdown behaves.
-            //
-            // That click already closes the list, because the popup dismisses
-            // itself when it loses activation - but the same click then arrives
-            // here and reopened it instantly, so the list never appeared to
-            // close and the only way out was to pick something. Ignoring a
-            // click that lands in the moment after a dismissal makes the two
-            // halves behave as one toggle.
-            if ((DateTime.Now - closedAt).TotalMilliseconds < 250) return;
+            if (openList != null) { CloseList(); return; }
+            if (!ShouldOpenOnClick(false, DateTime.Now - closedAt, ReopenGuard)) return;
 
-            using (PickerPopup pop = new PickerPopup(Items, selected, Width))
+            PickerPopup pop = new PickerPopup(Items, selected, Width);
+            pop.Location = PointToScreen(new Point(0, Height + 2));
+
+            // Flip above the control if the list would run off the screen.
+            Rectangle screen = Screen.FromControl(this).WorkingArea;
+            if (pop.Bottom > screen.Bottom)
+                pop.Location = PointToScreen(new Point(0, -pop.Height - 2));
+
+            // Chosen is the authority: a row was either clicked or it was not,
+            // and nothing about how the window closes can undo that.
+            pop.FormClosed += delegate
             {
-                pop.Location = PointToScreen(new Point(0, Height + 2));
-                // Flip above the control if the list would run off the screen.
-                Rectangle screen = Screen.FromControl(this).WorkingArea;
-                if (pop.Bottom > screen.Bottom)
-                    pop.Location = PointToScreen(new Point(0, -pop.Height - 2));
-                // Chosen is the authority, not DialogResult: a row was either
-                // clicked or it wasn't, and that fact cannot be undone by
-                // whatever the form's result ends up being as it closes.
-                pop.ShowDialog(FindForm());
                 if (pop.Chosen >= 0) SelectedIndex = pop.Chosen;
+                openList = null;
                 closedAt = DateTime.Now;
-            }
+                Invalidate();
+                pop.Dispose();
+            };
+
+            openList = pop;
+            pop.Show(FindForm());
             Invalidate();
         }
 
@@ -435,12 +466,10 @@ namespace RobloxKeeper
             // this handler used to overwrite the OK with a Cancel, throwing the
             // selection away. It depended on activation timing, so a dropdown
             // accepted roughly half the clicks made in it.
-            Deactivate += delegate
-            {
-                if (!ShouldCancelOnDeactivate) return;
-                DialogResult = DialogResult.Cancel;
-                Close();
-            };
+            // Clicking anywhere else dismisses the list. Modeless, so there
+            // is no DialogResult to set - Chosen already records whether a row
+            // was picked, and the owner reads it when the window closes.
+            Deactivate += delegate { Close(); };
         }
 
         // A choice has been recorded, so losing activation is the close we asked
@@ -486,7 +515,6 @@ namespace RobloxKeeper
             int i = IndexAt(e.Y);
             if (i < 0) return;
             Chosen = i;
-            DialogResult = DialogResult.OK;
             Close();
         }
 
