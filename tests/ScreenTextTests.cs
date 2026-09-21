@@ -83,6 +83,33 @@ namespace RobloxKeeper.Tests
             }
         }
 
+        // Chat is read line by line, so the line breaks are the point. Windows'
+        // own result text runs every line together with spaces - measured:
+        // three lines drawn, one line back - which would hand ChatFeed a whole
+        // chat box as a single message.
+        public static void TestEachLineOnScreenComesBackAsItsOwnLine()
+        {
+            if (!ScreenText.Available) return;
+
+            using (Bitmap bmp = new Bitmap(700, 200))
+            using (Graphics g = Graphics.FromImage(bmp))
+            {
+                g.Clear(Color.White);
+                using (Font f = new Font("Segoe UI", 24f))
+                {
+                    g.DrawString("hello there friend", f, Brushes.Black, 8, 10);
+                    g.DrawString("Restock: Rainbow Egg x3", f, Brushes.Black, 8, 70);
+                    g.DrawString("third line here", f, Brushes.Black, 8, 130);
+                }
+
+                string[] lines = ScreenText.Read(Pixels.FromBitmap(bmp)).Split('\n');
+                Assert.Equal(3, lines.Length, "three lines drawn, three lines read");
+                Assert.Contains("hello", lines[0], "the top line first");
+                Assert.Contains("Rainbow", lines[1], "the middle line on its own");
+                Assert.Contains("third", lines[2], "the bottom line last");
+            }
+        }
+
         // Reading is done several times a second, so the engine has to be
         // built once and kept, not rebuilt per call. Two reads in a row is
         // enough to catch it being disposed or recreated wrongly.

@@ -2,6 +2,7 @@ using System;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
+using System.Text;
 using System.Threading;
 using Windows.Foundation;
 using Windows.Globalization;
@@ -107,7 +108,17 @@ namespace RobloxKeeper
 
             BitmapDecoder decoder = Wait(BitmapDecoder.CreateAsync(ras));
             SoftwareBitmap software = Wait(decoder.GetSoftwareBitmapAsync());
-            return Wait(eng.RecognizeAsync(software)).Text;
+            OcrResult result = Wait(eng.RecognizeAsync(software));
+
+            // Line by line, not result.Text: that runs every line together with
+            // spaces, and chat is only readable as separate lines.
+            StringBuilder sb = new StringBuilder();
+            foreach (OcrLine line in result.Lines)
+            {
+                if (sb.Length > 0) sb.Append('\n');
+                sb.Append(line.Text);
+            }
+            return sb.ToString();
         }
 
         // Waiting on WinRT without the Task bridge.
