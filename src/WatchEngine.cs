@@ -167,7 +167,7 @@ namespace RobloxKeeper
         public Action<Watcher, WatchedClient, string> Problem;
 
         // Turns a stored picture name into pixels. Replaced in tests.
-        public Func<string, Pixels> LoadImage = LoadFromTemplates;
+        public Func<string, Pixels> LoadImage = LoadPicture;
 
         class Slot
         {
@@ -409,7 +409,7 @@ namespace RobloxKeeper
             lock (gate) images.Clear();
         }
 
-        static Pixels LoadFromTemplates(string file)
+        public static Pixels LoadPicture(string file)
         {
             try
             {
