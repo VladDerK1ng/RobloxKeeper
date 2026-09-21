@@ -138,7 +138,7 @@ namespace RobloxKeeper
     {
         // How much a projected region grows before it is read, to absorb the
         // drift no formula predicts. About a millisecond of extra reading.
-        const double WIDEN = 0.25;
+        public const double WIDEN = 0.25;
 
         readonly ICapture capture;
         readonly IReadText reader;
