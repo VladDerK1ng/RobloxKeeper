@@ -160,6 +160,97 @@ namespace RobloxKeeper
             });
         }
 
+        // Which installed versions are safe to remove.
+        //
+        // Roblox keeps every version it has ever installed - six of them, about
+        // 2 GB, on the machine this was written against. Deleting the wrong one
+        // makes Roblox reinstall, and its installer closes every open client,
+        // which is the most disruptive thing that can happen here. So three
+        // separate things are protected: the version the launch handler points
+        // at, any version a client is running right now, and the newest few,
+        // because Roblox serves different accounts different versions and
+        // throwing one away means downloading it again.
+        public static IList<string> DeletableVersions(IList<string> installed, string registered,
+                                                      IList<string> inUse, int keepNewest,
+                                                      Func<string, DateTime> installedAt)
+        {
+            List<string> safe = new List<string>();
+            if (installed == null || installed.Count == 0) return safe;
+
+            // Never leave the machine with no Roblox at all.
+            if (keepNewest < 1) keepNewest = 1;
+
+            List<string> byAge = new List<string>(installed);
+            byAge.Sort(delegate(string a, string b)
+            {
+                DateTime ta, tb;
+                try { ta = installedAt(a); } catch { ta = DateTime.MinValue; }
+                try { tb = installedAt(b); } catch { tb = DateTime.MinValue; }
+                return tb.CompareTo(ta);          // newest first
+            });
+
+            for (int i = 0; i < byAge.Count; i++)
+            {
+                string v = byAge[i];
+                if (i < keepNewest) continue;
+                if (string.Equals(v, registered, StringComparison.OrdinalIgnoreCase)) continue;
+
+                bool running = false;
+                if (inUse != null)
+                    foreach (string u in inUse)
+                        if (string.Equals(u, v, StringComparison.OrdinalIgnoreCase)) { running = true; break; }
+                if (running) continue;
+
+                safe.Add(v);
+            }
+            return safe;
+        }
+
+        // The same question against this machine, with the versions any running
+        // client is using worked out from the clients themselves.
+        public static IList<string> DeletableVersions(int keepNewest, IList<ClientInfo> clients)
+        {
+            List<string> inUse = new List<string>();
+            if (clients != null)
+                foreach (ClientInfo ci in clients)
+                {
+                    string v = VersionOfPid(ci.Pid);
+                    if (!string.IsNullOrEmpty(v) && v != "?") inUse.Add(v);
+                }
+
+            return DeletableVersions(InstalledVersionList(), LaunchPathVersion(), inUse, keepNewest,
+                delegate(string v)
+                {
+                    try { return File.GetLastWriteTimeUtc(Path.Combine(VersionsRoot, v, "RobloxPlayerBeta.exe")); }
+                    catch { return DateTime.MinValue; }
+                });
+        }
+
+        public static long VersionSize(string version)
+        {
+            long total = 0;
+            try
+            {
+                DirectoryInfo d = new DirectoryInfo(Path.Combine(VersionsRoot, version));
+                if (!d.Exists) return 0;
+                foreach (FileInfo f in d.GetFiles("*", SearchOption.AllDirectories)) total += f.Length;
+            }
+            catch { }
+            return total;
+        }
+
+        public static bool DeleteVersion(string version)
+        {
+            try
+            {
+                string dir = Path.Combine(VersionsRoot, version);
+                if (!Directory.Exists(dir)) return false;
+                Directory.Delete(dir, true);
+                return true;
+            }
+            catch { return false; }
+        }
+
         public static bool UsesLegacyBootstrapper()
         {
             string cmd = RobloxLaunchCommand().ToLowerInvariant();

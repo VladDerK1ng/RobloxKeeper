@@ -1,0 +1,139 @@
+using System;
+using System.Globalization;
+using System.Text.RegularExpressions;
+
+namespace RobloxKeeper
+{
+    struct RobloxLogEvent
+    {
+        public enum Kind { None, Joined, Disconnected, Hung }
+
+        public Kind Type;
+        public string PlaceId;
+        public int Reason;
+    }
+
+    // Reading what Roblox writes about itself.
+    //
+    // Roblox records exactly why a client dropped; the dialog it shows the user
+    // does not. An idle kick and a duplicate-login eviction both come up on
+    // screen as a lost connection, and they mean completely different things -
+    // one says the anti-AFK never reached that client, the other says two
+    // accounts are fighting over a single session. Guessing between them is
+    // what made the original problem take so long to find.
+    //
+    // Everything matched here was taken from real logs rather than invented.
+    static class RobloxLog
+    {
+        public static string LogsDir
+        {
+            get
+            {
+                return System.IO.Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "Roblox", "logs");
+            }
+        }
+
+        static readonly Regex JoinRx =
+            new Regex(@"! Joining game '[^']*' place (\d+)", RegexOptions.IgnoreCase);
+
+        // Three spellings, because the client reports a disconnect differently
+        // depending on whether the server sent it, the client sent it, or the
+        // client decided on its own (which is how the idle kick arrives).
+        static readonly Regex ReasonRx = new Regex(
+            @"(?:Disconnect reason received|Sending disconnect with reason|" +
+            @"setting replicator disconnect reason to)\s*:?\s*(\d+)",
+            RegexOptions.IgnoreCase);
+
+        public static RobloxLogEvent Parse(string line)
+        {
+            RobloxLogEvent e = new RobloxLogEvent();
+            if (string.IsNullOrEmpty(line)) return e;
+
+            if (line.IndexOf("HangMonitor", StringComparison.OrdinalIgnoreCase) >= 0 &&
+                line.IndexOf("Timeout", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                e.Type = RobloxLogEvent.Kind.Hung;
+                return e;
+            }
+
+            Match m = ReasonRx.Match(line);
+            if (m.Success)
+            {
+                e.Type = RobloxLogEvent.Kind.Disconnected;
+                int r;
+                if (int.TryParse(m.Groups[1].Value, out r)) e.Reason = r;
+                return e;
+            }
+
+            m = JoinRx.Match(line);
+            if (m.Success)
+            {
+                e.Type = RobloxLogEvent.Kind.Joined;
+                e.PlaceId = m.Groups[1].Value;
+                return e;
+            }
+
+            return e;
+        }
+
+        // Leaving a game on purpose is not a fault and must not be reported as
+        // one, or the log fills with alarming lines every time a client closes.
+        public static bool IsNormalExit(int reason)
+        {
+            return reason == 285;   // DisconnectClientInitiated
+        }
+
+        // What the code means, in words that say what to do about it.
+        public static string Explain(int reason)
+        {
+            switch (reason)
+            {
+                case 273:
+                    return "Roblox saw this account signed in from another device and dropped it. "
+                         + "Not your internet - this is what disconnect protection is for.";
+                case 277:
+                    return "Lost connection to the game server.";
+                case 278:
+                    return "Kicked for being idle. The anti-AFK nudge didn't reach this client - "
+                         + "check it's ticked in the Clients list.";
+                case 285:
+                    return "Left the game.";
+                case 264:
+                    return "The same account joined from somewhere else.";
+                case 267:
+                case 268:
+                    return "The game itself kicked this account.";
+                default:
+                    return "Roblox disconnected this client (reason " + reason + ").";
+            }
+        }
+
+        // Does this log file belong to a client that started at this time?
+        //
+        // The name carries a UTC timestamp of when the log opened, which is a
+        // moment after the process started, so a few seconds of slack is
+        // correct rather than sloppy.
+        public static bool LooksLikeSameSession(string fileName, DateTime startedUtc)
+        {
+            DateTime opened;
+            if (!TimestampOf(fileName, out opened)) return false;
+            double drift = (opened - startedUtc).TotalSeconds;
+            return drift >= -5 && drift <= 30;
+        }
+
+        public static bool TimestampOf(string fileName, out DateTime openedUtc)
+        {
+            openedUtc = DateTime.MinValue;
+            if (string.IsNullOrEmpty(fileName)) return false;
+
+            Match m = Regex.Match(fileName, @"(\d{8}T\d{6})Z");
+            if (!m.Success) return false;
+
+            return DateTime.TryParseExact(m.Groups[1].Value, "yyyyMMddTHHmmss",
+                CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
+                out openedUtc);
+        }
+    }
+}

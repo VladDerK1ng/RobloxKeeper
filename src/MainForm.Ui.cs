@@ -47,6 +47,9 @@ namespace RobloxKeeper
         const int COLUMN_BOTTOM = 720;
 
         const int ROW_H = 26;
+        // Roblox serves different accounts different client versions, so more
+        // than one recent version is worth keeping to avoid a re-download.
+        const int KEEP_NEWEST_VERSIONS = 2;
         // The multi-instance status row. Its height is whatever the status
         // label wraps to, so the dot and button are centred against that rather
         // than against a fixed number - the text is one line or two depending
@@ -665,6 +668,18 @@ namespace RobloxKeeper
             lblAct.BackColor = Theme.Inset;
             card.Controls.Add(lblAct);
 
+            // Housekeeping lives beside the log rather than taking a row of
+            // its own - there is no space left for one, and this is something
+            // you do once in a while, not every session.
+            LinkLabel lnkClean = Ui.RowLink("Free up disk", 246, Ui.TITLE_Y, Ui.TITLE_H, 8.25f);
+            lnkClean.BackColor = Theme.Inset;
+            lnkClean.Click += delegate { CleanOldVersions(); };
+            card.Controls.Add(lnkClean);
+            Explain(lnkClean,
+                "Roblox keeps every version it has ever installed. This removes the ones nothing "
+                + "is using - never the one Roblox launches, never one a client is running, and "
+                + "never the newest two, since accounts sometimes need different versions.");
+
             LinkLabel lnkCopy = Ui.RowLink("Copy log", 352, Ui.TITLE_Y);
             lnkCopy.Font = new Font("Segoe UI", 8.25f);
             Ui.CenterIn(lnkCopy, Ui.TITLE_Y, Ui.TITLE_H);
@@ -686,6 +701,46 @@ namespace RobloxKeeper
             rtbLog.ScrollBars = RichTextBoxScrollBars.Vertical;
             rtbLog.TabStop = false;
             card.Controls.Add(rtbLog);
+        }
+
+        // Removes installed Roblox versions nothing is using.
+        //
+        // Deleting the wrong one makes Roblox reinstall, and its installer
+        // closes every open client - so the rules in DeletableVersions are
+        // deliberately cautious, and the size is shown before anything goes.
+        void CleanOldVersions()
+        {
+            IList<string> spare = RobloxInstall.DeletableVersions(KEEP_NEWEST_VERSIONS, lastClients);
+            if (spare.Count == 0)
+            {
+                Log("Nothing to clean up - every installed Roblox version is either in use or recent.");
+                return;
+            }
+
+            long bytes = 0;
+            foreach (string v in spare) bytes += RobloxInstall.VersionSize(v);
+
+            string size = ClientTracker.FormatBytes(bytes);
+            if (MessageBox.Show(this,
+                    "Delete " + spare.Count + " old Roblox version(s) and free about " + size + "?\r\n\r\n"
+                    + "The version Roblox launches, any version a client is running, and the newest two "
+                    + "are all kept. If Roblox ever needs one of these again it downloads it.",
+                    "Free up disk", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+                return;
+
+            int removed = 0;
+            long freed = 0;
+            foreach (string v in spare)
+            {
+                long was = RobloxInstall.VersionSize(v);
+                if (!RobloxInstall.DeleteVersion(v)) continue;
+                removed++;
+                freed += was;
+            }
+
+            Log(removed > 0
+                ? "Removed " + removed + " old Roblox version(s) and freed " + ClientTracker.FormatBytes(freed) + "."
+                : "Could not remove those versions - Roblox may still have files open.");
         }
 
         // ---------- Tray ----------

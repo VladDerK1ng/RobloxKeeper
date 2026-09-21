@@ -1,0 +1,115 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+
+namespace RobloxKeeper
+{
+    // Follows Roblox's client logs and reports what actually happened.
+    //
+    // Roblox writes the real reason a client dropped and then shows the user a
+    // dialog that does not. This turns "it just disconnected" into "kicked for
+    // being idle" or "Roblox saw this account on another device", which are
+    // different problems with different fixes.
+    //
+    // Only new lines are ever read. On first sight of a file it seeks to the
+    // end, so starting the app does not replay hours of history, and each file
+    // is read from where it was left off rather than re-scanned - the logs from
+    // a long session run to tens of megabytes.
+    class RobloxLogWatch
+    {
+        // A file that has not been written to in this long is finished with.
+        const int STALE_SECONDS = 120;
+
+        public Action<string> Log;
+
+        // Which client a log belongs to, when that is known. Optional.
+        public Func<string, string> NameForLog;
+
+        readonly Dictionary<string, long> offsets = new Dictionary<string, long>();
+        readonly string dir;
+
+        public RobloxLogWatch() : this(RobloxLog.LogsDir) { }
+        public RobloxLogWatch(string dir) { this.dir = dir; }
+
+        public void Tick()
+        {
+            try
+            {
+                if (!Directory.Exists(dir)) return;
+                DateTime cutoff = DateTime.Now.AddSeconds(-STALE_SECONDS);
+
+                foreach (string path in Directory.GetFiles(dir, "*_Player_*.log"))
+                {
+                    FileInfo f = new FileInfo(path);
+                    if (f.LastWriteTime < cutoff) continue;
+                    ReadNew(f);
+                }
+            }
+            catch { }   // logs are Roblox's, and being unable to read them is not our problem
+        }
+
+        void ReadNew(FileInfo f)
+        {
+            long from;
+            bool known = offsets.TryGetValue(f.FullName, out from);
+
+            // First sight: start at the end. Anything already written happened
+            // before the app was watching and is not news.
+            if (!known) { offsets[f.FullName] = f.Length; return; }
+
+            // Roblox rotates a log by truncating it; start over rather than
+            // seeking past the end.
+            if (f.Length < from) from = 0;
+            if (f.Length == from) return;
+
+            try
+            {
+                using (FileStream fs = new FileStream(f.FullName, FileMode.Open,
+                           FileAccess.Read, FileShare.ReadWrite))
+                {
+                    fs.Seek(from, SeekOrigin.Begin);
+                    using (StreamReader r = new StreamReader(fs))
+                    {
+                        string line;
+                        while ((line = r.ReadLine()) != null) Report(f.Name, line);
+                        offsets[f.FullName] = fs.Position;
+                    }
+                }
+            }
+            catch
+            {
+                // Locked mid-write; try again on the next tick from the same
+                // place rather than losing our position.
+            }
+        }
+
+        void Report(string fileName, string line)
+        {
+            RobloxLogEvent e = RobloxLog.Parse(line);
+            if (e.Type == RobloxLogEvent.Kind.None) return;
+
+            string who = null;
+            if (NameForLog != null) { try { who = NameForLog(fileName); } catch { } }
+            string prefix = string.IsNullOrEmpty(who) ? "A client " : who + " ";
+
+            switch (e.Type)
+            {
+                case RobloxLogEvent.Kind.Joined:
+                    Log(prefix + "joined place " + e.PlaceId + ".");
+                    break;
+
+                case RobloxLogEvent.Kind.Hung:
+                    Log(prefix + "stopped responding and Roblox closed it. That's a hang, "
+                        + "not a disconnect - nothing on your end caused it.");
+                    break;
+
+                case RobloxLogEvent.Kind.Disconnected:
+                    // Leaving on purpose is not worth a line; every closed
+                    // client would produce one.
+                    if (RobloxLog.IsNormalExit(e.Reason)) break;
+                    Log(prefix + "was disconnected. " + RobloxLog.Explain(e.Reason));
+                    break;
+            }
+        }
+    }
+}

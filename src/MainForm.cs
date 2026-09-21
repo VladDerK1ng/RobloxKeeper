@@ -112,6 +112,9 @@ namespace RobloxKeeper
         // for clients this app launched, because that is the one moment the
         // account and the process id are both known.
         readonly ClientLabels clientLabels = new ClientLabels();
+        // Follows Roblox's own client logs so a disconnect can be explained
+        // rather than guessed at.
+        readonly RobloxLogWatch logWatch = new RobloxLogWatch();
         DateTime lastClientOpened = DateTime.MinValue;
         bool clientTrackingReady;
 
@@ -136,6 +139,8 @@ namespace RobloxKeeper
             perf.Log = Log;
             sessionLock.Log = Log;
             ghostWatch.IsTray = IsTrayProcess;
+            logWatch.Log = Log;
+            logWatch.NameForLog = NameForLog;
             updater = new Updater(this, Log);
 
             nudgeTimer = new System.Windows.Forms.Timer();
@@ -333,6 +338,9 @@ namespace RobloxKeeper
             // Two or more clients share one cookie jar and start overwriting
             // each other's session, which is what Roblox eventually evicts as a
             // duplicate device login. Holding the jar read-only stops that.
+            // What Roblox itself says happened to each client.
+            logWatch.Tick();
+
             sessionLock.Update(clients.Count);
             UpdateSessionLockStatus();
 
@@ -445,6 +453,24 @@ namespace RobloxKeeper
                    cmd.IndexOf("--launch-to-tray", StringComparison.OrdinalIgnoreCase) >= 0;
             trayPids[pid] = tray;
             return tray;
+        }
+
+        // Which client a log file belongs to, so an event can name it.
+        //
+        // The log's name carries the UTC time it opened, a moment after its
+        // process started, so the two are matched on that. A client the app
+        // did not launch has no account name and is simply not named.
+        string NameForLog(string logFileName)
+        {
+            foreach (ClientInfo ci in lastClients)
+            {
+                if (ci.Start == DateTime.MinValue) continue;
+                if (!RobloxLog.LooksLikeSameSession(logFileName, ci.Start.ToUniversalTime())) continue;
+
+                string account = clientLabels.NameFor(ci.Pid);
+                return string.IsNullOrEmpty(account) ? "Client " + ci.Pid : account;
+            }
+            return null;
         }
 
         static string GhostLabel(GhostWatch g)

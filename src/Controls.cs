@@ -271,6 +271,17 @@ namespace RobloxKeeper
         // A link centred in a row, instead of at a guessed offset. Every call
         // site used to add its own "+8" or "+9", which is where the one-pixel
         // drift between links and the labels beside them came from.
+        // Same, for a link that needs a different size from the one it would
+        // inherit. The font has to be set BEFORE the text is measured, or the
+        // box is sized for the wrong font and clips the label - which is how
+        // "Free up disk" first rendered as "Free up".
+        public static LinkLabel RowLink(string text, int x, int rowTop, int rowHeight, float fontSize)
+        {
+            LinkLabel l = RowLink(text, x, rowTop);
+            l.Font = new Font("Segoe UI", fontSize);
+            return SizeToRow(l, text, rowHeight);
+        }
+
         public static LinkLabel RowLink(string text, int x, int rowTop, int rowHeight)
         {
             LinkLabel l = RowLink(text, x, rowTop);
@@ -279,9 +290,14 @@ namespace RobloxKeeper
             // than auto-sized and then nudged. Deterministic: there is nothing
             // to measure and nothing to get wrong, which is how ColumnLink has
             // always done it.
+            return SizeToRow(l, text, rowHeight);
+        }
+
+        static LinkLabel SizeToRow(LinkLabel l, string text, int rowHeight)
+        {
             Size t = TextRenderer.MeasureText(text, l.Font);
             l.AutoSize = false;
-            l.Size = new Size(t.Width + 4, rowHeight);
+            l.Size = new Size(t.Width + 6, rowHeight);
             l.TextAlign = ContentAlignment.MiddleLeft;
             return l;
         }
