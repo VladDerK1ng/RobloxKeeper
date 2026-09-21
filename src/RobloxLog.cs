@@ -10,6 +10,11 @@ namespace RobloxKeeper
 
         public Kind Type;
         public string PlaceId;
+
+        // The server, not just the game. Roblox writes it on the same line,
+        // and it is what turns "a secret egg appeared" into a link you can
+        // press.
+        public string JobId;
         public int Reason;
     }
 
@@ -36,7 +41,7 @@ namespace RobloxKeeper
         }
 
         static readonly Regex JoinRx =
-            new Regex(@"! Joining game '[^']*' place (\d+)", RegexOptions.IgnoreCase);
+            new Regex(@"! Joining game '([^']*)' place (\d+)", RegexOptions.IgnoreCase);
 
         // Three spellings, because the client reports a disconnect differently
         // depending on whether the server sent it, the client sent it, or the
@@ -71,7 +76,8 @@ namespace RobloxKeeper
             if (m.Success)
             {
                 e.Type = RobloxLogEvent.Kind.Joined;
-                e.PlaceId = m.Groups[1].Value;
+                e.JobId = m.Groups[1].Value;
+                e.PlaceId = m.Groups[2].Value;
                 return e;
             }
 
@@ -121,6 +127,17 @@ namespace RobloxKeeper
             if (!TimestampOf(fileName, out opened)) return false;
             double drift = (opened - startedUtc).TotalSeconds;
             return drift >= -5 && drift <= 30;
+        }
+
+        // A link that opens this exact server rather than the game in general.
+        //
+        // Null unless both halves are known, because a link missing the server
+        // silently joins a different copy of the game - which looks exactly
+        // like the feature being broken.
+        public static string JoinLink(string placeId, string jobId)
+        {
+            if (string.IsNullOrEmpty(placeId) || string.IsNullOrEmpty(jobId)) return null;
+            return "roblox://experiences/start?placeId=" + placeId + "&gameInstanceId=" + jobId;
         }
 
         public static bool TimestampOf(string fileName, out DateTime openedUtc)

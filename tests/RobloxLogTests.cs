@@ -140,5 +140,41 @@ namespace RobloxKeeper.Tests
             Assert.False(RobloxLog.LooksLikeSameSession("notalog.txt", DateTime.UtcNow), "not a log");
             Assert.False(RobloxLog.LooksLikeSameSession(null, DateTime.UtcNow), "null");
         }
+
+        // The join line carries the server as well as the place. Keeping it is
+        // what lets a detection link back into the exact server it happened in.
+        public static void TestJoiningRecordsTheServerAsWellAsThePlace()
+        {
+            RobloxLogEvent e = RobloxLog.Parse(
+                "2026-09-21T11:49:33.123Z,0.123,abcd,6 [FLog::Output] ! Joining game " +
+                "'c1c5a3b9-4938-4cd8-9418-ca1a217858ae' place 107778070777162 at 10.30.4.209");
+            Assert.Equal(RobloxLogEvent.Kind.Joined, e.Type, "a join");
+            Assert.Equal("107778070777162", e.PlaceId, "the place");
+            Assert.Equal("c1c5a3b9-4938-4cd8-9418-ca1a217858ae", e.JobId, "the server");
+        }
+
+        public static void TestAJoinLineWithoutAServerStillParses()
+        {
+            RobloxLogEvent e = RobloxLog.Parse("! Joining game '' place 1234 at 10.0.0.1");
+            Assert.Equal(RobloxLogEvent.Kind.Joined, e.Type, "still a join");
+            Assert.Equal("1234", e.PlaceId, "the place survives");
+            Assert.Equal("", e.JobId, "no server, and that is not an error");
+        }
+
+        public static void TestAJoinLinkNamesBothThePlaceAndTheServer()
+        {
+            string link = RobloxLog.JoinLink("142823291", "55cf1f30-d19e-4a37-84aa-609ff3c1d3a0");
+            Assert.Contains("placeId=142823291", link, "the place");
+            Assert.Contains("gameInstanceId=55cf1f30-d19e-4a37-84aa-609ff3c1d3a0", link, "the server");
+        }
+
+        // A link that quietly dropped the server would drop you into a random
+        // copy of the game, which looks exactly like the feature being broken.
+        public static void TestThereIsNoJoinLinkWithoutAServer()
+        {
+            Assert.Equal(null, RobloxLog.JoinLink("142823291", null), "no server, no link");
+            Assert.Equal(null, RobloxLog.JoinLink(null, "abc"), "no place, no link");
+        }
+
     }
 }
