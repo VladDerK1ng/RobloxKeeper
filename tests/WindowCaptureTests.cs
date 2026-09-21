@@ -33,6 +33,44 @@ namespace RobloxKeeper.Tests
                 WindowCapture.StateOf(true, true, 1936, 1048), "nothing is being drawn");
         }
 
+        // What Windows actually reports for a minimized window, measured: a
+        // 160x28 rectangle parked at -32000,-32000. Checking the size first
+        // would call that "not in a game" and send the user off to wait for a
+        // client that is already in one.
+        public static void TestAMinimizedClientIsReportedAsMinimizedAtTheSizeWindowsGivesIt()
+        {
+            Assert.Equal(WatchState.Minimized,
+                WindowCapture.StateOf(true, true, 160, 28), "minimized, not still launching");
+        }
+
+        // Finding the window has the same trap: a minimized game window is
+        // small, and skipping small windows would lose it entirely.
+        public static void TestAMinimizedGameWindowIsStillFound()
+        {
+            Assert.True(WindowCapture.IsGameWindow("WINDOWSCLIENT", true, 160),
+                "the game, minimized");
+        }
+
+        public static void TestTheGameWindowIsFoundAtItsNormalSize()
+        {
+            Assert.True(WindowCapture.IsGameWindow("WINDOWSCLIENT", false, 1936), "the game");
+        }
+
+        // The tray host shares the process and the class is not the only
+        // thing that tells them apart.
+        public static void TestASmallWindowThatIsNotMinimizedIsNotTheGame()
+        {
+            Assert.False(WindowCapture.IsGameWindow("WINDOWSCLIENT", false, 16),
+                "a 16-pixel helper window");
+        }
+
+        public static void TestAnotherKindOfWindowIsNeverTheGame()
+        {
+            Assert.False(WindowCapture.IsGameWindow("SomethingElse", false, 1936),
+                "right size, wrong window");
+            Assert.False(WindowCapture.IsGameWindow(null, false, 1936), "no class at all");
+        }
+
         // A tray client has no game window at all.
         public static void TestAClientWithNoWindowCannotBeWatched()
         {

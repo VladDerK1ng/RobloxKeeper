@@ -68,11 +68,15 @@ namespace RobloxKeeper
         // Separated out so it can be tested, and because the answer has to
         // reach the user. A client that silently reports nothing forever
         // looks exactly like a watcher that does not work.
+        //
+        // Minimized is checked before size, because Windows reports a
+        // minimized window as a 160x28 rectangle - asking about the size first
+        // would call a client that is in a game "not in a game".
         public static WatchState StateOf(bool hasWindow, bool minimized, int width, int height)
         {
             if (!hasWindow) return WatchState.NotInAGame;
-            if (width < MIN_USEFUL_SIDE || height < MIN_USEFUL_SIDE) return WatchState.NotInAGame;
             if (minimized) return WatchState.Minimized;
+            if (width < MIN_USEFUL_SIDE || height < MIN_USEFUL_SIDE) return WatchState.NotInAGame;
             return WatchState.Watchable;
         }
 
@@ -116,11 +120,9 @@ namespace RobloxKeeper
                     uint owner;
                     Native.GetWindowThreadProcessId(hwnd, out owner);
                     if (owner != (uint)pid) return true;
-                    if (ClassOf(hwnd) != GAME_WINDOW_CLASS) return true;
-
                     RECT r;
                     if (!GetWindowRect(hwnd, out r)) return true;
-                    if (r.Right - r.Left < MIN_USEFUL_SIDE) return true;
+                    if (!IsGameWindow(ClassOf(hwnd), Native.IsIconic(hwnd), r.Right - r.Left)) return true;
 
                     found = hwnd;
                     return false;       // stop looking
@@ -129,6 +131,18 @@ namespace RobloxKeeper
             catch { return IntPtr.Zero; }
 
             return found;
+        }
+
+        // Whether one of a client's windows is its game window.
+        //
+        // The size check keeps out the small helper windows that share the
+        // class, but a minimized game window is small too, so being minimized
+        // is enough on its own. Losing it here would report a minimized client
+        // as not being in a game at all.
+        public static bool IsGameWindow(string className, bool minimized, int width)
+        {
+            if (className != GAME_WINDOW_CLASS) return false;
+            return minimized || width >= MIN_USEFUL_SIDE;
         }
 
         // The window's pixels, or null when there is nothing to take a
