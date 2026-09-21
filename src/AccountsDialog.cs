@@ -51,11 +51,13 @@ namespace RobloxKeeper
             Controls.Add(card);
 
             card.Controls.Add(Ui.SectionTitle("ACCOUNTS"));
-            card.Controls.Add(Ui.Subtitle("Each keeps its own sign-in - no five-account limit, no signing out"));
 
+            // No subtitle: the list takes the space instead of a line of text
+            // explaining what the window plainly is. It still ends where it
+            // always did, so nothing below moves.
             list = new ScrollPanel();
-            list.Location = new Point(Ui.PAD, 54);
-            list.Size = new Size(W - 24 - Ui.PAD * 2, 250);
+            list.Location = new Point(Ui.PAD, 44);
+            list.Size = new Size(W - 24 - Ui.PAD * 2, 260);
             list.BackColor = Theme.Card;
             list.AutoScroll = true;
             card.Controls.Add(list);

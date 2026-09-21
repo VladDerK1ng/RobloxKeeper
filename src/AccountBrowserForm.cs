@@ -133,11 +133,9 @@ namespace RobloxKeeper
             AddNav("Home", 162, delegate { Go(HOME_URL); });
             AddNav("Games", 232, delegate { Go(GAMES_URL); });
 
-            Label hint = Ui.MutedLabel(
-                "Find a game and press Play - it launches as " + accountName + ", not your main account.",
-                312, 12, 8.25f);
-            hint.BackColor = Theme.Card;
-            nav.Controls.Add(hint);
+            // No caption here. The window title already says which account this
+            // is, and the old line asserted it was not the user's main account
+            // - which it may well be.
         }
 
         void AddNav(string text, int x, EventHandler onClick)
