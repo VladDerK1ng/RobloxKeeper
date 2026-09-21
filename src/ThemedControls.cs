@@ -300,6 +300,9 @@ namespace RobloxKeeper
 
         int selected = -1;
         bool hot;
+        // When the list last closed, so the click that closed it cannot
+        // immediately reopen it.
+        DateTime closedAt = DateTime.MinValue;
 
         public event EventHandler SelectedIndexChanged;
 
@@ -340,6 +343,18 @@ namespace RobloxKeeper
         {
             base.OnMouseDown(e);
             if (Items.Count == 0) return;
+
+            // Clicking the picker while its list is open should shut it, the
+            // way every other dropdown behaves.
+            //
+            // That click already closes the list, because the popup dismisses
+            // itself when it loses activation - but the same click then arrives
+            // here and reopened it instantly, so the list never appeared to
+            // close and the only way out was to pick something. Ignoring a
+            // click that lands in the moment after a dismissal makes the two
+            // halves behave as one toggle.
+            if ((DateTime.Now - closedAt).TotalMilliseconds < 250) return;
+
             using (PickerPopup pop = new PickerPopup(Items, selected, Width))
             {
                 pop.Location = PointToScreen(new Point(0, Height + 2));
@@ -352,6 +367,7 @@ namespace RobloxKeeper
                 // whatever the form's result ends up being as it closes.
                 pop.ShowDialog(FindForm());
                 if (pop.Chosen >= 0) SelectedIndex = pop.Chosen;
+                closedAt = DateTime.Now;
             }
             Invalidate();
         }

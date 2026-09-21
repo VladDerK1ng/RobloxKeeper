@@ -62,8 +62,22 @@ namespace RobloxKeeper
 
         Panel titleBar;
 
+        // Hover explanations. The labels stay short enough to fit their rows,
+        // and the "what does this actually do" lives here instead of being
+        // squeezed into the label or left out entirely.
+        readonly ToolTip tips = new ToolTip();
+
+        void Explain(Control c, string text)
+        {
+            tips.SetToolTip(c, text);
+        }
+
         void BuildUi()
         {
+            tips.AutoPopDelay = 20000;
+            tips.InitialDelay = 400;
+            tips.ReshowDelay = 100;
+
             BuildTitleBar();
             BuildAfkCard();
             BuildClientsCard();
@@ -240,6 +254,12 @@ namespace RobloxKeeper
                         : "Nudges will happen on the interval regardless of what you're doing.");
                 SaveSettings();
             };
+            Explain(chkIdleOnly,
+                "A nudge has to bring a client to the front for about a third of a second, which in a "
+                + "game costs you the fight. With this on it waits for a pause first, and never "
+                + "interrupts a fullscreen game.\r\n\r\n"
+                + "The exception is a client about to hit Roblox's 20-minute idle kick - then it goes "
+                + "ahead anyway and warns you first.");
             card.Controls.Add(chkIdleOnly);
 
             // Used by the "Custom key" method. Offered as a list of keys known
@@ -330,7 +350,7 @@ namespace RobloxKeeper
             card.Controls.Add(clientsPanel);
 
             const int row = CLIENTS_H - 76;
-            chkAutoGhost = Ui.DarkCheck("Auto-clear ghosts", 18, row, 8.25f);
+            chkAutoGhost = Ui.DarkCheck("Auto-close leftovers", 18, row, 8.25f);
             chkAutoGhost.Checked = true;
             Ui.CenterIn(chkAutoGhost, row, ROW_H);
             chkAutoGhost.CheckedChanged += delegate
@@ -341,6 +361,10 @@ namespace RobloxKeeper
                         : "off."));
                 SaveSettings();
             };
+            Explain(chkAutoGhost,
+                "Roblox sometimes leaves a process running with no window after you close a client. "
+                + "Those hold memory and stop you opening new clients, so they're closed for you.\r\n\r\n"
+                + "Roblox's own tray process is recognised and never closed.");
             card.Controls.Add(chkAutoGhost);
 
             // Amber, not muted grey: "stuck" is a state that wants attention, and
@@ -348,7 +372,7 @@ namespace RobloxKeeper
             lblGhosts = Ui.RowLabel("", 166, row, ROW_H, 120, 8.25f, Theme.Amber);
             card.Controls.Add(lblGhosts);
 
-            btnZombie = Ui.AccentButton("End background", BTN_X, row, BTN_W, ROW_H);
+            btnZombie = Ui.AccentButton("Close leftovers", BTN_X, row, BTN_W, ROW_H);
             btnZombie.Font = new Font("Segoe UI", 8.25f, FontStyle.Bold);
             btnZombie.Visible = false;
             // Ends exactly what the counter beside it says is leaked, nothing
@@ -366,6 +390,9 @@ namespace RobloxKeeper
             btnAccounts = Ui.AccentButton("Accounts", BTN_X, accRow, BTN_W, ROW_H);
             btnAccounts.Font = new Font("Segoe UI", 8.25f, FontStyle.Bold);
             btnAccounts.Click += delegate { OpenAccounts(); };
+            Explain(btnAccounts,
+                "Save as many Roblox accounts as you like and launch them without signing out. "
+                + "Roblox itself only holds five.");
             card.Controls.Add(btnAccounts);
         }
 
@@ -433,13 +460,16 @@ namespace RobloxKeeper
 
             // A wider gap here than between the two dropdowns, so Eco reads as a
             // separate switch rather than a third field in the same group.
-            chkPerfEco = Ui.DarkCheck("Eco", 336, row1, 9f);
+            chkPerfEco = Ui.DarkCheck("Low power", 336, row1, 9f);
             Ui.CenterIn(chkPerfEco, row1, ROW_H);
             chkPerfEco.CheckedChanged += OnPerfDefaultsChanged;
+            Explain(chkPerfEco,
+                "Windows efficiency mode: the client uses less CPU and less battery. Good for accounts "
+                + "sitting in an AFK game, not for one you're playing.");
             card.Controls.Add(chkPerfEco);
 
             const int row2 = 88;
-            chkAutoTrim = Ui.DarkCheck("Auto-trim idle clients every", Ui.PAD, row2, 8.25f);
+            chkAutoTrim = Ui.DarkCheck("Free up memory every", Ui.PAD, row2, 8.25f);
             Ui.CenterIn(chkAutoTrim, row2, ROW_H);
             chkAutoTrim.CheckedChanged += delegate
             {
@@ -452,6 +482,9 @@ namespace RobloxKeeper
                         : "Auto-trim off.");
                 SaveSettings();
             };
+            Explain(chkAutoTrim,
+                "Hands memory a client isn't using back to Windows, on a timer. Safe to do while "
+                + "playing - it costs a brief hitch, and the client you're looking at is skipped.");
             card.Controls.Add(chkAutoTrim);
 
             numTrimEvery = Ui.DarkNumeric(188, row2, 46, 1, 120, 10);
@@ -465,7 +498,7 @@ namespace RobloxKeeper
 
             card.Controls.Add(Ui.RowLabel("min", 240, row2, ROW_H, 32, 8.25f, Theme.Muted));
 
-            btnTrimAll = Ui.AccentButton("Trim all now", BTN_X, row2, BTN_W, ROW_H);
+            btnTrimAll = Ui.AccentButton("Free memory now", BTN_X, row2, BTN_W, ROW_H);
             btnTrimAll.Font = new Font("Segoe UI", 8.25f, FontStyle.Bold);
             btnTrimAll.Click += delegate { OnTrimAllClicked(); };
             card.Controls.Add(btnTrimAll);
@@ -482,6 +515,9 @@ namespace RobloxKeeper
             btnApplyAll = Ui.AccentButton("Apply to all", BTN_X, row3, BTN_W, ROW_H);
             btnApplyAll.Font = new Font("Segoe UI", 8.25f, FontStyle.Bold);
             btnApplyAll.Click += delegate { OnApplyToAllClicked(); };
+            Explain(btnApplyAll,
+                "The settings above only reach clients opened from now on. This applies them to the "
+                + "ones already running too.");
             card.Controls.Add(btnApplyAll);
 
             // Capping a client's FPS is not reachable from outside the process -
@@ -489,7 +525,7 @@ namespace RobloxKeeper
             // client. Dropping priority and switching on EcoQoS for the clients
             // you are not looking at is, and it touches nothing on disk.
             const int row4 = 156;
-            chkThrottleBg = Ui.DarkCheck("Throttle clients I'm not using", Ui.PAD, row4, 8.25f);
+            chkThrottleBg = Ui.DarkCheck("Slow down clients I'm not using", Ui.PAD, row4, 8.25f);
             Ui.CenterIn(chkThrottleBg, row4, ROW_H);
             chkThrottleBg.CheckedChanged += delegate
             {
@@ -500,17 +536,24 @@ namespace RobloxKeeper
                         : "Background throttling off.");
                 SaveSettings();
             };
+            Explain(chkThrottleBg,
+                "Any client you're not looking at drops a step in priority and switches to efficiency "
+                + "mode. The one in front of you stays at full speed, and clients go back to normal "
+                + "the moment you switch to them.");
             card.Controls.Add(chkThrottleBg);
 
             btnAfkMode = Ui.AccentButton("AFK mode", BTN_X, row4, BTN_W, ROW_H);
             btnAfkMode.Font = new Font("Segoe UI", 8.25f, FontStyle.Bold);
             btnAfkMode.Click += delegate { OnAfkModeClicked(); };
+            Explain(btnAfkMode,
+                "Parks every client except the one you're playing, in one click. Press it again to put "
+                + "them all back.");
             card.Controls.Add(btnAfkMode);
 
             // A ceiling trims on the spot rather than waiting for the timer, for
             // the client that has quietly grown to three gigabytes.
             const int row5 = 190;
-            chkCeiling = Ui.DarkCheck("Trim any client over", Ui.PAD, row5, 8.25f);
+            chkCeiling = Ui.DarkCheck("Free memory over", Ui.PAD, row5, 8.25f);
             Ui.CenterIn(chkCeiling, row5, ROW_H);
             chkCeiling.CheckedChanged += delegate
             {
@@ -520,6 +563,9 @@ namespace RobloxKeeper
                         : "Memory ceiling off.");
                 SaveSettings();
             };
+            Explain(chkCeiling,
+                "Frees a client's unused memory as soon as it grows past this, instead of waiting "
+                + "for the timer.");
             card.Controls.Add(chkCeiling);
 
             numCeiling = Ui.DarkNumeric(150, row5, 62, 256, 16384, 2000);
@@ -581,6 +627,13 @@ namespace RobloxKeeper
             btnPauseLock = Ui.AccentButton("Pause 60s", BTN_X, lockRow, BTN_W, ROW_H);
             btnPauseLock.Font = new Font("Segoe UI", 8.25f, FontStyle.Bold);
             btnPauseLock.Click += delegate { OnPauseSessionLock(); };
+            Explain(lblSessionLock,
+                "Two Roblox accounts on one PC share a single login file, so they overwrite each "
+                + "other's session and Roblox knocks one offline - the \"lost connection\" kick.\r\n\r\n"
+                + "This stops that. It switches on by itself once two clients are open, and off again "
+                + "below two, because while it is on you can't sign in to a new account.");
+            Explain(btnPauseLock,
+                "Lets go for 60 seconds so you can sign in to Roblox, then switches back on by itself.");
             card.Controls.Add(btnPauseLock);
 
             // Only ever visible when the registration is actually dangling.
@@ -831,11 +884,11 @@ namespace RobloxKeeper
         {
             string text;
             if (sessionLock.Held)
-                text = "Session lock on - clients can't evict each other's Roblox session.";
+                text = "Disconnect protection on";
             else if (lastClients.Count < 2)
-                text = "Session lock idle - it arms itself at two clients.";
+                text = "Disconnect protection: on at 2 clients";
             else
-                text = "Session lock paused - sign in now; it re-arms by itself.";
+                text = "Paused 60s - sign in to Roblox now";
 
             if (lblSessionLock.Text != text) lblSessionLock.Text = text;
             btnPauseLock.Enabled = sessionLock.Held;

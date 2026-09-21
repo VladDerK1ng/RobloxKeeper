@@ -83,8 +83,8 @@ namespace RobloxKeeper
             if (Held)
             {
                 Release();
-                Log("Session lock paused for " + (int)duration.TotalSeconds +
-                    "s - sign in now; it re-arms by itself.");
+                Log("Disconnect protection paused for " + (int)duration.TotalSeconds +
+                    "s so you can sign in. It switches back on by itself.");
             }
         }
 
@@ -101,8 +101,7 @@ namespace RobloxKeeper
                 // FileAccess.Read + FileShare.Read: we read, others may read,
                 // nobody may write or delete.
                 handle = new FileStream(jarPath, FileMode.Open, FileAccess.Read, FileShare.Read);
-                Log("Session lock on - clients share the cookie jar read-only, " +
-                    "so neither can evict the other's session.");
+                Log("Disconnect protection on - your accounts can't knock each other offline.");
                 return true;
             }
             catch (Exception ex)
@@ -110,8 +109,8 @@ namespace RobloxKeeper
                 handle = null;
                 // An improvement, not a prerequisite. Multi-instance keeps
                 // working without it; the user just keeps the old risk.
-                Log("Could not hold the session lock (" + ex.Message +
-                    "). Multi-client sessions stay exposed to the duplicate-login disconnect.");
+                Log("Couldn't switch on disconnect protection (" + ex.Message +
+                    "). Everything still works; your accounts may knock each other offline.");
                 return false;
             }
         }
@@ -122,7 +121,7 @@ namespace RobloxKeeper
             try { handle.Dispose(); }
             catch { }
             handle = null;
-            Log("Session lock off - the cookie jar is writable again.");
+            Log("Disconnect protection off.");
         }
 
         void Backup()

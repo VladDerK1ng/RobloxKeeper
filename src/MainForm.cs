@@ -16,9 +16,11 @@ namespace RobloxKeeper
         public const int WIDTH_WITH_BUTTON = 238;
         public const int WIDTH_ALONE = 362;
 
-        public const string DISABLED = "Disabled - a new client replaces the running one.";
-        public const string ACTIVE = "Active - singleton mutex held. New clients stay open.";
-        public const string WAITING = "Waiting - a Roblox client owns the mutex. Close them all and I take over.";
+        // Said in terms of what the user gets, not how it works. "Singleton
+        // mutex" is the mechanism and belongs in the code, not on screen.
+        public const string DISABLED = "Off - opening Roblox closes the one already open.";
+        public const string ACTIVE = "On - you can keep several Roblox windows open at once.";
+        public const string WAITING = "Close every Roblox window once, then this switches on.";
 
         // The hint under the status. Both must fit one line at HINT_WIDTH - the
         // updating one in bold - or the card's bottom padding stops matching its
@@ -274,7 +276,7 @@ namespace RobloxKeeper
             if (chkMulti.Checked && keeper.Held && !heldLogged)
             {
                 heldLogged = true;
-                Log("Multi-instance active - singleton mutex acquired.");
+                Log("Multi-instance on - you can open several Roblox windows now.");
             }
             UpdateMultiStatus();
             btnCloseRbx.Visible = chkMulti.Checked && !keeper.Held;
