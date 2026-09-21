@@ -59,10 +59,27 @@ namespace RobloxKeeper
 
         public WatchRegion FindRegion(string placeId, string name)
         {
-            foreach (WatchRegion r in regions)
-                if (string.Equals(r.PlaceId, placeId, StringComparison.Ordinal) &&
+            return FindIn(regions, placeId, name);
+        }
+
+        // The same lookup over any list, so the watch thread can search a
+        // snapshot rather than the list the UI is editing.
+        public static WatchRegion FindIn(IEnumerable<WatchRegion> list, string placeId, string name)
+        {
+            if (list == null) return null;
+            foreach (WatchRegion r in list)
+                if (r != null &&
+                    string.Equals(r.PlaceId, placeId, StringComparison.Ordinal) &&
                     string.Equals(r.Name, name, StringComparison.OrdinalIgnoreCase)) return r;
             return null;
+        }
+
+        // Where a picture is kept. Stored as a bare name so the folder can be
+        // opened and looked at; a full path is used as it is.
+        public static string TemplatePath(string file)
+        {
+            if (string.IsNullOrEmpty(file)) return null;
+            return Path.IsPathRooted(file) ? file : Path.Combine(TemplatesDir, file);
         }
 
         public IList<WatchRegion> RegionsFor(string placeId)

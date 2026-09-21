@@ -194,6 +194,27 @@ namespace RobloxKeeper.Tests
             return r;
         }
 
+        // The watch thread searches a snapshot, not the list the UI is
+        // editing, so the same lookup has to work on any list.
+        public static void TestRegionsCanBeFoundInAnyList()
+        {
+            WatchRegion[] list = new WatchRegion[] { Region("banner", "111"), Region("chat", "111") };
+            Assert.Equal("chat", WatchStore.FindIn(list, "111", "CHAT").Name, "by name, any case");
+            Assert.Equal(null, WatchStore.FindIn(list, "222", "chat"), "not another game's");
+            Assert.Equal(null, WatchStore.FindIn(null, "111", "chat"), "no list at all");
+        }
+
+        // Pictures are stored by name and kept in one folder, so the folder can
+        // be opened and looked at. A full path is used as it is.
+        public static void TestAPictureNameIsLookedForInThePicturesFolder()
+        {
+            Assert.Equal(Path.Combine(WatchStore.TemplatesDir, "egg.png"),
+                WatchStore.TemplatePath("egg.png"), "in the folder");
+            Assert.Equal(@"C:\somewhere\egg.png",
+                WatchStore.TemplatePath(@"C:\somewhere\egg.png"), "a full path as it is");
+            Assert.Equal(null, WatchStore.TemplatePath(null), "nothing chosen");
+        }
+
         // On a machine whose locale writes 0,82 a stored tolerance would come
         // back as 82 and every image watcher would quietly stop matching.
         public static void TestADecimalSurvivesOnAnyLocale()
