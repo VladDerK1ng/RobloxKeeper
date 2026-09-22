@@ -5,7 +5,9 @@ using System.Windows.Forms;
 
 namespace RobloxKeeper
 {
-    enum MacroStepKind { Key, Click, Wait, Type }
+    // KeyDown and KeyUp are for keys held across other steps - walking while
+    // jumping. A key pressed and let go on its own is a Key.
+    enum MacroStepKind { Key, Click, Wait, Type, KeyDown, KeyUp }
 
     // One thing a macro does.
     class MacroStep
@@ -42,6 +44,20 @@ namespace RobloxKeeper
             return s;
         }
 
+        public static MacroStep KeyDown(byte vk)
+        {
+            MacroStep s = new MacroStep();
+            s.Kind = MacroStepKind.KeyDown; s.Vk = vk;
+            return s;
+        }
+
+        public static MacroStep KeyUp(byte vk)
+        {
+            MacroStep s = new MacroStep();
+            s.Kind = MacroStepKind.KeyUp; s.Vk = vk;
+            return s;
+        }
+
         public static MacroStep Wait(int ms)
         {
             MacroStep s = new MacroStep();
@@ -65,7 +81,8 @@ namespace RobloxKeeper
                     case MacroStepKind.Key: return HoldMs;
                     case MacroStepKind.Click: return CLICK_MS;
                     case MacroStepKind.Wait: return Ms;
-                    default: return (Text ?? "").Length * CHAR_MS;
+                    case MacroStepKind.Type: return (Text ?? "").Length * CHAR_MS;
+                    default: return 0;
                 }
             }
         }
@@ -82,6 +99,10 @@ namespace RobloxKeeper
                     return (RightButton ? "Right-click " : "Click ") + Percent(X) + " across, " + Percent(Y) + " down";
                 case MacroStepKind.Wait:
                     return "Wait " + Seconds(Ms);
+                case MacroStepKind.KeyDown:
+                    return "Hold down " + MacroKeys.Name(Vk);
+                case MacroStepKind.KeyUp:
+                    return "Let go of " + MacroKeys.Name(Vk);
                 default:
                     return "Type \"" + Text + "\"";
             }
