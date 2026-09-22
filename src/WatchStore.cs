@@ -17,6 +17,7 @@ namespace RobloxKeeper
     {
         public string Name;
         public readonly List<Watcher> Watchers = new List<Watcher>();
+        public readonly List<Rule> Rules = new List<Rule>();
 
         public WatchSetup(string name) { Name = name; }
     }
@@ -70,6 +71,7 @@ namespace RobloxKeeper
         // watchers goes through this, so choosing another setup changes all
         // of it at once.
         public IList<Watcher> Watchers { get { return chosen.Watchers; } }
+        public IList<Rule> Rules { get { return chosen.Rules; } }
         public IList<WatchRegion> Regions { get { return regions; } }
 
         // Never empty. Changed only through the methods below, which keep it
@@ -98,6 +100,10 @@ namespace RobloxKeeper
                     s.Watchers[i] = copy;
                     n++;
                 }
+            // Rules are only read on the UI thread, so they change in place.
+            foreach (WatchSetup s in setups)
+                foreach (Rule r in s.Rules)
+                    if (string.Equals(r.Macro, was, StringComparison.OrdinalIgnoreCase)) { r.Macro = now; n++; }
             return n;
         }
 
@@ -150,8 +156,11 @@ namespace RobloxKeeper
             if (SetupNameProblem(name, null) != null) return null;
             WatchSetup s = new WatchSetup(name.Trim());
             if (copyChosen)
+            {
                 foreach (Watcher w in chosen.Watchers)
                     s.Watchers.Add(DeserializeWatcher(SerializeWatcher(w)));
+                foreach (Rule r in chosen.Rules) s.Rules.Add(r.Copy());
+            }
             setups.Add(s);
             chosen = s;
             return s;
@@ -274,6 +283,17 @@ namespace RobloxKeeper
                         filling = new WatchSetup(Unescape(rest));
                         setups.Add(filling);
                     }
+                    else if (kind == "X|")
+                    {
+                        Rule r = DeserializeRule(rest);
+                        if (r == null) continue;
+                        if (filling == null)
+                        {
+                            filling = new WatchSetup(FirstSetupName);
+                            setups.Add(filling);
+                        }
+                        filling.Rules.Add(r);
+                    }
                     else if (kind == "C|") wanted = Unescape(rest);
                     else if (kind == "H|")
                     {
@@ -328,6 +348,7 @@ namespace RobloxKeeper
             {
                 sb.Append("S|").Append(Escape(s.Name)).Append('\n');
                 foreach (Watcher w in s.Watchers) sb.Append("W|").Append(SerializeWatcher(w)).Append('\n');
+                foreach (Rule r in s.Rules) sb.Append("X|").Append(SerializeRule(r)).Append('\n');
             }
 
             try
@@ -484,6 +505,53 @@ namespace RobloxKeeper
                 m.Steps.Add(s);
             }
             return m;
+        }
+
+        public static string SerializeRule(Rule r)
+        {
+            StringBuilder sb = new StringBuilder();
+            sb.Append(Escape(r.Name)).Append(FIELD);
+            sb.Append(r.Enabled ? "1" : "0").Append(FIELD);
+            sb.Append((int)r.When).Append(FIELD);
+            sb.Append(Escape(r.Watcher)).Append(FIELD);
+            sb.Append(Escape(r.FoundContains)).Append(FIELD);
+            sb.Append(r.EverySeconds).Append(FIELD);
+            sb.Append(r.HotkeyVk).Append(FIELD);
+            sb.Append((r.Ctrl ? 1 : 0) | (r.Alt ? 2 : 0) | (r.Shift ? 4 : 0)).Append(FIELD);
+            sb.Append(Escape(r.Macro)).Append(FIELD);
+            sb.Append(r.Times).Append(FIELD);
+            sb.Append(r.DelaySeconds).Append(FIELD);
+            sb.Append((int)r.On).Append(FIELD);
+            sb.Append(Escape(Join(r.Accounts))).Append(FIELD);
+            sb.Append(r.GapSeconds).Append(FIELD);
+            sb.Append(r.OnlyWhenAway ? "1" : "0");
+            return sb.ToString();
+        }
+
+        public static Rule DeserializeRule(string line)
+        {
+            if (string.IsNullOrEmpty(line)) return null;
+            string[] f = line.Split(FIELD);
+            if (f.Length < 9) return null;          // not a record we wrote
+
+            Rule r = new Rule();
+            r.Name = Unescape(f[0]);
+            r.Enabled = f[1] != "0";
+            r.When = (RuleWhen)ParseInt(f[2], 0);
+            r.Watcher = Blank(Unescape(f[3]));
+            r.FoundContains = Blank(Unescape(f[4]));
+            r.EverySeconds = ParseInt(f[5], 300);
+            r.HotkeyVk = (byte)ParseInt(f[6], 0x70);
+            int mods = ParseInt(f[7], 0);
+            r.Ctrl = (mods & 1) != 0; r.Alt = (mods & 2) != 0; r.Shift = (mods & 4) != 0;
+            r.Macro = Blank(Unescape(f[8]));
+            if (f.Length > 9) r.Times = Math.Max(1, ParseInt(f[9], 1));
+            if (f.Length > 10) r.DelaySeconds = ParseInt(f[10], 0);
+            if (f.Length > 11) r.On = (RuleOn)ParseInt(f[11], 0);
+            if (f.Length > 12) { string[] a = Split(Unescape(f[12])); r.Accounts = a.Length == 0 ? null : a; }
+            if (f.Length > 13) r.GapSeconds = ParseInt(f[13], 15);
+            if (f.Length > 14) r.OnlyWhenAway = f[14] == "1";
+            return r;
         }
 
         // ---------- field helpers ----------
