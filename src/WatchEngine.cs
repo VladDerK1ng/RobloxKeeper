@@ -253,7 +253,7 @@ namespace RobloxKeeper
 
         void RunChat(Watcher w, WatchedClient c, Slot slot, WatchCheck k, DateTime now)
         {
-            IList<string> fresh = slot.Chat.NewLines(k.Text);
+            IList<string> fresh = slot.Chat.NewLines(k.Text, now);
 
             // Whatever is in the box the first time it is read was said before
             // anyone was looking. Reporting it would send a burst of old

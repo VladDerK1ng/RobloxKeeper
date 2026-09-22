@@ -358,6 +358,23 @@ namespace RobloxKeeper.Tests
             Assert.Equal("restock", r.Found[0].Matched, "reported as what was asked for");
         }
 
+        // The owner's report, replayed: a whole-window chat watcher for
+        // "Secret", an old Secret line sitting in the chat, and the counters
+        // around it changing every scan. It sent the old line again and again.
+        public static void TestOldChatStaysQuietWhileTheScreenAroundItChanges()
+        {
+            Rig r = new Rig();
+            WatchedClient c = Client(100, "a");
+            Watcher w = Chat("Secret chat", "Secret");
+            for (int i = 0; i < 120; i++)
+            {
+                r.Reader.Text = "A Secret Kraken Egg spawned in Angels!\n+" + (i * 7919 % 1000) + "K\n"
+                              + (152 + i % 9) + "." + i % 10 + "B (x32)\nshop " + (char)('a' + i % 26) + (char)('a' + i * 7 % 26);
+                r.Pass(c, w);
+            }
+            Assert.Equal(0, r.Found.Count, "an old line is not news, however long it stays");
+        }
+
         // A different server is a different chat. What was said in the last
         // one must not make the same words in this one look old.
         public static void TestChatStartsOverWhenTheClientChangesServer()

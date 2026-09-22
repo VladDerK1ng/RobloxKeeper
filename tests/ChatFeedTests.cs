@@ -1,3 +1,5 @@
+using System;
+
 namespace RobloxKeeper.Tests
 {
     // Chat scrolls, fades, and OCR reads the same line slightly differently
@@ -118,6 +120,58 @@ namespace RobloxKeeper.Tests
             ChatFeed f = new ChatFeed();
             Assert.Equal(0, f.NewLines(null).Count, "nothing at all");
             Assert.Equal(0, f.NewLines("").Count, "an empty read");
+        }
+
+        // ---------- what happened live ----------
+
+        // A line of junk that looks like nothing else - the money pop-ups and
+        // counters a whole-window read picks up change every scan like this.
+        static string Junk(int i)
+        {
+            char[] c = new char[9];
+            uint x = (uint)(i * 2654435761u + 12345u);
+            for (int k = 0; k < c.Length; k++) { x = x * 1103515245u + 12345u; c[k] = (char)('a' + (x >> 16) % 26); }
+            return "+" + i + "K " + new string(c);
+        }
+
+        const string OldSecret = "A Secret Kraken Egg spawned in Angels!";
+
+        // Measured on the owner's client: a whole-window chat watcher also reads
+        // the counters and money pop-ups, 500 "new" lines in 90 seconds, and the
+        // Secret lines still on screen were pushed out of a memory kept in the
+        // order lines were first seen - then sent to Discord again, ten times.
+        public static void TestALineStillOnScreenIsNeverForgottenHoweverMuchElseTurnsUp()
+        {
+            ChatFeed f = new ChatFeed(5, 0.85);
+            f.NewLines(OldSecret);
+            int again = 0;
+            for (int i = 0; i < 20; i++)
+                foreach (string line in f.NewLines(OldSecret + "\n" + Junk(i)))
+                    if (line == OldSecret) again++;
+            Assert.Equal(0, again, "on screen the whole time, so never news again");
+        }
+
+        // The chat fades out when nobody is talking and comes back with the
+        // same lines in it, while the rest of the screen keeps changing.
+        public static void TestAChatThatFadesOutAndComesBackIsNotNews()
+        {
+            ChatFeed f = new ChatFeed();
+            DateTime t = new DateTime(2026, 9, 22, 13, 0, 0);
+            f.NewLines(OldSecret, t);
+            for (int i = 0; i < 360; i++)                       // three minutes of it, two a second
+                f.NewLines(Junk(i), t.AddMilliseconds(500 * (i + 1)));
+            Assert.Equal(0, f.NewLines(OldSecret, t.AddMinutes(3)).Count, "the same line, back again");
+        }
+
+        // Remembered for a while, not for ever: a line gone for longer than
+        // that is news if it turns up again.
+        public static void TestALineGoneLongerThanItIsRememberedIsNewAgain()
+        {
+            ChatFeed f = new ChatFeed(1000, 0.85, TimeSpan.FromMinutes(10));
+            DateTime t = new DateTime(2026, 9, 22, 13, 0, 0);
+            f.NewLines("hello there everyone", t);
+            Assert.Equal(0, f.NewLines("hello there everyone", t.AddMinutes(9)).Count, "still remembered");
+            Assert.Equal(1, f.NewLines("hello there everyone", t.AddMinutes(20)).Count, "eleven minutes away, and new");
         }
     }
 }
