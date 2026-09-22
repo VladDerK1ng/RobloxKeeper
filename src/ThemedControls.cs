@@ -345,7 +345,14 @@ namespace RobloxKeeper
         {
             base.OnMouseMove(e);
             int z = e.X >= Width - SPIN_W ? (e.Y < Height / 2 ? 1 : 2) : 0;
-            if (z != hotZone) { hotZone = z; Invalidate(); }
+            if (z == hotZone) return;
+            hotZone = z;
+            // Each arrow lights on its own, so it is obvious which one a
+            // click is about to hit. Started here, where the pointer moves,
+            // and never from the paint: asking for a paint from inside one
+            // repaints the control for as long as it is on screen.
+            Glow(upLit, hotZone == 1 ? 1 : 0);
+            Glow(downLit, hotZone == 2 ? 1 : 0);
         }
 
         readonly Anim hover = new Anim(0);
@@ -392,11 +399,6 @@ namespace RobloxKeeper
             Rectangle text = new Rectangle(0, 0, Width - SPIN_W, Height);
             TextRenderer.DrawText(g, value.ToString(), Font, text, ForeColor,
                 TextFormatFlags.VerticalCenter | TextFormatFlags.HorizontalCenter | TextFormatFlags.NoPadding);
-
-            // Each arrow lights on its own, so it is obvious which one a
-            // click is about to hit.
-            Glow(upLit, hotZone == 1 ? 1 : 0);
-            Glow(downLit, hotZone == 2 ? 1 : 0);
 
             int cx = Width - SPIN_W / 2 - 3;
             Draw.Chevron(g, cx, Height / 2 - 5, 3,
@@ -561,8 +563,8 @@ namespace RobloxKeeper
                 TextFormatFlags.EndEllipsis);
 
             // The chevron turns over as the list opens, so the control says
-            // which way it is about to go.
-            Glow(opened, IsListOpen ? 1 : 0);
+            // which way it is about to go. Started where the list opens and
+            // closes - never from here, or the control repaints for ever.
             Draw.Chevron(g, Width - BUTTON_W / 2 - 4, Height / 2, 4,
                 Anim.Blend(Theme.Muted, Theme.Text, hover.Value), opened.Value);
         }
@@ -772,7 +774,8 @@ namespace RobloxKeeper
         // stand out.
         bool busy;
         readonly Anim breath = new Anim(0);
-        bool breathingIn = true;
+
+        public bool Breathing { get { return breath.Running; } }
 
         public bool Busy
         {
@@ -795,8 +798,10 @@ namespace RobloxKeeper
         {
             if (!busy) return;
             if (!Animator.MotionWanted) return;
-            breathingIn = !breathingIn;
-            breath.To(breathingIn ? 1 : 0, TimeSpan.FromMilliseconds(900), DateTime.Now);
+            // Towards whichever end it is not at. A flag of its own for which
+            // way it was going started out of step - its first breath asked to
+            // go where it already was, which is nothing, so it never moved.
+            breath.To(breath.FarEndFrom(0, 1), TimeSpan.FromMilliseconds(900), DateTime.Now);
             Animator.Run(this, breath, OnBreathFrame);
         }
 

@@ -223,7 +223,13 @@ namespace RobloxKeeper
 
         static void Step(object sender, EventArgs e)
         {
-            DateTime now = DateTime.Now;
+            if (!StepAt(DateTime.Now)) timer.Enabled = false;
+        }
+
+        // One frame of everything, at this moment. True while anything is
+        // still moving, which is what keeps the timer on.
+        public static bool StepAt(DateTime now)
+        {
             bool anythingMoving = false;
 
             for (int i = entries.Count - 1; i >= 0; i--)
@@ -237,11 +243,16 @@ namespace RobloxKeeper
                 // Ticked either way, and the frame is drawn either way - the
                 // last one is what settles the control on its exact final
                 // appearance rather than a frame short of it.
-                if (entry.Anim.Tick(now)) anythingMoving = true;
+                entry.Anim.Tick(now);
                 Frame(entry);
+
+                // Asked after the frame, not before: a frame can start the
+                // next movement - a pulse turning round - and deciding first
+                // switched the timer off with that movement already under way.
+                if (entry.Anim.Running) anythingMoving = true;
             }
 
-            if (!anythingMoving) timer.Enabled = false;
+            return anythingMoving;
         }
 
         static void Frame(Entry entry)
