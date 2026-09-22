@@ -499,6 +499,9 @@ namespace RobloxKeeper
                 s = new Slot();
                 s.Fire = w.NewFireControl();
                 s.Chat = new ChatFeed();
+                // A chat watcher's word is what tells one of its messages from
+                // another, however differently a message is read each scan.
+                s.Chat.Anchor = BlankToNull(w.ChatContains);
                 mine[w] = s;
             }
             return s;

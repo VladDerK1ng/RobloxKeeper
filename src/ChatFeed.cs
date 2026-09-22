@@ -64,7 +64,65 @@ namespace RobloxKeeper
             this.remember = remember;
         }
 
+        // The word a watcher is looking for, or null for every line. With one,
+        // only lines containing it are considered at all, and two readings are
+        // compared by what sits next to it - see SameMessage.
+        public string Anchor;
+
         public void Clear() { seen.Clear(); }
+
+        // Are two readings the same message? Judged by the few characters on
+        // either side of the watched-for word, with spacing and punctuation set
+        // aside.
+        //
+        // Measured on the owner's client: one chat line came back as "A Secret
+        // Pure Jellyfish Egg spawned In Angels--!", "o: Secret Pure Jellyfish
+        // Egg", and more, as the chat changed look - words dropped, junk on the
+        // ends, "RazorFang" read as "Razor Fang". Whole lines that different
+        // cannot be matched, and loosening the match would merge different
+        // eggs, which share most of their line. What does hold still is what
+        // sits right next to the word - "krakenegg", "purejellyfish" - and that
+        // is also exactly what tells one egg from another.
+        //
+        // Eight characters each side are compared, one misread allowed. Fewer
+        // than three on a side is no evidence either way, which is what lets a
+        // stray "o:" or a missing "A" through.
+        const int CONTEXT = 8;
+
+        public static bool SameMessage(string a, string b, string anchor)
+        {
+            string ca = Core(a), cb = Core(b), cw = Core(anchor);
+            if (cw.Length == 0) return false;
+            int ia = ca.IndexOf(cw, StringComparison.Ordinal);
+            int ib = cb.IndexOf(cw, StringComparison.Ordinal);
+            if (ia < 0 || ib < 0) return false;
+            return Agree(ca, ia - 1, cb, ib - 1, -1)
+                && Agree(ca, ia + cw.Length, cb, ib + cw.Length, 1);
+        }
+
+        static bool Agree(string a, int i, string b, int j, int step)
+        {
+            int roomA = step > 0 ? a.Length - i : i + 1;
+            int roomB = step > 0 ? b.Length - j : j + 1;
+            int n = Math.Min(CONTEXT, Math.Min(roomA, roomB));
+            if (n < 3) return true;
+
+            int wrong = 0;
+            for (int k = 0; k < n; k++)
+                if (a[i + k * step] != b[j + k * step]) wrong++;
+            return wrong <= 1;
+        }
+
+        // Letters and digits only, lower case: what readings of one line agree
+        // on once spacing and stray punctuation are set aside.
+        static string Core(string s)
+        {
+            StringBuilder sb = new StringBuilder();
+            if (s != null)
+                foreach (char c in s.ToLowerInvariant())
+                    if (char.IsLetterOrDigit(c)) sb.Append(c);
+            return sb.ToString();
+        }
 
         public IList<string> NewLines(string ocrText)
         {
@@ -83,6 +141,8 @@ namespace RobloxKeeper
             {
                 string line = raw.Trim();
                 if (line.Length < MinLineLength) continue;
+                if (!string.IsNullOrEmpty(Anchor) && Anchor.Trim().Length > 0 &&
+                    line.IndexOf(Anchor.Trim(), StringComparison.OrdinalIgnoreCase) < 0) continue;
 
                 string key = Normalise(line);
                 if (key.Length == 0) continue;
@@ -102,8 +162,11 @@ namespace RobloxKeeper
         string Known(string key)
         {
             if (seen.ContainsKey(key)) return key;
+            bool anchored = !string.IsNullOrEmpty(Anchor) && Anchor.Trim().Length > 0;
             foreach (string old in seen.Keys)
             {
+                if (anchored && SameMessage(old, key, Anchor)) return old;
+
                 // Lines too different in length cannot reach the threshold,
                 // and skipping them keeps a long memory cheap to search.
                 int shorter = Math.Min(old.Length, key.Length), longer = Math.Max(old.Length, key.Length);

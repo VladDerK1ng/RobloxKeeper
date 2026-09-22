@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace RobloxKeeper.Tests
 {
@@ -161,6 +162,71 @@ namespace RobloxKeeper.Tests
             for (int i = 0; i < 360; i++)                       // three minutes of it, two a second
                 f.NewLines(Junk(i), t.AddMilliseconds(500 * (i + 1)));
             Assert.Equal(0, f.NewLines(OldSecret, t.AddMinutes(3)).Count, "the same line, back again");
+        }
+
+        // ---------- one message, read many ways ----------
+
+        // Every reading below is real: sent to the owner's Discord or logged
+        // live, five eggs read fourteen ways as the chat switched between its
+        // dark panel and see-through. Words dropped, junk on either end, a
+        // name split in two. Five eggs is five messages.
+        static readonly string[] ReadingsOfFiveEggs = {
+            "A Secret Pure Jellyfish Egg spawned In Angels--!",
+            "A Secret RazorFang Egg spawned in",
+            "A Secret Kraken Egg s>awne€d in",
+            "o: Secret Pure Jellyfish Egg",
+            "A Secret Cerberus Egg spawned in",
+            "Secret Razor Fang Egg-4$4'ONiFg$_l",
+            "A Secret Kraken Egg spawnedin",
+            "A Secret Centaur Egg spawned in Angels. a!",
+            "A Secret Pure Jellyfish Egg spawne€d in Angels. a!",
+            "Secret Kraken Egg 'if' Abyss Ocem",
+            "Secret Cerberus Egg",
+            "A Secret Centaur Egg in Angels. a!",
+            "A Secret RazorFang Egg spawned in",
+            "Secret Pure Jellyfish Egg"
+        };
+
+        public static void TestOneMessageReadManyWaysIsReportedOnce()
+        {
+            ChatFeed f = new ChatFeed();
+            f.Anchor = "Secret";
+            int reported = 0;
+            foreach (string reading in ReadingsOfFiveEggs) reported += f.NewLines(reading).Count;
+            Assert.Equal(5, reported, "one report per egg, not one per reading");
+        }
+
+        // The other side of it, and the one that matters more: different eggs
+        // share most of their line, and must never merge into one.
+        public static void TestDifferentEggsAreStillDifferentMessages()
+        {
+            Assert.False(ChatFeed.SameMessage("A Secret Kraken Egg spawned in Angels!",
+                "A Secret Centaur Egg spawned in Angels!", "Secret"), "a different egg in the same place");
+            Assert.False(ChatFeed.SameMessage("A Secret Kraken Egg spawned in Angels!",
+                "A Secret Kraken Lord Egg spawned in Angels!", "Secret"), "a name that only starts the same");
+            Assert.True(ChatFeed.SameMessage("A Secret RazorFang Egg spawned in",
+                "Secret Razor Fang Egg-4$4'ONiFg$_l", "Secret"), "the same egg, read badly");
+        }
+
+        // Where the word being watched for comes after the name - "spawned" -
+        // it is what comes before it that tells eggs apart.
+        public static void TestEggsAreToldApartWhicheverSideOfTheWordTheNameIs()
+        {
+            Assert.False(ChatFeed.SameMessage("A Secret Kraken Egg spawned in Angels!",
+                "A Secret Centaur Egg spawned in Angels!", "spawned"), "different eggs");
+            Assert.True(ChatFeed.SameMessage("A Secret Kraken Egg spawned in Angels!",
+                "A Secret Kraken Egg spawnedin", "spawned"), "the same egg");
+        }
+
+        // A watcher with a word only ever reports lines with that word, so
+        // lines without it are not even remembered.
+        public static void TestAFeedWatchingForAWordOnlyReportsLinesWithIt()
+        {
+            ChatFeed f = new ChatFeed();
+            f.Anchor = "restock";
+            IList<string> fresh = f.NewLines("bob: hi there\n[SERVER] Restock: Rainbow Egg x3");
+            Assert.Equal(1, fresh.Count, "only the restock line");
+            Assert.Contains("Rainbow", fresh[0], "and it is that one");
         }
 
         // Remembered for a while, not for ever: a line gone for longer than

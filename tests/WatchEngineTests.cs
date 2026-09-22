@@ -375,6 +375,33 @@ namespace RobloxKeeper.Tests
             Assert.Equal(0, r.Found.Count, "an old line is not news, however long it stays");
         }
 
+        // The owner's second report, replayed through the engine: the same five
+        // Secret eggs sitting in chat, read a different way on each pass as
+        // the chat changed look. Five eggs, five messages - not a stream.
+        public static void TestTheSameEggsReadDifferentlyEachPassAreReportedOnceEach()
+        {
+            Rig r = new Rig();
+            WatchedClient c = Client(100, "a");
+            Watcher w = Chat("Secret chat", "Secret");
+
+            string[][] passes = {
+                new string[] { "A Secret Pure Jellyfish Egg spawned In Angels--!", "A Secret Kraken Egg s>awne€d in" },
+                new string[] { "A Secret RazorFang Egg spawned in", "A Secret Cerberus Egg spawned in", "A Secret Centaur Egg spawned in Angels. a!" },
+                new string[] { "o: Secret Pure Jellyfish Egg", "Secret Razor Fang Egg-4$4'ONiFg$_l", "Secret Kraken Egg 'if' Abyss Ocem" },
+                new string[] { "Secret Cerberus Egg", "A Secret Centaur Egg in Angels. a!", "A Secret Kraken Egg spawnedin" },
+                new string[] { "A Secret Pure Jellyfish Egg spawne€d in Angels. a!", "Secret Pure Jellyfish Egg" }
+            };
+
+            r.Reader.Text = "";
+            r.Pass(c, w);                                   // watching starts on an empty chat
+            foreach (string[] lines in passes)
+            {
+                r.Reader.Text = string.Join("\n", lines);
+                r.Pass(c, w);
+            }
+            Assert.Equal(5, r.Found.Count, "one message per egg");
+        }
+
         // A different server is a different chat. What was said in the last
         // one must not make the same words in this one look old.
         public static void TestChatStartsOverWhenTheClientChangesServer()
