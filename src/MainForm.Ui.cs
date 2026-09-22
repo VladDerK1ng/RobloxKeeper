@@ -367,7 +367,8 @@ namespace RobloxKeeper
             Explain(chkAutoGhost,
                 "Roblox sometimes leaves a process running with no window after you close a client. "
                 + "Those hold memory and stop you opening new clients, so they're closed for you.\r\n\r\n"
-                + "Roblox's own tray process is recognised and never closed.");
+                + "Roblox also starts a copy of itself in the tray every time a client closes and never ends "
+                + "them; once one has sat there as long, it is closed too.");
             card.Controls.Add(chkAutoGhost);
 
             // Amber, not muted grey: "stuck" is a state that wants attention, and
@@ -380,7 +381,7 @@ namespace RobloxKeeper
             btnZombie.Visible = false;
             // Ends exactly what the counter beside it says is leaked, nothing
             // more. "Close all Roblox" is the button for ending everything.
-            btnZombie.Click += delegate { ghostCleaner.Clear(ghostWatch.Stuck, ghostWatch); };
+            btnZombie.Click += delegate { ghostCleaner.Clear(ghostWatch.Leftovers, ghostWatch); };
             card.Controls.Add(btnZombie);
 
             // Roblox stores five accounts and makes you sign out to switch.

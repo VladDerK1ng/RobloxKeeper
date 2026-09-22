@@ -307,14 +307,17 @@ namespace RobloxKeeper
             // Only offered for genuinely leaked processes. Showing it while a
             // client is still launching invites the user to kill the client they
             // just opened.
-            btnZombie.Visible = ghostWatch.Stuck.Count > 0;
+            btnZombie.Visible = ghostWatch.Leftovers.Count > 0;
 
             // A process whose window has been gone this long is leaked memory
             // whether or not multi-instance is on and whether or not we hold the
             // mutex, so nothing else gates this. Anything that has shown a window
             // recently is not in the list.
-            if (chkAutoGhost.Checked && ghostWatch.Stuck.Count > 0)
-                ghostCleaner.Clear(ghostWatch.Stuck, ghostWatch);
+            // Tray copies Roblox leaves behind count as leftovers once idle
+            // that long too - measured, four at once and 155-271 MB each, and
+            // hunting closes a client a minute.
+            if (chkAutoGhost.Checked && ghostWatch.Leftovers.Count > 0)
+                ghostCleaner.Clear(ghostWatch.Leftovers, ghostWatch);
 
             // Asked once and reused: ForegroundPid is a pair of Win32 calls,
             // and three features below all want the same answer.

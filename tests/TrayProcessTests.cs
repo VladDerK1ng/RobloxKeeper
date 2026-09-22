@@ -81,6 +81,38 @@ namespace RobloxKeeper.Tests
             Assert.Equal(1, w.Tray, "it is in the tray");
         }
 
+        // The owner's report: "auto close leftovers doesn't close them". Seen
+        // live on 2026-09-22 - four tray copies, one per client closed, each
+        // with its own exited parent and 155-271 MB, all left alone because a
+        // tray copy was never a leftover. Hunting closes a client a minute, so
+        // they would pile up by the dozen. A tray copy left idle for the same
+        // grace period a leak gets is a leftover too.
+        public static void TestATrayCopyLeftIdleIsALeftoverToEnd()
+        {
+            DateTime[] now = { new DateTime(2026, 9, 22, 18, 30, 0) };
+            GhostWatch w = Watch(now);
+            w.IsTray = delegate(int pid) { return pid == 29588 || pid == 4104; };
+
+            RunPastGrace(w, now, L(), L(29588, 4104, 999));
+
+            Assert.Equal(1, w.Stuck.Count, "the leak is still the only thing called stuck");
+            Assert.Equal(2, w.TrayLeftovers.Count, "both idle tray copies are leftovers");
+            Assert.Equal(3, w.Leftovers.Count, "and auto-close ends all three");
+        }
+
+        // One that appeared a moment ago - a client just closed - is left for
+        // the grace period like anything else, in case Roblox is using it.
+        public static void TestAFreshTrayCopyIsNotYetALeftover()
+        {
+            DateTime[] now = { new DateTime(2026, 9, 22, 18, 30, 0) };
+            GhostWatch w = Watch(now);
+            w.IsTray = delegate(int pid) { return pid == 29588; };
+
+            w.Update(L(), L(29588));
+            Assert.Equal(0, w.Leftovers.Count, "just appeared");
+            Assert.Equal(1, w.Tray, "counted as in the tray");
+        }
+
         public static void TestWithoutTheTrayTestNothingChanges()
         {
             // IsTray unset must behave exactly as before, so the classification

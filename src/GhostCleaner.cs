@@ -59,7 +59,7 @@ namespace RobloxKeeper
             }
 
             if (killed.Count > 0)
-                Log("Ended " + killed.Count + " leaked Roblox process(es): " +
+                Log("Ended " + killed.Count + " leftover Roblox process(es): " +
                     string.Join(", ", killed.ToArray()) + ".");
 
             // Retrying every second and complaining every second are different

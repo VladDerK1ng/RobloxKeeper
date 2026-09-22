@@ -28,18 +28,37 @@ namespace RobloxKeeper
 
         readonly Dictionary<int, Sighting> windowless = new Dictionary<int, Sighting>();
         readonly List<int> stuck = new List<int>();
+        readonly List<int> trayLeftovers = new List<int>();
 
         // Swapped out by the tests so grace periods don't take real minutes.
         public Func<DateTime> Clock = delegate { return DateTime.Now; };
 
         // Tells Roblox's own tray process from a leaked one. Closing a client
-        // makes Roblox relaunch itself window-less with --launch-to-tray; that
-        // process is legitimate, so condemning it means killing something the
-        // user's Roblox deliberately started. Unset, everything behaves as it
-        // did before.
+        // makes Roblox relaunch itself window-less with --launch-to-tray. That
+        // is not stuck - Roblox meant to start it - so it is never called
+        // stuck; but one left idle past the grace period is a leftover, and is
+        // listed in TrayLeftovers. Unset, everything behaves as it did before.
         public Func<int, bool> IsTray;
 
         public IList<int> Stuck { get { return stuck; } }
+
+        // Tray copies left idle for as long as a leak is given. Roblox starts
+        // one each time a client closes and never ends them; measured, four at
+        // once, 155-271 MB each. They are not stuck - Roblox meant to start
+        // them - but they are left over, and closing leftovers is what the
+        // user asked for.
+        public IList<int> TrayLeftovers { get { return trayLeftovers; } }
+
+        // Everything "close leftovers" ends: leaks and idle tray copies.
+        public IList<int> Leftovers
+        {
+            get
+            {
+                List<int> all = new List<int>(stuck);
+                all.AddRange(trayLeftovers);
+                return all;
+            }
+        }
         public int Starting { get; private set; }
         public int Tray { get; private set; }
         public int Total { get { return stuck.Count + Starting; } }
@@ -69,6 +88,7 @@ namespace RobloxKeeper
         public void Update(IList<int> withWindow, IList<int> withoutWindow)
         {
             stuck.Clear();
+            trayLeftovers.Clear();
             Starting = 0;
             Tray = 0;
 
@@ -89,7 +109,12 @@ namespace RobloxKeeper
                 // Resident by design, not launching and not leaked. Counted
                 // separately because it does hold the singleton mutex, which is
                 // why multi-instance looks stuck after closing every client.
-                if (IsTray != null && IsTray(pid)) { Tray++; continue; }
+                if (IsTray != null && IsTray(pid))
+                {
+                    Tray++;
+                    if (IsLeaked(s)) trayLeftovers.Add(pid);
+                    continue;
+                }
 
                 if (IsLeaked(s)) stuck.Add(pid);
                 else Starting++;
