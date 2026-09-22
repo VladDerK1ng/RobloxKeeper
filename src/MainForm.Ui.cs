@@ -119,24 +119,14 @@ namespace RobloxKeeper
             chkAutostart.BackColor = Theme.Bg;
             chkAutostart.Location = new Point(AUTOSTART_RIGHT - chkAutostart.PreferredSize.Width,
                                               (TITLEBAR_H - chkAutostart.PreferredSize.Height) / 2);
-            bool autostartOn = false;
-            try
-            {
-                using (RegistryKey k = Registry.CurrentUser.OpenSubKey(RUN_KEY, true))
-                {
-                    object val = k != null ? k.GetValue(AUTOSTART_VALUE) : null;
-                    autostartOn = val != null;
-                    // Self-heal entries from older versions (no --minimized flag)
-                    // or after the exe was moved.
-                    string want = "\"" + Application.ExecutablePath + "\" --minimized";
-                    if (autostartOn && (val as string) != want)
-                        k.SetValue(AUTOSTART_VALUE, want);
-                }
-            }
-            catch { }
-            chkAutostart.Checked = autostartOn;
             chkAutostart.CheckedChanged += OnAutostartToggled;
+            Explain(chkAutostart,
+                "Starts RobloxKeeper in the tray the moment you sign in to Windows - ahead of other startup apps, "
+                + "the way Wallpaper Engine's high-priority start does - so it holds Roblox's lock before any "
+                + "client opens. No administrator rights needed.");
             titleBar.Controls.Add(chkAutostart);
+            // Checked once the window exists (OnHandleCreated): the answer is
+            // handed back to it, and before then there is nothing to hand it to.
 
             // 32px tall in a 44px bar: without centring they sat 6px above the
             // title text beside them.

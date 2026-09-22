@@ -33,8 +33,11 @@ namespace RobloxKeeper
             appMutex = new Mutex(true, APP_MUTEX, out createdNew);
             if (!createdNew)
             {
-                Native.AllowSetForegroundWindow(ASFW_ANY);
-                Native.PostMessage(HWND_BROADCAST, WM_SHOWME, IntPtr.Zero, IntPtr.Zero);
+                if (ShouldShowExisting(args))
+                {
+                    Native.AllowSetForegroundWindow(ASFW_ANY);
+                    Native.PostMessage(HWND_BROADCAST, WM_SHOWME, IntPtr.Zero, IntPtr.Zero);
+                }
                 return;
             }
 
@@ -42,6 +45,16 @@ namespace RobloxKeeper
             Application.SetCompatibleTextRenderingDefault(false);
             Application.Run(new MainForm());
             GC.KeepAlive(appMutex);
+        }
+
+        // A second copy opened by hand brings the running one forward. One
+        // started minimized - at sign-in, say, by a leftover Run-list entry as
+        // well as the task - just leaves, instead of popping the window open.
+        public static bool ShouldShowExisting(string[] args)
+        {
+            for (int i = 1; i < args.Length; i++)
+                if (args[i] == "--minimized") return false;
+            return true;
         }
     }
 }

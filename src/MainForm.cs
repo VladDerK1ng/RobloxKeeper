@@ -44,8 +44,6 @@ namespace RobloxKeeper
     // MainForm.Install.cs deals with Roblox reinstalling itself.
     partial class MainForm : Form
     {
-        const string RUN_KEY = "Software\\Microsoft\\Windows\\CurrentVersion\\Run";
-        const string AUTOSTART_VALUE = "RobloxKeeper";
         const string ROBLOX_EVENT = "ROBLOX_singletonEvent";
 
         readonly MutexKeeper keeper = new MutexKeeper();
@@ -229,6 +227,11 @@ namespace RobloxKeeper
         protected override void OnHandleCreated(EventArgs e)
         {
             base.OnHandleCreated(e);
+            if (!autostartChecked)
+            {
+                autostartChecked = true;
+                CheckAutostart();
+            }
             int on = 1;
             try { Native.DwmSetWindowAttribute(Handle, Native.DWMWA_USE_IMMERSIVE_DARK_MODE, ref on, 4); } catch { }
 
@@ -693,28 +696,58 @@ namespace RobloxKeeper
 
         // ---------- Autostart / Start menu ----------
 
+        readonly LiveAutostart autostart = new LiveAutostart();
+        bool showingAutostart;      // the box is being set to what is recorded, not ticked by hand
+        bool autostartChecked;
+
+        // Whether it is on, off the UI thread - Task Scheduler is quick, but
+        // this runs while the app starts and nothing should hold that up. An
+        // old Run-list entry is moved to the fast start on the way.
+        void CheckAutostart()
+        {
+            string exe = Application.ExecutablePath;
+            ThreadPool.QueueUserWorkItem(delegate
+            {
+                bool on;
+                string said;
+                try { on = Autostart.Check(autostart, exe, System.IO.File.Exists, out said); }
+                catch (Exception ex) { on = autostart.RunEntry() != null; said = "Couldn't check Start with Windows: " + ex.Message; }
+                OnUi(delegate
+                {
+                    showingAutostart = true;
+                    try { chkAutostart.Checked = on; }
+                    finally { showingAutostart = false; }
+                    if (said != null) Log(said);
+                });
+            });
+        }
+
         void OnAutostartToggled(object sender, EventArgs e)
         {
-            try
+            if (showingAutostart) return;
+            bool on = chkAutostart.Checked;
+            string exe = Application.ExecutablePath;
+            ThreadPool.QueueUserWorkItem(delegate
             {
-                using (RegistryKey k = Registry.CurrentUser.OpenSubKey(RUN_KEY, true))
+                string said;
+                try
                 {
-                    if (chkAutostart.Checked)
+                    if (on)
                     {
-                        k.SetValue(AUTOSTART_VALUE, "\"" + Application.ExecutablePath + "\" --minimized");
-                        Log("Autostart enabled - starts minimized to the tray with Windows.");
+                        string why = Autostart.SwitchOn(autostart, exe);
+                        said = why == null
+                            ? "Start with Windows on - RobloxKeeper starts in the tray the moment you sign in, ahead of other startup apps."
+                            : "Start with Windows on, the ordinary way - Task Scheduler said: " + why + ".";
                     }
                     else
                     {
-                        k.DeleteValue(AUTOSTART_VALUE, false);
-                        Log("Autostart disabled.");
+                        Autostart.SwitchOff(autostart);
+                        said = "Start with Windows off.";
                     }
                 }
-            }
-            catch (Exception ex)
-            {
-                Log("Autostart change failed: " + ex.Message);
-            }
+                catch (Exception ex) { said = "Couldn't change Start with Windows: " + ex.Message; }
+                OnUi(delegate { Log(said); });
+            });
         }
 
         // Puts RobloxKeeper in the Start menu so it can be found by typing its
