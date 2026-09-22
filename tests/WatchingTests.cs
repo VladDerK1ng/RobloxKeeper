@@ -251,6 +251,125 @@ namespace RobloxKeeper.Tests
             finally { try { File.Delete(path); } catch { } }
         }
 
+        // ---------- setups in the watchers window ----------
+
+        static WatchKit TwoSetups(string path)
+        {
+            WatchKit k = Kit(path, Watcher.Default("Secret", WatchKind.ChatLine), Watcher.Default("Banner", WatchKind.TextAppears));
+            k.Store.AddSetup("Other game", false);
+            k.Store.Watchers.Add(Watcher.Default("Boss", WatchKind.TextAppears));
+            k.Store.Choose(WatchStore.FirstSetupName);
+            return k;
+        }
+
+        // Choosing a setup is the whole point: the list becomes its watchers,
+        // the app is told so the watch thread follows, and it is remembered.
+        public static void TestChoosingASetupShowsItsWatchersAndSaves()
+        {
+            string path = TempStore();
+            try
+            {
+                int told = 0;
+                WatchKit k = TwoSetups(path);
+                using (WatchersDialog d = new WatchersDialog(k, delegate { told++; }))
+                {
+                    Assert.Equal(2, d.SetupCount, "both setups to choose from");
+                    Assert.Equal(WatchStore.FirstSetupName, d.SetupShown, "showing the one in use");
+                    Assert.Equal(2, d.RowCount, "its two watchers");
+
+                    d.ChooseSetup("Other game");
+                    Assert.Equal("Other game", d.SetupShown, "the other one shown");
+                    Assert.Equal(1, d.RowCount, "with its one watcher");
+                    Assert.True(told > 0, "and the app was told to pick it up");
+                }
+                WatchStore back = new WatchStore(path);
+                back.Load();
+                Assert.Equal("Other game", back.Chosen.Name, "still chosen next time");
+            }
+            finally { try { File.Delete(path); } catch { } }
+        }
+
+        public static void TestANewSetupStartsEmptyOrAsACopy()
+        {
+            string path = TempStore();
+            try
+            {
+                WatchKit k = TwoSetups(path);
+                using (WatchersDialog d = new WatchersDialog(k, delegate { }))
+                {
+                    Assert.True(d.AddSetup("Steal an Egg 2", true), "a copy");
+                    Assert.Equal("Steal an Egg 2", d.SetupShown, "in use straight away");
+                    Assert.Equal(2, d.RowCount, "with the same watchers");
+
+                    Assert.True(d.AddSetup("Blank", false), "an empty one");
+                    Assert.Equal(0, d.RowCount, "with nothing in it");
+                    Assert.Equal(4, d.SetupCount, "four to choose from");
+
+                    Assert.False(d.AddSetup("other GAME", false), "a name already taken");
+                    Assert.Equal(4, d.SetupCount, "still four");
+                }
+                WatchStore back = new WatchStore(path);
+                back.Load();
+                Assert.Equal(4, back.Setups.Count, "saved");
+            }
+            finally { try { File.Delete(path); } catch { } }
+        }
+
+        public static void TestRenamingASetupShowsTheNewName()
+        {
+            string path = TempStore();
+            try
+            {
+                WatchKit k = TwoSetups(path);
+                using (WatchersDialog d = new WatchersDialog(k, delegate { }))
+                {
+                    Assert.True(d.RenameSetup("Steal an Egg"), "renamed");
+                    Assert.Equal("Steal an Egg", d.SetupShown, "shown by its new name");
+                    Assert.False(d.RenameSetup("Other game"), "not to a name another setup has");
+                }
+                WatchStore back = new WatchStore(path);
+                back.Load();
+                Assert.Equal("Steal an Egg", back.Setups[0].Name, "saved");
+            }
+            finally { try { File.Delete(path); } catch { } }
+        }
+
+        public static void TestRemovingASetupShowsTheOneNowInUse()
+        {
+            string path = TempStore();
+            try
+            {
+                WatchKit k = TwoSetups(path);
+                k.Store.Choose("Other game");
+                using (WatchersDialog d = new WatchersDialog(k, delegate { }))
+                {
+                    Assert.True(d.RemoveSetup(), "removed");
+                    Assert.Equal(1, d.SetupCount, "one left");
+                    Assert.Equal(WatchStore.FirstSetupName, d.SetupShown, "and it is in use");
+                    Assert.Equal(2, d.RowCount, "with its watchers");
+                    Assert.False(d.RemoveSetup(), "the last one stays");
+                }
+                WatchStore back = new WatchStore(path);
+                back.Load();
+                Assert.Equal(1, back.Setups.Count, "saved");
+            }
+            finally { try { File.Delete(path); } catch { } }
+        }
+
+        // The box a name is typed into says what is wrong with it, and only
+        // lets a good name through.
+        public static void TestTheNameBoxRefusesANameItCannotUse()
+        {
+            WatchStore s = new WatchStore(TempStore());
+            using (SetupNameDialog d = new SetupNameDialog(s, "New setup", "", null, true))
+            {
+                Assert.False(d.Accept("MAIN"), "taken");
+                Assert.Contains("already", d.ProblemText, "and it says so");
+                Assert.True(d.Accept("  Steal an Egg "), "a good one");
+                Assert.Equal("Steal an Egg", d.ChosenName, "trimmed");
+            }
+        }
+
         // Saved, and the box it was typed into is emptied - it is never shown
         // again once saved.
         public static void TestAGoodWebhookIsSavedAndNotShownAgain()

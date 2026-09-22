@@ -68,6 +68,10 @@ namespace RobloxKeeper
         ScrollPanel list, clientList;
         Label empty, lblPace, lblHook, lblHookSays;
         TextBox hookBox;
+        ThemedPicker setupPicker;
+        LinkLabel removeSetup;
+        bool fillingSetups;
+        readonly ToolTip tips = new ToolTip();
         readonly List<Label> rowLines = new List<Label>();
         readonly List<Label> rowNames = new List<Label>();
         readonly List<string> clientTexts = new List<string>();
@@ -80,6 +84,7 @@ namespace RobloxKeeper
 
             WatchUi.Frame(this, "Watchers", W, H);
             Build();
+            FillSetups();
             Rebuild();
             RefreshLive();
 
@@ -92,18 +97,46 @@ namespace RobloxKeeper
 
         protected override void Dispose(bool disposing)
         {
-            if (disposing && refresh != null) refresh.Dispose();
+            if (disposing)
+            {
+                if (refresh != null) refresh.Dispose();
+                tips.Dispose();
+            }
             base.Dispose(disposing);
         }
 
         public int RowCount { get { return kit.Store.Watchers.Count; } }
         public string WebhookBoxText { get { return hookBox.Text; } }
+        public int SetupCount { get { return setupPicker.Items.Count; } }
+        public string SetupShown { get { return setupPicker.Text; } }
 
         // ---------- layout ----------
 
         void Build()
         {
             Card card = WatchUi.CardAt(this, "WATCHERS", 12, TOP, W - 24, LIST_H);
+
+            // Which setup the list is showing - and the app is watching with.
+            Label setupCap = Ui.RowLabel("Setup", 226, 10, 26, 50, 8.25f, Theme.Muted);
+            setupCap.TextAlign = ContentAlignment.MiddleRight;
+            card.Controls.Add(setupCap);
+            setupPicker = Ui.DarkCombo(282, 10, 200);
+            setupPicker.SelectedIndexChanged += delegate { if (!fillingSetups) ChooseSetup(setupPicker.Text); };
+            card.Controls.Add(setupPicker);
+            string explain = "A setup is a set of watchers - one for each game, say. "
+                           + "Choosing another setup swaps every watcher at once.";
+            tips.SetToolTip(setupCap, explain);
+            tips.SetToolTip(setupPicker, explain);
+
+            LinkLabel newSetup = Ui.RowLink("New", 494, 10, 26, 9f);
+            newSetup.Click += delegate { AskNewSetup(); };
+            card.Controls.Add(newSetup);
+            LinkLabel rename = Ui.RowLink("Rename", 532, 10, 26, 9f);
+            rename.Click += delegate { AskRenameSetup(); };
+            card.Controls.Add(rename);
+            removeSetup = Ui.RowLink("Remove", 590, 10, 26, 9f);
+            removeSetup.Click += delegate { AskRemoveSetup(); };
+            card.Controls.Add(removeSetup);
 
             int listY = 44;
             if (!kit.CanReadText)
@@ -362,6 +395,93 @@ namespace RobloxKeeper
             Rebuild();
         }
 
+        // ---------- setups ----------
+
+        void FillSetups()
+        {
+            fillingSetups = true;
+            try
+            {
+                setupPicker.Items.Clear();
+                foreach (WatchSetup s in kit.Store.Setups) setupPicker.Items.Add(s.Name);
+                setupPicker.SelectedIndex = kit.Store.Setups.IndexOf(kit.Store.Chosen);
+                setupPicker.Invalidate();       // a new name at the same place
+                removeSetup.Visible = kit.Store.Setups.Count > 1;
+            }
+            finally { fillingSetups = false; }
+        }
+
+        // Every watcher in the list is swapped for the other setup's, and the
+        // app is told, so the watch thread swaps too.
+        public void ChooseSetup(string name)
+        {
+            WatchSetup s = kit.Store.FindSetup(name);
+            if (s == null || ReferenceEquals(s, kit.Store.Chosen)) return;
+            kit.Store.Choose(s.Name);
+            Commit();
+            kit.Say("Now watching with the " + s.Name + " setup.");
+            FillSetups();
+            Rebuild();
+        }
+
+        public bool AddSetup(string name, bool copyWatchers)
+        {
+            WatchSetup s = kit.Store.AddSetup(name, copyWatchers);
+            if (s == null) return false;
+            Commit();
+            kit.Say("Setup " + s.Name + " added" + (copyWatchers ? ", with a copy of the watchers." : "."));
+            FillSetups();
+            Rebuild();
+            return true;
+        }
+
+        public bool RenameSetup(string name)
+        {
+            string was = kit.Store.Chosen.Name;
+            if (!kit.Store.RenameSetup(kit.Store.Chosen, name)) return false;
+            Commit();
+            kit.Say("Setup " + was + " is now called " + kit.Store.Chosen.Name + ".");
+            FillSetups();
+            return true;
+        }
+
+        // Always the one in use: that is the one whose watchers are on screen,
+        // so it is clear what goes with it.
+        public bool RemoveSetup()
+        {
+            WatchSetup gone = kit.Store.Chosen;
+            if (!kit.Store.RemoveSetup(gone)) return false;
+            Commit();
+            kit.Say("Setup " + gone.Name + " removed. Now watching with the " + kit.Store.Chosen.Name + " setup.");
+            FillSetups();
+            Rebuild();
+            return true;
+        }
+
+        void AskNewSetup()
+        {
+            using (SetupNameDialog d = new SetupNameDialog(kit.Store, "New setup", "", null,
+                                                           kit.Store.Watchers.Count > 0))
+                if (d.ShowDialog(this) == DialogResult.OK) AddSetup(d.ChosenName, d.CopyWatchers);
+        }
+
+        void AskRenameSetup()
+        {
+            using (SetupNameDialog d = new SetupNameDialog(kit.Store, "Rename setup", kit.Store.Chosen.Name,
+                                                           kit.Store.Chosen, false))
+                if (d.ShowDialog(this) == DialogResult.OK) RenameSetup(d.ChosenName);
+        }
+
+        void AskRemoveSetup()
+        {
+            WatchSetup s = kit.Store.Chosen;
+            int n = s.Watchers.Count;
+            string with = n == 0 ? "" : n == 1 ? " and its watcher" : " and its " + n + " watchers";
+            if (MessageBox.Show(this, "Remove the setup " + s.Name + with + "?", "Remove setup",
+                    MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+            RemoveSetup();
+        }
+
         // ---------- the webhook ----------
 
         // Saves a new webhook if it is one. Never logs or shows it: whoever
@@ -457,6 +577,80 @@ namespace RobloxKeeper
             {
                 kit.Say("Couldn't start installing text reading: " + ex.Message);
             }
+        }
+    }
+
+    // Asks for a setup's name - a new setup's, or a new name for one - and
+    // only lets through a name that setup can have.
+    class SetupNameDialog : Form
+    {
+        const int W = 400;
+        const int TOP = WatchUi.TITLEBAR_H + 6;
+
+        readonly WatchStore store;
+        readonly WatchSetup renaming;
+        readonly TextBox box;
+        readonly Label problem;
+        readonly ThemedCheckBox copy;
+
+        public string ChosenName;
+
+        public SetupNameDialog(WatchStore store, string title, string name, WatchSetup renaming, bool offerCopy)
+        {
+            this.store = store;
+            this.renaming = renaming;
+
+            int cardH = offerCopy ? 130 : 100;
+            int footY = TOP + cardH + 12;
+            WatchUi.Frame(this, title, W, footY + 32 + 12);
+
+            Card card = WatchUi.CardAt(this, "NAME", 12, TOP, W - 24, cardH);
+            box = WatchUi.Input(Ui.PAD, 40, W - 24 - Ui.PAD * 2);
+            box.MaxLength = WatchStore.MaxSetupName;
+            box.Text = name ?? "";
+            card.Controls.Add(box);
+
+            problem = Ui.MutedLabel("The name of a game works well.", Ui.PAD, 68, 8.25f);
+            problem.MaximumSize = new Size(W - 24 - Ui.PAD * 2, 0);
+            card.Controls.Add(problem);
+
+            if (offerCopy)
+            {
+                copy = Ui.DarkCheck("Start with a copy of the watchers in use now", Ui.PAD, 94, 8.25f);
+                copy.AutoSize = true;
+                card.Controls.Add(copy);
+            }
+
+            Button save = WatchUi.Primary("Save", W - 12 - 100, footY, 100, 32);
+            save.Click += delegate
+            {
+                if (!Accept(box.Text)) return;
+                DialogResult = DialogResult.OK;
+                Close();
+            };
+            Controls.Add(save);
+            Button cancel = WatchUi.Secondary("Cancel", W - 12 - 208, footY, 100, 32);
+            cancel.Click += delegate { DialogResult = DialogResult.Cancel; Close(); };
+            Controls.Add(cancel);
+            AcceptButton = save;
+            CancelButton = cancel;
+            Shown += delegate { box.Focus(); box.SelectAll(); };
+        }
+
+        public bool CopyWatchers { get { return copy != null && copy.Checked; } }
+        public string ProblemText { get { return problem.Text; } }
+
+        public bool Accept(string typed)
+        {
+            string why = store.SetupNameProblem(typed, renaming);
+            if (why != null)
+            {
+                problem.Text = why;
+                problem.ForeColor = Theme.Amber;
+                return false;
+            }
+            ChosenName = typed.Trim();
+            return true;
         }
     }
 }
