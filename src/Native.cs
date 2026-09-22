@@ -70,6 +70,51 @@ namespace RobloxKeeper
         public const uint KEYEVENTF_KEYUP = 0x0002;
         public const uint KEYEVENTF_SCANCODE = 0x0008;
 
+        public const uint MOUSEEVENTF_LEFTDOWN = 0x0002;
+        public const uint MOUSEEVENTF_LEFTUP = 0x0004;
+        public const uint MOUSEEVENTF_RIGHTDOWN = 0x0008;
+        public const uint MOUSEEVENTF_RIGHTUP = 0x0010;
+        public const uint KEYEVENTF_UNICODE = 0x0004;
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct POINT { public int X, Y; }
+
+        [DllImport("user32.dll")]
+        public static extern bool SetCursorPos(int x, int y);
+        [DllImport("user32.dll")]
+        public static extern bool GetCursorPos(out POINT p);
+        [DllImport("user32.dll")]
+        public static extern bool GetClientRect(IntPtr hwnd, out RECT rect);
+        [DllImport("user32.dll")]
+        public static extern bool ClientToScreen(IntPtr hwnd, ref POINT p);
+
+        // ---------- Recording a macro ----------
+
+        // Low-level hooks see input on its way to whichever window is in
+        // front. They do not change it; the callback passes everything on.
+        public delegate IntPtr HookProc(int code, IntPtr wParam, IntPtr lParam);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        public static extern IntPtr SetWindowsHookEx(int idHook, HookProc proc, IntPtr hMod, uint threadId);
+        [DllImport("user32.dll")]
+        public static extern bool UnhookWindowsHookEx(IntPtr hook);
+        [DllImport("user32.dll")]
+        public static extern IntPtr CallNextHookEx(IntPtr hook, int code, IntPtr wParam, IntPtr lParam);
+        [DllImport("kernel32.dll")]
+        public static extern IntPtr GetModuleHandle(string name);
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct KBDLLHOOKSTRUCT { public uint vkCode, scanCode, flags, time; public IntPtr dwExtraInfo; }
+        [StructLayout(LayoutKind.Sequential)]
+        public struct MSLLHOOKSTRUCT { public POINT pt; public uint mouseData, flags, time; public IntPtr dwExtraInfo; }
+
+        public const int WH_KEYBOARD_LL = 13;
+        public const int WH_MOUSE_LL = 14;
+        public const int WM_KEYDOWN = 0x0100, WM_KEYUP = 0x0101, WM_SYSKEYDOWN = 0x0104, WM_SYSKEYUP = 0x0105;
+        public const int WM_LBUTTONDOWN = 0x0201, WM_LBUTTONUP = 0x0202, WM_RBUTTONDOWN = 0x0204, WM_RBUTTONUP = 0x0205;
+        public const uint LLKHF_INJECTED = 0x10;
+        public const uint LLMHF_INJECTED = 0x01;
+
         public const byte VK_LMENU = 0xA4;
         public const byte VK_LEFT = 0x25;    // rotate camera left
         public const byte VK_RIGHT = 0x27;   // rotate camera right

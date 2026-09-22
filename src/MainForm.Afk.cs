@@ -176,8 +176,14 @@ namespace RobloxKeeper
         void NudgeWorker(NudgePlan plan, NudgeStep[] steps, IntPtr self, string reason)
         {
             int count = 0;
+            bool gate = false;
             try
             {
+                // A macro playing has the foreground; the nudge waits for it
+                // rather than pulling another client in front mid-macro.
+                gate = FocusGate.TryEnter(60000);
+                if (!gate) return;
+
                 IntPtr previous = Native.GetForegroundWindow();
 
                 foreach (IntPtr hwnd in plan.Targets)
@@ -204,6 +210,7 @@ namespace RobloxKeeper
             }
             finally
             {
+                if (gate) FocusGate.Exit();
                 int nudged = count;
                 // Back to the UI thread to report, and to clear the guard even
                 // if a window vanished mid-nudge and threw. If the form is on
