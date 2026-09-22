@@ -59,6 +59,8 @@ namespace RobloxKeeper
             if (When == RuleWhen.Every && EverySeconds < MIN_EVERY)
                 return "Make it every " + MIN_EVERY + " seconds or more - a macro holds the keyboard while it plays.";
             if (When == RuleWhen.Hotkey && HotkeyVk == 0) return "Choose a key.";
+            if (When == RuleWhen.Hotkey && OnlyWhenAway)
+                return "Pressing the key means you're at the keyboard, so it could never fire while you're away - untick that.";
             if (On == RuleOn.WhereItHappened && !HappensOnAClient)
                 return "Choose which clients it plays on - a timer or a key doesn't happen on one client.";
             if (On == RuleOn.TheseAccounts && (Accounts == null || Accounts.Length == 0))

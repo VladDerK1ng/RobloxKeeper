@@ -83,6 +83,18 @@ namespace RobloxKeeper.Tests
             Assert.Equal(null, r.Problem(), "fine");
         }
 
+        // Pressing the key is being at the keyboard, so a key rule that waits
+        // for you to be away could never fire. Said, rather than saved.
+        public static void TestAKeyRuleCannotAlsoWaitForYouToBeAway()
+        {
+            Rule r = new Rule();
+            r.Name = "k"; r.Macro = "m"; r.When = RuleWhen.Hotkey; r.On = RuleOn.InFront;
+            r.OnlyWhenAway = true;
+            Assert.Contains("away", r.Problem(), "it could never fire");
+            r.OnlyWhenAway = false;
+            Assert.Equal(null, r.Problem(), "fine without it");
+        }
+
         // A rule belongs to a game's setup, so a timer for one game never
         // fires in another.
         public static void TestRulesLiveInTheirSetup()
