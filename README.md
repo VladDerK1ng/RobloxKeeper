@@ -34,6 +34,10 @@ One tiny executable. Zero dependencies. No injection, no memory access, no file 
 | **Where credentials live** | `%APPDATA%\RobloxKeeperccounts.dat`, encrypted with DPAPI at CurrentUser scope - Windows ties the key to your user on this machine, so the file is useless if it is copied anywhere else. A `.ROBLOSECURITY` cookie IS the account: hold one and you are signed in as that user, no password involved. Nothing is sent anywhere except to roblox.com, and no code path prints a cookie to the log, a tooltip or an error message. Removing an account deletes its stored session and browser profile from this PC. |
 | **Watchers** | Get told when something turns up on a client's screen: a **word** (say, *spawned*), a **new chat line** (you get the whole line, not just the word), or a **picture** you cut out of the game with its background painted out. Each watched client is looked at up to four times a second **without being focused, clicked or typed into** - it works behind other windows and on another virtual desktop, though not while minimized, and the Watchers window says which clients can't be read and why. You're told on **Discord** (with the picture and a link straight back into that server), with a **pop-up**, a **sound** or a line in the activity list - chosen per watcher. Draw a **box** around the part of the screen that matters and it is read about nine times faster than the whole window; boxes belong to a game, so every client in that game uses them. **Test against client now** shows exactly what was read, or how alike a picture was, before you rely on it. Keep a **setup** of watchers for each game - one for Steal an Egg, one for another game - and switch between them in one click from the main window; every watcher swaps at once, and the chat already on screen is not sent again. |
 | **Where watchers live** | `%LOCALAPPDATA%\RobloxKeeper\watchers.dat`, encrypted with DPAPI like the account list: the Discord webhook link in it is enough for anyone who has it to post into your channel, so it is never shown or logged either. Setups are kept in the same file; the webhook link is shared by all of them, and a watcher can have a link of its own. The pictures watchers look for are ordinary PNG files in `%LOCALAPPDATA%\RobloxKeeper\templates` - open the folder and look. |
+| **Macros** | A few keys, clicks, waits and typed text played on a client - **recorded** by doing it once in the game (F8 to stop; only what you do in that client is seen) or built step by step. Clicks are kept as a place on the window, so they land on the same button at any size. The client comes to the front while a macro plays and whatever you were using comes back after; if another window comes to the front part-way it stops at once and lets go of any key it was holding. A macro can't be longer than a minute. |
+| **Then play a macro** | Any watcher can play a macro on the client that saw it - buy the egg that just spawned, say. At most once every 15 seconds on each client, one macro at a time, and never at the same moment as an anti-AFK nudge. |
+| **Hunt mode** | Pick accounts and a game: each account's client is moved to a server of that game, the watchers of the setup in use look for as long as you set, and it moves on - until a watcher finds something, and then it **stays in that server**. Servers are picked from Roblox's public list: never the one it is in, one visited in the last half hour, or one another of your clients is in. A move gets the server list and a launch ticket first and only then closes the client, so a failed move leaves it where it was. For accounts saved in the account manager. |
+| **Same size windows** | **Same size as Client 1** in the Watchers window makes every client the size of the first, so a box drawn on one - or a click recorded on one - lands exactly on all of them. Windows are sized from outside, as dragging an edge would; nothing in Roblox's files is changed. |
 | **Single instance** | Launching RobloxKeeper while it's already running won't open a second copy - it surfaces the existing window instead, restoring it from the tray if needed. |
 | **Start with Windows** | Optional autostart toggle (top-right). With it on, RobloxKeeper starts **minimized to the tray** at boot and holds the mutex before any Roblox client can exist, which makes the launch-order problem impossible. |
 | **Saved settings** | Every setting - anti-AFK on/off, interval, nudge profile, multi-instance, auto-clear ghosts, client defaults, auto-trim - is written to `%APPDATA%\RobloxKeeper\settings.txt` and restored on the next launch. Per-client **Tune** overrides are deliberately session-only: Windows recycles PIDs, so a saved override would eventually land on an unrelated process. |
@@ -165,7 +169,7 @@ src/
   FireControl.cs         tell once when something arrives, not every scan it is still there
   ChatFeed.cs            which chat lines are new, allowing for misreads
   Pixels.cs              an image as a plain array, so image code is testable
-  ImageMatch.cs          finding a picture again, with its background painted out
+  ImageMatch.cs          finding a picture again, with its background painted out - quickly
   Watcher.cs             one watcher, and what it reports when it finds something
   WatchStore.cs          setups of watchers, boxes and the webhook link, DPAPI-encrypted
   WebhookPost.cs         the Discord message, built, sent and retried
@@ -176,6 +180,16 @@ src/
   WatcherEditDialog.cs   editing one watcher, and trying it on a client
   WatchersDialog.cs      the watchers list, and choosing and naming setups
   MainForm.Watch.cs      watching, wired into the main window
+  Macro.cs               a macro and its steps
+  MacroPlan.cs           what playing a macro sends, and turning a recording into steps
+  MacroPlayer.cs         playing and recording, and the lock the nudge shares
+  MacrosDialog.cs        the macro list, editor and step box
+  RobloxServers.cs       a game's public server list, and picking the next server
+  Hopper.cs              moving an account's client to another server
+  Hunt.cs                hunt mode's decisions for one account
+  HuntDialog.cs          the Hunt window
+  MainForm.Hunt.cs       hunting, wired into the main window
+  WindowSizer.cs         every client the size of the first
   RobloxLog.cs           reading what Roblox writes about itself
   RobloxLogWatch.cs      following the logs as clients join and drop
 tests/
@@ -205,9 +219,9 @@ Measured on Windows 11 while idle: about **0.8% of one CPU core** and **67 MB** 
 
 Running two Roblox clients costs whatever two Roblox clients cost on your machine (mostly GPU and RAM), and the number of installed Roblox versions makes no difference. The per-client work added by the Performance card is a memory reading per client per tick, plus a priority/affinity call only when a client's settings have actually drifted from its profile - so it is proportional to the number of clients, not to time.
 
-Watching costs what it reads. Every picture is read three ways - as it is, with colour turned into brightness so coloured text is read, and with only the plain grey fill of outlined letters kept so chat over the scenery and dark egg names are read too - and measured on frames from a live client that comes to about 15-40ms for a box and about 235-300ms for the whole window, with a picture of the window taking about 25ms on top. So one client watched through its whole window settles at around one and a half scans a second; a box around the part that matters is what gets it to four. With no watcher switched on, the watch thread isn't running at all.
+Watching costs what it reads. Every picture is read three ways - as it is, with colour turned into brightness so coloured text is read, and with only the plain grey fill of outlined letters kept so chat over the scenery and dark egg names are read too - and measured on frames from a live client that comes to about 15-40ms for a box and about 235-300ms for the whole window, with a picture of the window taking about 25ms on top. So one client watched through its whole window settles at around one and a half scans a second; a box around the part that matters is what gets it to four. A picture looked for across the whole window is found by shrinking both first and looking closely only where it might be: on a 1936x1048 frame an 80x80 picture took 33 seconds to find pixel by pixel and takes 160ms this way. With no watcher switched on, the watch thread isn't running at all.
 
-The only moment it touches your desktop is a nudge: it focuses each selected client for roughly half a second, sends the keys, and hands focus back. If you are typing at that moment you will notice it. Nothing else it does steals focus.
+It touches your desktop only in ways you set up. A nudge focuses each selected client for roughly half a second, sends the keys, and hands focus back. A macro does the same for as long as it plays - a minute at most. And hunting closes a client and opens it again in another server. If you are typing at one of those moments you will notice it; nothing else it does steals focus.
 
 ## How it works
 
@@ -219,6 +233,10 @@ The most common reason multi-instance "sometimes doesn't work" with any tool: cl
 
 **Watchers** never send the game anything. A picture of the client is taken with `PrintWindow` and `PW_RENDERFULLCONTENT`, which asks the desktop compositor for the frame it is already holding - Roblox draws with Direct3D, and without that flag the picture comes back as an empty rectangle. That is also why it works behind other windows and on another virtual desktop, and why it can't on a minimized window: Windows stops composing those. Each client is captured once per pass and every watcher on it reads that one picture. Text is read by `Windows.Media.Ocr`, which is part of Windows - nothing is downloaded, and if the English text pack is missing the Watchers window offers to install it (Windows asks for administrator rights) while picture watchers keep working without it. The pass aims for four a second and slows itself down when there is more to read than that allows.
 
+**Macros** go through the same `SendInput` scan codes as the nudge, with the mouse moved to a place on the client's window and pressed there. Everything a macro will send is worked out as a list before any of it is sent, and only one thing - a nudge or a macro - may hold the foreground at a time. Recording uses low-level keyboard and mouse hooks, which see input without changing it, and keeps only what arrives while the chosen client is in front.
+
+**Hunt mode** moves a client with the same official launch the account manager uses: a launch ticket for the account's own saved session, and Roblox's place launcher asked for one particular server by its id - what the website's Join button on a server does. The server list is the public one the website's Servers tab shows. Arriving is confirmed by the join line in the client's own log.
+
 ## Byfron / Hyperion compatibility
 
 RobloxKeeper is designed to stay entirely **outside** the Roblox process:
@@ -226,7 +244,8 @@ RobloxKeeper is designed to stay entirely **outside** the Roblox process:
 - **No DLL injection** - nothing is loaded into the client.
 - **No memory reads or writes** - the game's process memory is never opened.
 - **No file modification** - the Roblox installation is untouched.
-- **OS-level only** - a named kernel mutex (a Windows object, not a Roblox one) and synthesized keyboard input, identical in mechanism to a hardware keyboard.
+- **OS-level only** - a named kernel mutex (a Windows object, not a Roblox one) and synthesized keyboard and mouse input, identical in mechanism to a hardware keyboard and mouse.
+- **Moving servers is Roblox's own launch** - a launch ticket and the place launcher, as the website's Join button uses. Same size windows are sized from outside, as dragging an edge would.
 - **Watching reads pixels, not memory** - a picture of the window from the desktop compositor, the same one a screenshot tool gets.
 
 This is the same externally-held-mutex technique used by established multi-instance managers, and it does not interact with the anti-cheat's protected surface. That said, automation and multi-instancing are against the [Roblox Terms of Use](https://en.help.roblox.com/hc/en-us/articles/115004647846) - use at your own risk.
@@ -238,6 +257,12 @@ Open the watcher and press **Test against this client now** - it says exactly wh
 
 **Can I keep different watchers for different games?**
 Yes - that is what a **setup** is. In Watchers, press **New** beside the setup picker, name it after the game, and add its watchers (tick *Start with a copy* to begin from the ones you have). Once there are two, a picker appears beside the Watchers button on the main window and switching is one click. Boxes don't need doing twice: they already belong to the game they were drawn on. Anything in a chat when you switch is treated as already seen, so switching never sends old messages to Discord.
+
+**Can a macro play without taking over my screen?**
+No. Roblox only reads input that reaches the window in front, which was tested four ways before any of this was built - so a macro brings its client to the front, plays, and gives you your window back. That is why a macro is kept under a minute, why only one plays at a time, and why it stops the moment another window comes to the front.
+
+**What does hunting do to my accounts?**
+It starts each one the way the website's Play and Join buttons do, with that account's own saved sign-in, so it is only for accounts saved in the account manager. Each move closes the client and opens it in another server - roughly once a minute per account at the default. If Roblox asks it to slow down, or a move keeps failing, it waits and tries again, and stops after five failures in a row with the reason. Automation is against the Roblox Terms of Use - see the compatibility section above.
 
 **Does it work while Roblox is minimized?**
 Yes - the client is restored for about a second, nudged, and re-minimized.
