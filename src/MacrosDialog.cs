@@ -370,6 +370,8 @@ namespace RobloxKeeper
                         : kind == MacroStepKind.Click ? MacroStep.Click(0.5, 0.5, false)
                         : kind == MacroStepKind.Wait ? MacroStep.Wait(1000)
                         : MacroStep.Type("");
+            // Typing is nearly always something to say in chat.
+            if (kind == MacroStepKind.Type) s.InChat = true;
             using (MacroStepDialog d = new MacroStepDialog(s))
                 if (d.ShowDialog(this) == DialogResult.OK && d.Result != null) AddStep(d.Result);
         }
@@ -504,7 +506,7 @@ namespace RobloxKeeper
         Button btnKey;
         TextBox secondsBox, textBox;
         ThemedNumeric numAcross, numDown;
-        ThemedCheckBox chkRight;
+        ThemedCheckBox chkRight, chkChat;
         Label lblProblem;
 
         public MacroStep Result { get; private set; }
@@ -565,7 +567,12 @@ namespace RobloxKeeper
                     textBox = WatchUi.Input(FIELD_X, 42, inner - FIELD_X + Ui.PAD);
                     textBox.Text = step.Text ?? "";
                     card.Controls.Add(textBox);
-                    Hint(card, "Open the chat first with a / key step, and send it with an Enter key step.", 76, inner);
+                    chkChat = Ui.DarkCheck("Say it in chat - open the chat first and send it after", Ui.PAD, 76, 9f);
+                    chkChat.AutoSize = true;
+                    chkChat.Checked = step.InChat;
+                    card.Controls.Add(chkChat);
+                    Hint(card, "Ticked, it presses / to open the chat, types this, and presses Enter to send it. "
+                             + "Untick it to type into a box that is already open.", 104, inner);
                     break;
 
                 default:
@@ -635,6 +642,7 @@ namespace RobloxKeeper
                     break;
                 case MacroStepKind.Type:
                     s.Text = textBox.Text;
+                    s.InChat = chkChat.Checked;
                     if (s.Text.Length == 0) problem = "Type something.";
                     break;
                 default:

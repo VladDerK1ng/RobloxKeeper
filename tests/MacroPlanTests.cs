@@ -60,6 +60,39 @@ namespace RobloxKeeper.Tests
             Assert.Equal("/e hi", new string(typed.ToArray()), "every character, in order");
         }
 
+        // The owner asked for it: typing that opens the chat first and sends
+        // what it typed, rather than three steps to get right by hand.
+        public static void TestSayingSomethingInChatOpensItTypesAndSends()
+        {
+            MacroStep say = MacroStep.Type("gg");
+            say.InChat = true;
+            List<InputAction> plan = Plan(say);
+
+            List<string> did = new List<string>();
+            foreach (InputAction a in plan)
+            {
+                if (a.Kind == InputActionKind.KeyDown) did.Add("down " + MacroKeys.Name(a.Vk));
+                else if (a.Kind == InputActionKind.Char) did.Add("type " + a.Char);
+                else if (a.Kind == InputActionKind.Sleep && a.Ms >= MacroPlan.CHAT_OPEN_MS) did.Add("wait for the chat");
+            }
+            Assert.Equal("down /|wait for the chat|type g|type g|down Enter", string.Join("|", did.ToArray()),
+                "open, wait, type, send");
+            Assert.Equal("Say \"gg\" in chat", say.Describe(), "and it says so");
+        }
+
+        public static void TestSayingInChatIsSaved()
+        {
+            MacroStep say = MacroStep.Type("gg");
+            say.InChat = true;
+            Macro m = new Macro();
+            m.Name = "x";
+            m.Steps.Add(say);
+            m.Steps.Add(MacroStep.Type("plain"));
+            Macro back = WatchStore.DeserializeMacro(WatchStore.SerializeMacro(m));
+            Assert.True(back.Steps[0].InChat, "in chat");
+            Assert.False(back.Steps[1].InChat, "and plain typing stays plain");
+        }
+
         public static void TestAWaitIsJustAWait()
         {
             List<InputAction> plan = Plan(MacroStep.Wait(1500));

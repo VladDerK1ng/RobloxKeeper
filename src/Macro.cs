@@ -19,6 +19,7 @@ namespace RobloxKeeper
         public bool RightButton;        // Click
         public int Ms;                  // Wait
         public string Text;             // Type
+        public bool InChat;             // Type: open the chat first with /, send it after with Enter
 
         // A click is pressed and let go this far apart; typing takes this long
         // a character. Both are what Roblox reliably notices.
@@ -81,7 +82,8 @@ namespace RobloxKeeper
                     case MacroStepKind.Key: return HoldMs;
                     case MacroStepKind.Click: return CLICK_MS;
                     case MacroStepKind.Wait: return Ms;
-                    case MacroStepKind.Type: return (Text ?? "").Length * CHAR_MS;
+                    case MacroStepKind.Type:
+                        return (Text ?? "").Length * CHAR_MS + (InChat ? MacroPlan.CHAT_OPEN_MS + 2 * HoldMs : 0);
                     default: return 0;
                 }
             }
@@ -104,7 +106,7 @@ namespace RobloxKeeper
                 case MacroStepKind.KeyUp:
                     return "Let go of " + MacroKeys.Name(Vk);
                 default:
-                    return "Type \"" + Text + "\"";
+                    return InChat ? "Say \"" + Text + "\" in chat" : "Type \"" + Text + "\"";
             }
         }
 

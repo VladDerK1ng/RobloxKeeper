@@ -449,7 +449,8 @@ namespace RobloxKeeper
                     s.Y.ToString("R", CultureInfo.InvariantCulture),
                     s.RightButton ? "1" : "0",
                     s.Ms.ToString(CultureInfo.InvariantCulture),
-                    s.Text ?? "" }));
+                    s.Text ?? "",
+                    s.InChat ? "1" : "0" }));
             return Escape(m.Name) + FIELD + Escape(Join(steps.ToArray()));
         }
 
@@ -474,6 +475,7 @@ namespace RobloxKeeper
                 s.RightButton = p[5] == "1";
                 s.Ms = ParseInt(p[6], 0);
                 s.Text = p[7];
+                if (p.Length > 8) s.InChat = p[8] == "1";
                 m.Steps.Add(s);
             }
             return m;

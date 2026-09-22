@@ -42,6 +42,10 @@ namespace RobloxKeeper
         // not to matter.
         public const int SETTLE_MS = 40;
 
+        // Between pressing / and the chat box being ready to type into.
+        public const int CHAT_OPEN_MS = 250;
+        const byte VK_SLASH = 0xBF, VK_ENTER = 0x0D;
+
         // A fraction of the client area, as a point on the screen. Held inside
         // the window: a click that fell off its edge would land on whatever is
         // next to it.
@@ -113,6 +117,11 @@ namespace RobloxKeeper
                         plan.Add(InputAction.Sleep(s.Ms));
                         break;
                     default:
+                        if (s.InChat)
+                        {
+                            Tap(plan, VK_SLASH, s.HoldMs);
+                            plan.Add(InputAction.Sleep(CHAT_OPEN_MS));
+                        }
                         foreach (char c in s.Text ?? "")
                         {
                             InputAction ch = InputAction.Of(InputActionKind.Char);
@@ -120,10 +129,27 @@ namespace RobloxKeeper
                             plan.Add(ch);
                             plan.Add(InputAction.Sleep(MacroStep.CHAR_MS));
                         }
+                        if (s.InChat) Tap(plan, VK_ENTER, s.HoldMs);
                         break;
                 }
             }
 
+            return Release(plan, held);
+        }
+
+        static void Tap(List<InputAction> plan, byte vk, int holdMs)
+        {
+            InputAction down = InputAction.Of(InputActionKind.KeyDown);
+            down.Vk = vk;
+            plan.Add(down);
+            plan.Add(InputAction.Sleep(holdMs));
+            InputAction up = InputAction.Of(InputActionKind.KeyUp);
+            up.Vk = vk;
+            plan.Add(up);
+        }
+
+        static List<InputAction> Release(List<InputAction> plan, List<byte> held)
+        {
             // A key held down and never let go would stay down in the game -
             // walking forward for ever - so whatever is still down at the end
             // is let go, however the macro was edited.
