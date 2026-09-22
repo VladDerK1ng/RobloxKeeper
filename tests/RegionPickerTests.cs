@@ -192,5 +192,26 @@ namespace RobloxKeeper.Tests
                 Assert.Contains("5B", shown, "and what it read is shown");
             }
         }
+
+        // A chat box reads many lines, and every one has to be reachable - a
+        // box that scrolls, not a label that stops at its bottom edge.
+        public static void TestALongReadBackScrollsRatherThanCutsOff()
+        {
+            Func<Pixels, string> read = delegate(Pixels p)
+            {
+                return "Roblox\nHere\nGlobal\nFriends\nSay hi to everyone playing now!\n"
+                     + "A Secret Pure Jellyfish Egg spawned in Angels!\n"
+                     + "A Eternal Mosasaurus Egg spawned in Prehistoric!";
+            };
+            using (RegionPickerForm f = new RegionPickerForm(Still(400, 300), "Client 1",
+                       RegionPickMode.Region, "1", RegionScaling.Stretch, read))
+            {
+                f.SetBox(new Rectangle(0, 0, 100, 60));
+                f.TestRead();
+                Assert.True(f.ReadScrolls, "the read-back can be scrolled");
+                Assert.Contains("\r\nA Eternal Mosasaurus Egg spawned in Prehistoric!", f.ReadShown,
+                    "and the last line is in it, on a line of its own");
+            }
+        }
     }
 }

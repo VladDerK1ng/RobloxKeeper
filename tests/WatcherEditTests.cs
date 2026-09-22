@@ -363,5 +363,58 @@ namespace RobloxKeeper.Tests
                 Assert.Contains("a SECRET egg", said, "and says what it read");
             }
         }
+
+        // ---------- a long read ----------
+
+        // What a whole-window chat test really reads: the leaderboard and the
+        // buttons, then the chat. The owner's report was a result cut off
+        // before the egg lines it was run to show.
+        const string WholeWindowRead =
+            "Roblox\nHere\nGlobal\nFriends\nVladDerKing\n152B\n53.9B\nFly\n86.5B\n308B\nx64 Speed\nONLY 155\n"
+            + "Say hi to everyone playing now!\n"
+            + "A Secret Pure Jellyfish Egg spawned in Angels!\n"
+            + "A Eternal Mosasaurus Egg spawned in Prehistoric!";
+
+        static Watcher SpawnChat()
+        {
+            Watcher w = Watcher.Default("Spawns", WatchKind.ChatLine);
+            w.ChatContains = "spawned";
+            return w;
+        }
+
+        public static void TestALongChatReadIsReportedInFull()
+        {
+            WatchCheck k = new WatchCheck();
+            k.Text = WholeWindowRead;
+            string said = WatcherForm.CheckSummary(SpawnChat(), k);
+            Assert.Contains("A Eternal Mosasaurus Egg spawned in Prehistoric!", said, "the last line, not cut off");
+            Assert.Contains("2 of them", said, "and how many would count");
+        }
+
+        // The lines the filter picks out come first: in a whole-window read
+        // they are the last few of many, and the box shows six at a time.
+        public static void TestTheLinesThatCountComeFirst()
+        {
+            WatchCheck k = new WatchCheck();
+            k.Text = WholeWindowRead;
+            string said = WatcherForm.CheckSummary(SpawnChat(), k);
+            int egg = said.IndexOf("A Eternal Mosasaurus Egg spawned in Prehistoric!", StringComparison.Ordinal);
+            int button = said.IndexOf("x64 Speed", StringComparison.Ordinal);
+            Assert.True(egg >= 0 && button >= 0, "both are in there");
+            Assert.True(egg < button, "the matching line before the rest of the screen");
+        }
+
+        // All of it has to be reachable on screen too: a box that scrolls, with
+        // each line on its own line, not a label that stops at its bottom edge.
+        public static void TestTheTestResultScrollsRatherThanCutsOff()
+        {
+            using (WatcherEditDialog d = new WatcherEditDialog(SpawnChat(), Kit(WholeWindowRead)))
+            {
+                d.RunTest(Client());
+                Assert.True(d.ResultScrolls, "the result can be scrolled");
+                Assert.Contains("\r\nA Eternal Mosasaurus Egg spawned in Prehistoric!", d.ResultShown,
+                    "and the last line is in it, on a line of its own");
+            }
+        }
     }
 }

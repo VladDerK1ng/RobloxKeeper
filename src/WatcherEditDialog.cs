@@ -114,16 +114,24 @@ namespace RobloxKeeper
                 case WatchKind.ChatLine:
                     if (string.IsNullOrEmpty(k.Text) || k.Text.Trim().Length == 0)
                         return "It didn't read any chat there. Is the chat open on that client?";
-                    string said = "It read:\r\n" + Clip(k.Text);
                     string filter = Blank(w.ChatContains);
-                    if (filter == null) return said;
-                    int passing = 0;
+                    if (filter == null) return "It read:\r\n" + Clip(k.Text);
+
+                    // The lines that would count come first. In a whole-window
+                    // read they are a few among the leaderboard and the buttons,
+                    // and usually the last of them.
+                    int lines = 0;
+                    List<string> passing = new List<string>();
                     foreach (string line in k.Text.Split('\n'))
                     {
                         if (line.Trim().Length == 0) continue;
-                        if (line.IndexOf(filter, StringComparison.OrdinalIgnoreCase) >= 0) passing++;
+                        lines++;
+                        if (line.IndexOf(filter, StringComparison.OrdinalIgnoreCase) >= 0) passing.Add(line.Trim());
                     }
-                    return said + "\r\n(" + passing + " of them contain \"" + filter + "\")";
+                    string head = "It read " + lines + (lines == 1 ? " line" : " lines") + ". "
+                                + passing.Count + " of them contain \"" + filter + "\""
+                                + (passing.Count > 0 ? ":\r\n" + string.Join("\r\n", passing.ToArray()) : ".");
+                    return head + "\r\n\r\nEverything it read:\r\n" + Clip(k.Text);
 
                 default:
                     string read = string.IsNullOrEmpty(k.Text) || k.Text.Trim().Length == 0
@@ -138,10 +146,13 @@ namespace RobloxKeeper
             return ((int)Math.Floor(v * 100 + 0.5)) + "%";
         }
 
+        // Only a guard against something absurd: the result box scrolls, and a
+        // whole-window chat read runs to several hundred characters with the
+        // lines that matter at the end.
         static string Clip(string s)
         {
             s = s.Trim();
-            return s.Length <= 180 ? s : s.Substring(0, 177) + "...";
+            return s.Length <= 2000 ? s : s.Substring(0, 1997) + "...";
         }
 
         public static string Blank(string s)
@@ -316,6 +327,33 @@ namespace RobloxKeeper
             TextBox t = Input(x, y, w);
             t.UseSystemPasswordChar = true;
             return t;
+        }
+
+        // A box for text of any length - what a test read, say. It scrolls
+        // rather than stopping at its bottom edge, which a label does.
+        public static TextBox ReadOnlyBox(int x, int y, int w, int h)
+        {
+            TextBox t = new TextBox();
+            t.Location = new Point(x, y);
+            t.Size = new Size(w, h);
+            t.Multiline = true;
+            t.ReadOnly = true;
+            t.WordWrap = true;
+            t.ScrollBars = ScrollBars.Vertical;
+            t.BorderStyle = BorderStyle.None;
+            t.BackColor = Theme.Card;
+            t.ForeColor = Theme.Muted;
+            t.Font = new Font("Segoe UI", 8.25f);
+            t.TabStop = false;
+            t.HandleCreated += delegate { DarkScrollbars.Apply(t); };
+            return t;
+        }
+
+        // A text box only breaks a line at "\r\n", and the recogniser hands
+        // back "\n" - without this every line read runs into the next.
+        public static string Lines(string s)
+        {
+            return string.IsNullOrEmpty(s) ? "" : s.Replace("\r\n", "\n").Replace("\n", "\r\n");
         }
 
         public static Button Secondary(string text, int x, int y, int w, int h)
@@ -499,7 +537,7 @@ namespace RobloxKeeper
         const int TOP = WatchUi.TITLEBAR_H + 6;
         const int TOP_H = 380;
         const int LOW_Y = TOP + TOP_H + 12;
-        const int LOW_H = 170;
+        const int LOW_H = 210;
         const int FOOT_Y = LOW_Y + LOW_H + 12;
         const int H = FOOT_Y + 32 + 12;
         const int ROW_H = 26;
@@ -515,14 +553,14 @@ namespace RobloxKeeper
         readonly List<string> created = new List<string>();
         string templateFile, maskFile;
 
-        TextBox nameBox, wordsBox, chatBox, hookBox;
+        TextBox nameBox, wordsBox, chatBox, hookBox, resultBox;
         ThemedPicker cmbKind, cmbMode, cmbWho, cmbWhere, cmbClient;
         ThemedCheckBox chkCase, chkWhole, chkDiscord, chkTray, chkSound, chkLog;
         ThemedNumeric numTolerance, numConfirm, numCooldown;
         Panel textPanel, chatPanel, picturePanel, firingPanel;
         ScrollPanel accountsList;
         PictureBox thumb;
-        Label lblPicture, lblCost, lblResult, lblProblem, lblChatOnly;
+        Label lblPicture, lblCost, lblProblem, lblChatOnly;
         Button btnTest;
         readonly List<string> regionNames = new List<string>();
         readonly List<ThemedCheckBox> accountChecks = new List<ThemedCheckBox>();
@@ -753,9 +791,8 @@ namespace RobloxKeeper
             btnTest.Click += delegate { RunTest(SelectedClient()); };
             card.Controls.Add(btnTest);
 
-            lblResult = Ui.MutedLabel("", Ui.PAD, 110, 8.25f);
-            lblResult.MaximumSize = new Size(INNER, 56);
-            card.Controls.Add(lblResult);
+            resultBox = WatchUi.ReadOnlyBox(Ui.PAD, 110, INNER, LOW_H - 120);
+            card.Controls.Add(resultBox);
         }
 
         // ---------- loading and collecting ----------
@@ -902,7 +939,7 @@ namespace RobloxKeeper
             if (clients.Length > 0) cmbClient.SelectedIndex = 0;
             btnTest.Enabled = clients.Length > 0;
             if (clients.Length == 0)
-                lblResult.Text = "Open a Roblox client to draw boxes, cut out pictures or test this.";
+                ShowResult("Open a Roblox client to draw boxes, cut out pictures or test this.");
         }
 
         WatchedClient SelectedClient()
@@ -957,7 +994,7 @@ namespace RobloxKeeper
                 if (f.ShowDialog(this) != DialogResult.OK || f.PickedPicture == null) return;
                 string file = WatcherForm.TemplateName(nameBox.Text, DateTime.Now);
                 try { WatcherForm.SavePicture(f.PickedPicture, file); }
-                catch (Exception ex) { lblResult.Text = "Couldn't save the picture: " + ex.Message; return; }
+                catch (Exception ex) { ShowResult("Couldn't save the picture: " + ex.Message); return; }
                 created.Add(file);
                 templateFile = file;
                 maskFile = null;
@@ -967,9 +1004,9 @@ namespace RobloxKeeper
 
         void PaintMask()
         {
-            if (string.IsNullOrEmpty(templateFile)) { lblResult.Text = "Cut out a picture first."; return; }
+            if (string.IsNullOrEmpty(templateFile)) { ShowResult("Cut out a picture first."); return; }
             Pixels t = WatchEngine.LoadPicture(templateFile);
-            if (t == null) { lblResult.Text = "Couldn't open the picture. Cut it out again."; return; }
+            if (t == null) { ShowResult("Couldn't open the picture. Cut it out again."); return; }
 
             Pixels existing = maskFile == null ? null : WatchEngine.LoadPicture(maskFile);
             using (MaskPainterForm f = new MaskPainterForm(t, existing))
@@ -977,7 +1014,7 @@ namespace RobloxKeeper
                 if (f.ShowDialog(this) != DialogResult.OK) return;
                 string file = WatcherForm.MaskNameFor(templateFile, DateTime.Now);
                 try { WatcherForm.SavePicture(f.Mask, file); }
-                catch (Exception ex) { lblResult.Text = "Couldn't save it: " + ex.Message; return; }
+                catch (Exception ex) { ShowResult("Couldn't save it: " + ex.Message); return; }
                 created.Add(file);
                 maskFile = file;
                 ShowPicture();
@@ -1005,8 +1042,8 @@ namespace RobloxKeeper
             if (c == null) return;
             if (string.IsNullOrEmpty(c.PlaceId))
             {
-                lblResult.Text = "That client hasn't joined a game yet, and a box belongs to a game. "
-                               + "Try again once it's in one.";
+                ShowResult("That client hasn't joined a game yet, and a box belongs to a game. "
+                         + "Try again once it's in one.");
                 return;
             }
             Pixels still = Grab(c);
@@ -1036,7 +1073,7 @@ namespace RobloxKeeper
         {
             WatchedClient c = SelectedClient();
             if (c == null)
-                lblResult.Text = "Open a Roblox client first - boxes, pictures and tests all need one to look at.";
+                ShowResult("Open a Roblox client first - boxes, pictures and tests all need one to look at.");
             return c;
         }
 
@@ -1048,9 +1085,9 @@ namespace RobloxKeeper
             catch { }
             if (p != null && !p.IsEmpty) return p;
 
-            lblResult.Text = state == WatchState.Watchable
+            ShowResult(state == WatchState.Watchable
                 ? "Couldn't take a picture of that client just now."
-                : WindowCapture.Explain(state);
+                : WindowCapture.Explain(state));
             return null;
         }
 
@@ -1058,13 +1095,23 @@ namespace RobloxKeeper
 
         // Runs the watcher as it stands in the form - not as last saved -
         // against one client right now. Nothing is counted and nothing is sent.
+        // What the result box shows, and that it scrolls - a chat test reads
+        // every line in the box, and the lines that matter come last.
+        public bool ResultScrolls { get { return resultBox.ScrollBars == ScrollBars.Vertical; } }
+        public string ResultShown { get { return resultBox.Text; } }
+
+        void ShowResult(string text)
+        {
+            resultBox.Text = WatchUi.Lines(text);
+        }
+
         public string RunTest(WatchedClient c)
         {
-            if (c == null) return lblResult.Text;
+            if (c == null) return resultBox.Text;
             Watcher w = Collect();
             WatchCheck k = kit.Engine.Check(w, c, kit.Store.Regions);
             string said = WatcherForm.CheckSummary(w, k);
-            lblResult.Text = said;
+            ShowResult(said);
             return said;
         }
 

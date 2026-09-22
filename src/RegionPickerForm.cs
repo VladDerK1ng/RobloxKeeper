@@ -205,7 +205,7 @@ namespace RobloxKeeper
     {
         const int TITLEBAR_H = 40;
         const int SIDE_W = 268;       // the card of controls right of the picture
-        const int SIDE_H = 470;
+        const int SIDE_H = 520;
         const int M = 12;             // outer margin
         const int INNER = SIDE_W - Ui.PAD * 2;
 
@@ -223,7 +223,8 @@ namespace RobloxKeeper
         bool dragging;
 
         StillView view;
-        Label lblSize, lblRead;
+        Label lblSize;
+        TextBox readBox;
         AnchorGrid grid;
         ThemedPicker cmbScaling;
         TextBox nameBox;
@@ -396,9 +397,10 @@ namespace RobloxKeeper
             test.Visible = read != null;
             card.Controls.Add(test);
 
-            lblRead = Ui.MutedLabel("", Ui.PAD, 360, 8.25f);
-            lblRead.MaximumSize = new Size(INNER, 54);
-            card.Controls.Add(lblRead);
+            // Scrolls, because a chat box reads many lines and the ones that
+            // matter are usually the last.
+            readBox = WatchUi.ReadOnlyBox(Ui.PAD, 360, INNER, SIDE_H - 48 - 12 - 360);
+            card.Controls.Add(readBox);
         }
 
         void BuildPictureControls(Card card)
@@ -410,9 +412,8 @@ namespace RobloxKeeper
             hint.MaximumSize = new Size(INNER, 0);
             card.Controls.Add(hint);
 
-            lblRead = Ui.MutedLabel("", Ui.PAD, 160, 8.25f);
-            lblRead.MaximumSize = new Size(INNER, 0);
-            card.Controls.Add(lblRead);
+            readBox = WatchUi.ReadOnlyBox(Ui.PAD, 160, INNER, 60);
+            card.Controls.Add(readBox);
         }
 
         void StartDrag(object sender, MouseEventArgs e)
@@ -470,6 +471,9 @@ namespace RobloxKeeper
 
         // Reads the box grown by the same quarter a watcher grows it by, so
         // what is shown here is exactly what a watcher would get.
+        public bool ReadScrolls { get { return readBox.ScrollBars == ScrollBars.Vertical; } }
+        public string ReadShown { get { return readBox.Text; } }
+
         public string TestRead()
         {
             if (read == null || !HasBox) return "";
@@ -480,8 +484,8 @@ namespace RobloxKeeper
             catch { text = null; }
 
             string said = RegionPick.ReadBack(text);
-            lblRead.Text = said;
-            lblRead.ForeColor = Theme.Muted;
+            readBox.Text = WatchUi.Lines(said);
+            readBox.ForeColor = Theme.Muted;
             return said;
         }
 
@@ -494,8 +498,8 @@ namespace RobloxKeeper
                 string problem = RegionPick.NameProblem(nameBox.Text);
                 if (problem != null)
                 {
-                    lblRead.Text = problem;
-                    lblRead.ForeColor = Theme.Amber;
+                    readBox.Text = problem;
+                    readBox.ForeColor = Theme.Amber;
                     nameBox.Focus();
                     return;
                 }
