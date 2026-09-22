@@ -92,6 +92,13 @@ namespace RobloxKeeper
         public static extern bool SetWindowPos(IntPtr hWnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
         public const uint SWP_NOMOVE = 0x0002, SWP_NOZORDER = 0x0004, SWP_NOACTIVATE = 0x0010;
 
+        // Windows 10 1607 and later. The app is not DPI-aware, so on a scaled
+        // display the positions it reads for other programs' windows are
+        // scaled down - while a mouse hook reports real pixels.
+        [DllImport("user32.dll")]
+        public static extern IntPtr SetThreadDpiAwarenessContext(IntPtr context);
+        public static readonly IntPtr DPI_PER_MONITOR_AWARE_V2 = new IntPtr(-4);
+
         [DllImport("user32.dll")]
         public static extern short GetAsyncKeyState(int vk);
         // The key for a character on the current keyboard layout: the key in

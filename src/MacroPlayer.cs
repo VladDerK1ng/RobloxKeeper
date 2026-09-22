@@ -100,53 +100,89 @@ namespace RobloxKeeper
                     return "Ctrl, Alt or Shift was still held down, and every key would have arrived as a shortcut";
 
                 IntPtr previous = Native.GetForegroundWindow();
-                Native.POINT cursor;
-                Native.GetCursorPos(out cursor);
-
-                bool wasMinimized = Native.IsIconic(hwnd);
-                if (wasMinimized) { Native.ShowWindow(hwnd, Native.SW_RESTORE); Thread.Sleep(180); }
-                // Already in front - a key rule on the client you are playing -
-                // needs no bringing forward, and the Alt tap that does it would
-                // go into the game.
-                if (Native.GetForegroundWindow() != hwnd)
+                // The whole play in real pixels, so the window's position,
+                // the clicks and putting the pointer back all agree.
+                IntPtr dpiWas = RealPixels();
+                try
                 {
-                    InputSender.FocusWindow(hwnd);
-                    Thread.Sleep(100);
+                    return PlayInFront(m, hwnd, previous);
                 }
-
-                string problem = null;
-                if (Native.GetForegroundWindow() != hwnd) problem = "Windows wouldn't bring the client to the front";
-                else
-                {
-                    List<InputAction> plan = MacroPlan.For(m, ClientOnScreen(hwnd));
-                    int done = 0;
-                    for (; done < plan.Count; done++)
-                    {
-                        if (plan[done].Kind != InputActionKind.Sleep && Native.GetForegroundWindow() != hwnd)
-                        {
-                            problem = "stopped - another window came to the front";
-                            break;
-                        }
-                        Send(plan[done]);
-                    }
-                    foreach (byte vk in StillHeld(plan, done)) InputSender.SendScan(vk, false);
-                }
-
-                if (wasMinimized) Native.ShowWindow(hwnd, Native.SW_MINIMIZE);
-                Native.SetCursorPos(cursor.X, cursor.Y);
-                if (previous != IntPtr.Zero && previous != hwnd) InputSender.FocusWindow(previous);
-                return problem;
+                finally { Restore(dpiWas); }
             }
             finally { FocusGate.Exit(); }
         }
 
+        static string PlayInFront(Macro m, IntPtr hwnd, IntPtr previous)
+        {
+            Native.POINT cursor;
+            Native.GetCursorPos(out cursor);
+
+            bool wasMinimized = Native.IsIconic(hwnd);
+            if (wasMinimized) { Native.ShowWindow(hwnd, Native.SW_RESTORE); Thread.Sleep(180); }
+            // Already in front - a key rule on the client you are playing -
+            // needs no bringing forward, and the Alt tap that does it would go
+            // into the game.
+            if (Native.GetForegroundWindow() != hwnd)
+            {
+                InputSender.FocusWindow(hwnd);
+                Thread.Sleep(100);
+            }
+
+            string problem = null;
+            if (Native.GetForegroundWindow() != hwnd) problem = "Windows wouldn't bring the client to the front";
+            else
+            {
+                List<InputAction> plan = MacroPlan.For(m, ClientOnScreen(hwnd));
+                int done = 0;
+                for (; done < plan.Count; done++)
+                {
+                    if (plan[done].Kind != InputActionKind.Sleep && Native.GetForegroundWindow() != hwnd)
+                    {
+                        problem = "stopped - another window came to the front";
+                        break;
+                    }
+                    Send(plan[done]);
+                }
+                foreach (byte vk in StillHeld(plan, done)) InputSender.SendScan(vk, false);
+            }
+
+            if (wasMinimized) Native.ShowWindow(hwnd, Native.SW_MINIMIZE);
+            Native.SetCursorPos(cursor.X, cursor.Y);
+            if (previous != IntPtr.Zero && previous != hwnd) InputSender.FocusWindow(previous);
+            return problem;
+        }
+
+        // In real screen pixels, the same units a mouse hook reports and
+        // SetCursorPos takes while RealPixels is in force.
         public static Rectangle ClientOnScreen(IntPtr hwnd)
         {
-            Native.RECT r;
-            Native.GetClientRect(hwnd, out r);
-            Native.POINT origin = new Native.POINT();
-            Native.ClientToScreen(hwnd, ref origin);
-            return new Rectangle(origin.X, origin.Y, r.Right - r.Left, r.Bottom - r.Top);
+            IntPtr was = RealPixels();
+            try
+            {
+                Native.RECT r;
+                Native.GetClientRect(hwnd, out r);
+                Native.POINT origin = new Native.POINT();
+                Native.ClientToScreen(hwnd, ref origin);
+                return new Rectangle(origin.X, origin.Y, r.Right - r.Left, r.Bottom - r.Top);
+            }
+            finally { Restore(was); }
+        }
+
+        // This thread sees real pixels until Restore. The app is not DPI-aware,
+        // so on a display scaled above 100% Windows hands it scaled-down
+        // window positions, while a mouse hook reports real pixels - and a
+        // recorded click would play back in the wrong place. On an unscaled
+        // display, and on Windows older than 10 1607, nothing changes.
+        static IntPtr RealPixels()
+        {
+            try { return Native.SetThreadDpiAwarenessContext(Native.DPI_PER_MONITOR_AWARE_V2); }
+            catch { return IntPtr.Zero; }
+        }
+
+        static void Restore(IntPtr was)
+        {
+            if (was == IntPtr.Zero) return;
+            try { Native.SetThreadDpiAwarenessContext(was); } catch { }
         }
 
         static void Send(InputAction a)
