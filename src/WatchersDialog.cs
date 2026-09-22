@@ -174,6 +174,11 @@ namespace RobloxKeeper
             card.Controls.Add(lblPace);
 
             Card clients = WatchUi.CardAt(this, "CLIENTS", 12, LOW_Y, HALF, LOW_H);
+            LinkLabel same = Ui.RowLink("Same size as Client 1", HALF - Ui.PAD - 130, 10, 26, 8.25f);
+            same.Click += delegate { SameSize(); };
+            tips.SetToolTip(same, "Every client the size of the first, so boxes and macro clicks land exactly "
+                + "the same on all of them. Each window stays where it is.");
+            clients.Controls.Add(same);
             clientList = new ScrollPanel();
             clientList.Location = new Point(Ui.PAD, 42);
             clientList.Size = new Size(HALF - Ui.PAD * 2, LOW_H - 54);
@@ -411,6 +416,15 @@ namespace RobloxKeeper
                 kit.Say("Watcher " + d.Result.Name + " saved.");
             }
             Rebuild();
+        }
+
+        void SameSize()
+        {
+            string said;
+            List<KeyValuePair<IntPtr, Size>> plan = WindowSizer.Plan(WindowSizer.Measure(kit.RunningClients()), out said);
+            WindowSizer.Apply(plan);
+            kit.Say(said);
+            MessageBox.Show(this, said, "Same size", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
         // ---------- setups ----------

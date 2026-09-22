@@ -80,6 +80,12 @@ namespace RobloxKeeper
         public struct POINT { public int X, Y; }
 
         [DllImport("user32.dll")]
+        public static extern bool IsZoomed(IntPtr hWnd);
+        [DllImport("user32.dll")]
+        public static extern bool SetWindowPos(IntPtr hWnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
+        public const uint SWP_NOMOVE = 0x0002, SWP_NOZORDER = 0x0004, SWP_NOACTIVATE = 0x0010;
+
+        [DllImport("user32.dll")]
         public static extern bool SetCursorPos(int x, int y);
         [DllImport("user32.dll")]
         public static extern bool GetCursorPos(out POINT p);
