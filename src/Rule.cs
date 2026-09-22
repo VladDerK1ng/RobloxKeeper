@@ -123,4 +123,152 @@ namespace RobloxKeeper
             return r;
         }
     }
+
+    // Something that happened which a rule may be waiting for. Timers are not
+    // happenings - the clock is, and RuleRunner.Tick reads it.
+    class RuleHappening
+    {
+        public RuleWhen Kind;
+        public string WatcherName;      // WatcherFinds
+        public string Found;            // WatcherFinds: the line or word it found
+        public int Pid;                 // WatcherFinds, Joins: which client
+        public byte Vk;                 // Hotkey
+        public bool Ctrl, Alt, Shift;   // Hotkey
+    }
+
+    // A rule's macro, to be played on one client.
+    class RuleFiring
+    {
+        public Rule Rule;
+        public int Pid;
+        public string Label;            // "Client 2 - alt1", for the activity list
+        public int Times;
+        public DateTime Due;
+    }
+
+    // Which rules fire, on which clients, and when. Decides only; the main
+    // window plays what it is handed.
+    class RuleRunner
+    {
+        // Nobody has touched the keyboard or mouse for this long: away.
+        public static readonly TimeSpan AwayAfter = TimeSpan.FromMinutes(1);
+
+        readonly Dictionary<Rule, DateTime> nextDue = new Dictionary<Rule, DateTime>();
+        readonly Dictionary<Rule, Dictionary<int, DateTime>> lastPlayed = new Dictionary<Rule, Dictionary<int, DateTime>>();
+        readonly List<RuleFiring> waiting = new List<RuleFiring>();
+
+        // Something happened: the rules it sets off, due now. Ones told to
+        // wait first come back from Tick when their time comes.
+        public List<RuleFiring> Happened(IList<Rule> rules, RuleHappening h, IList<WatchedClient> clients,
+                                         int foregroundPid, TimeSpan idle, DateTime now)
+        {
+            List<RuleFiring> fire = new List<RuleFiring>();
+            foreach (Rule r in rules)
+            {
+                if (!Ready(r) || r.When == RuleWhen.Every || !Matches(r, h)) continue;
+                if (r.OnlyWhenAway && idle < AwayAfter) continue;
+                Fire(r, Targets(r, h.Pid, clients, foregroundPid), now, fire);
+            }
+            return fire;
+        }
+
+        // Once a second: timers that have come round, and waits that are over.
+        public List<RuleFiring> Tick(IList<Rule> rules, IList<WatchedClient> clients,
+                                     int foregroundPid, TimeSpan idle, DateTime now)
+        {
+            List<RuleFiring> fire = new List<RuleFiring>();
+            for (int i = waiting.Count - 1; i >= 0; i--)
+                if (waiting[i].Due <= now) { fire.Insert(0, waiting[i]); waiting.RemoveAt(i); }
+
+            foreach (Rule r in rules)
+            {
+                if (!Ready(r) || r.When != RuleWhen.Every) continue;
+                DateTime due;
+                if (!nextDue.TryGetValue(r, out due)) { nextDue[r] = now.AddSeconds(r.EverySeconds); continue; }
+                if (now < due) continue;
+                // Waiting for the keyboard to go quiet keeps it due, so it
+                // plays the moment it may rather than a whole turn later.
+                if (r.OnlyWhenAway && idle < AwayAfter) continue;
+                nextDue[r] = now.AddSeconds(r.EverySeconds);
+                Fire(r, Targets(r, 0, clients, foregroundPid), now, fire);
+            }
+
+            // A rule removed or edited (and so replaced) takes its clock with it.
+            List<Rule> gone = new List<Rule>();
+            foreach (Rule r in nextDue.Keys) if (!rules.Contains(r)) gone.Add(r);
+            foreach (Rule r in gone) { nextDue.Remove(r); lastPlayed.Remove(r); }
+            return fire;
+        }
+
+        static bool Ready(Rule r)
+        {
+            return r != null && r.Enabled && r.Problem() == null;
+        }
+
+        static bool Matches(Rule r, RuleHappening h)
+        {
+            if (h == null || r.When != h.Kind) return false;
+            switch (r.When)
+            {
+                case RuleWhen.WatcherFinds:
+                    if (!string.IsNullOrEmpty(r.Watcher) &&
+                        !string.Equals(r.Watcher, h.WatcherName, StringComparison.OrdinalIgnoreCase)) return false;
+                    return string.IsNullOrEmpty(r.FoundContains) ||
+                           (h.Found ?? "").IndexOf(r.FoundContains, StringComparison.OrdinalIgnoreCase) >= 0;
+                case RuleWhen.Hotkey:
+                    return r.HotkeyVk == h.Vk && r.Ctrl == h.Ctrl && r.Alt == h.Alt && r.Shift == h.Shift;
+                default:
+                    return true;
+            }
+        }
+
+        static List<WatchedClient> Targets(Rule r, int where, IList<WatchedClient> clients, int foregroundPid)
+        {
+            List<WatchedClient> list = new List<WatchedClient>();
+            foreach (WatchedClient c in clients)
+            {
+                if (c == null) continue;
+                bool take;
+                switch (r.On)
+                {
+                    case RuleOn.InFront: take = c.Pid == foregroundPid; break;
+                    case RuleOn.EveryClient: take = true; break;
+                    case RuleOn.TheseAccounts: take = Named(r.Accounts, c.AccountName); break;
+                    default: take = c.Pid == where; break;
+                }
+                if (take) list.Add(c);
+            }
+            return list;
+        }
+
+        static bool Named(string[] accounts, string name)
+        {
+            if (accounts == null || string.IsNullOrEmpty(name)) return false;
+            foreach (string a in accounts)
+                if (string.Equals(a, name, StringComparison.OrdinalIgnoreCase)) return true;
+            return false;
+        }
+
+        void Fire(Rule r, List<WatchedClient> targets, DateTime now, List<RuleFiring> fire)
+        {
+            Dictionary<int, DateTime> byPid;
+            if (!lastPlayed.TryGetValue(r, out byPid)) { byPid = new Dictionary<int, DateTime>(); lastPlayed[r] = byPid; }
+
+            foreach (WatchedClient c in targets)
+            {
+                DateTime was;
+                if (byPid.TryGetValue(c.Pid, out was) && now - was < TimeSpan.FromSeconds(r.GapSeconds)) continue;
+                byPid[c.Pid] = now;
+
+                RuleFiring f = new RuleFiring();
+                f.Rule = r;
+                f.Pid = c.Pid;
+                f.Label = string.IsNullOrEmpty(c.AccountName) ? c.Label : c.Label + " - " + c.AccountName;
+                f.Times = Math.Max(1, r.Times);
+                f.Due = now.AddSeconds(r.DelaySeconds);
+                if (r.DelaySeconds > 0) waiting.Add(f);
+                else fire.Add(f);
+            }
+        }
+    }
 }
