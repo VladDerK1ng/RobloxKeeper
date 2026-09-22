@@ -205,7 +205,7 @@ Measured on Windows 11 while idle: about **0.8% of one CPU core** and **67 MB** 
 
 Running two Roblox clients costs whatever two Roblox clients cost on your machine (mostly GPU and RAM), and the number of installed Roblox versions makes no difference. The per-client work added by the Performance card is a memory reading per client per tick, plus a priority/affinity call only when a client's settings have actually drifted from its profile - so it is proportional to the number of clients, not to time.
 
-Watching costs what it reads. Measured on a live client: a picture of the window takes about 25ms, reading a box about 10ms, and reading the whole window about 90-110ms - so one client watched through its whole window settles at around three scans a second, and boxes are what get it to four. With no watcher switched on, the watch thread isn't running at all.
+Watching costs what it reads. Every picture is read twice - once as it is, and once with colour turned into brightness, so coloured text is read too - and measured on frames from a live client that comes to about 10-15ms for a box and about 200ms for the whole window, with a picture of the window taking about 25ms on top. So one client watched through its whole window settles at around two scans a second, and boxes are what get it to four. With no watcher switched on, the watch thread isn't running at all.
 
 The only moment it touches your desktop is a nudge: it focuses each selected client for roughly half a second, sends the keys, and hands focus back. If you are typing at that moment you will notice it. Nothing else it does steals focus.
 
@@ -234,7 +234,7 @@ This is the same externally-held-mutex technique used by established multi-insta
 ## FAQ
 
 **A watcher never fires, but I can see the word on screen.**
-Open the watcher and press **Test against this client now** - it says exactly what it read. Windows' text recogniser reads light text on a plain background well and struggles with dark lettering on a dark outline: on a live egg-spawn banner it read *spawned in* every time and never the dark egg name next to it. Watch for a word it does read, such as *spawned* - the picture sent with the alert shows the rest - or use a **picture** watcher, which compares pixels and doesn't care what colour the text is. Chat can only be read while the chat is open on that client.
+Open the watcher and press **Test against this client now** - it says exactly what it read. Windows' text recogniser sees brightness, not colour, so on its own it misses coloured words on a dark background: a dark red egg name in chat is barely brighter than the chat panel. RobloxKeeper reads every picture a second time with colour turned into brightness and keeps the better reading of each line, which is what gets those words. What it still can't read is near-black lettering on a dark outline: on a live egg-spawn banner it reads *spawned in Demons* but never the black egg name before it. Watch for a word it does read, such as *spawned* - the picture sent with the alert shows the rest - or use a **picture** watcher, which compares pixels and doesn't care what colour the text is. Chat can only be read while the chat is open on that client.
 
 **Does it work while Roblox is minimized?**
 Yes - the client is restored for about a second, nudged, and re-minimized.
