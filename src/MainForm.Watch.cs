@@ -421,8 +421,11 @@ namespace RobloxKeeper
             job.Times = Math.Max(1, times);
             if (!macroQueue.Offer(job))
             {
-                Log("Didn't play " + m.Name + " on " + job.Label + ": " + MacroQueue.MAX_WAITING
-                    + " macros are already waiting their turn.");
+                // Already waiting for that client is the queue working, not
+                // worth a line. Only a full queue is.
+                if (macroQueue.Waiting >= MacroQueue.MAX_WAITING)
+                    Log("Didn't play " + m.Name + " on " + job.Label + ": " + MacroQueue.MAX_WAITING
+                        + " macros are already waiting their turn.");
                 return;
             }
 

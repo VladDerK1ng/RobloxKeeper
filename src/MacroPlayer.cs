@@ -148,16 +148,18 @@ namespace RobloxKeeper
         public int Times = 1;      // played this many times in a row, while it holds the front
     }
 
-    // Macros set off by watchers, played one at a time.
+    // Macros set off by watchers and rules, played one at a time.
     //
-    // Five waiting is already most of a minute of held focus, so a sixth is
-    // turned away and the caller says so, rather than the queue growing while
-    // a busy chat keeps firing.
+    // What stops it backing up is that the same macro for the same client is
+    // never waiting twice: a busy chat firing again and again adds nothing
+    // while one is already queued. A rule on every client still reaches every
+    // client. The cap is only a safety net, and the caller says so if it is
+    // ever hit.
     class MacroQueue
     {
-        public const int MAX_WAITING = 5;
+        public const int MAX_WAITING = 30;
 
-        readonly Queue<MacroJob> waiting = new Queue<MacroJob>();
+        readonly List<MacroJob> waiting = new List<MacroJob>();
         readonly object gate = new object();
 
         public bool Offer(MacroJob j)
@@ -165,14 +167,23 @@ namespace RobloxKeeper
             lock (gate)
             {
                 if (waiting.Count >= MAX_WAITING) return false;
-                waiting.Enqueue(j);
+                foreach (MacroJob w in waiting)
+                    if (w.Pid == j.Pid && string.Equals(w.Macro.Name, j.Macro.Name, StringComparison.OrdinalIgnoreCase))
+                        return false;
+                waiting.Add(j);
                 return true;
             }
         }
 
         public MacroJob Take()
         {
-            lock (gate) return waiting.Count == 0 ? null : waiting.Dequeue();
+            lock (gate)
+            {
+                if (waiting.Count == 0) return null;
+                MacroJob j = waiting[0];
+                waiting.RemoveAt(0);
+                return j;
+            }
         }
 
         public int Waiting { get { lock (gate) return waiting.Count; } }
