@@ -7,6 +7,20 @@ using System.Text;
 
 namespace RobloxKeeper
 {
+    // A named set of watchers - one for each game, say - so everything being
+    // watched changes in one go instead of watcher by watcher.
+    //
+    // Only watchers. Boxes already belong to the game they were drawn on, so
+    // every setup finds the right ones; and the Discord webhook is shared,
+    // with a watcher's own link for anything that should go elsewhere.
+    class WatchSetup
+    {
+        public string Name;
+        public readonly List<Watcher> Watchers = new List<Watcher>();
+
+        public WatchSetup(string name) { Name = name; }
+    }
+
     // Watchers and regions on disk.
     //
     // Encrypted the same way the account list is, for the same reason: the
@@ -24,16 +38,104 @@ namespace RobloxKeeper
         // so a user's own text can never split it.
         const char LIST = '\u001f';
 
+        // What the one setup everybody starts with is called, and where the
+        // watchers in a file from before setups go.
+        public const string FirstSetupName = "Main";
+
+        // Long enough for a game's name, short enough for the list it is
+        // picked from.
+        public const int MaxSetupName = 40;
+
         readonly string path;
-        readonly List<Watcher> watchers = new List<Watcher>();
+        readonly List<WatchSetup> setups = new List<WatchSetup>();
         readonly List<WatchRegion> regions = new List<WatchRegion>();
+        WatchSetup chosen;
 
         public string WebhookUrl = "";
 
-        public WatchStore(string path) { this.path = path; }
+        public WatchStore(string path)
+        {
+            this.path = path;
+            chosen = new WatchSetup(FirstSetupName);
+            setups.Add(chosen);
+        }
 
-        public IList<Watcher> Watchers { get { return watchers; } }
+        // The chosen setup's watchers. Everything that shows, edits or runs
+        // watchers goes through this, so choosing another setup changes all
+        // of it at once.
+        public IList<Watcher> Watchers { get { return chosen.Watchers; } }
         public IList<WatchRegion> Regions { get { return regions; } }
+
+        // Never empty. Changed only through the methods below, which keep it
+        // that way.
+        public IList<WatchSetup> Setups { get { return setups.AsReadOnly(); } }
+        public WatchSetup Chosen { get { return chosen; } }
+
+        // ---------- setups ----------
+
+        public WatchSetup FindSetup(string name)
+        {
+            if (name == null) return null;
+            string n = name.Trim();
+            foreach (WatchSetup s in setups)
+                if (string.Equals(s.Name, n, StringComparison.OrdinalIgnoreCase)) return s;
+            return null;
+        }
+
+        public bool Choose(string name)
+        {
+            WatchSetup s = FindSetup(name);
+            if (s == null) return false;
+            chosen = s;
+            return true;
+        }
+
+        // Null when the name will do. Setups are picked by name, so two with
+        // one name could not be told apart.
+        public string SetupNameProblem(string name, WatchSetup renaming)
+        {
+            string n = name == null ? "" : name.Trim();
+            if (n.Length == 0) return "Give the setup a name.";
+            if (n.Length > MaxSetupName) return "Keep the name to " + MaxSetupName + " characters or fewer.";
+            WatchSetup same = FindSetup(n);
+            if (same != null && !ReferenceEquals(same, renaming))
+                return "There's already a setup called \"" + same.Name + "\".";
+            return null;
+        }
+
+        // A new setup, chosen straight away, because the next thing anyone
+        // does with one is fill it in. A copy starts with copies of the chosen
+        // setup's watchers, so changing it leaves the original alone. Null if
+        // the name will not do.
+        public WatchSetup AddSetup(string name, bool copyChosen)
+        {
+            if (SetupNameProblem(name, null) != null) return null;
+            WatchSetup s = new WatchSetup(name.Trim());
+            if (copyChosen)
+                foreach (Watcher w in chosen.Watchers)
+                    s.Watchers.Add(DeserializeWatcher(SerializeWatcher(w)));
+            setups.Add(s);
+            chosen = s;
+            return s;
+        }
+
+        public bool RenameSetup(WatchSetup s, string name)
+        {
+            if (s == null || !setups.Contains(s) || SetupNameProblem(name, s) != null) return false;
+            s.Name = name.Trim();
+            return true;
+        }
+
+        // Never the last one. Removing the one in use puts the one before it
+        // in use, so there is never none.
+        public bool RemoveSetup(WatchSetup s)
+        {
+            int i = setups.IndexOf(s);
+            if (i < 0 || setups.Count == 1) return false;
+            setups.RemoveAt(i);
+            if (ReferenceEquals(s, chosen)) chosen = setups[Math.Max(0, i - 1)];
+            return true;
+        }
 
         public static string DefaultPath
         {
@@ -92,17 +194,21 @@ namespace RobloxKeeper
 
         // ---------- file ----------
 
+        // A setup line starts a setup, and the watcher lines after it are its
+        // watchers; one more line says which setup was in use.
         public void Load()
         {
-            watchers.Clear();
+            setups.Clear();
             regions.Clear();
             WebhookUrl = "";
+            string wanted = null;
 
             try
             {
                 if (!File.Exists(path)) return;
                 byte[] plain = ProtectedData.Unprotect(File.ReadAllBytes(path), null,
                                                        DataProtectionScope.CurrentUser);
+                WatchSetup filling = null;
                 foreach (string line in Encoding.UTF8.GetString(plain).Split('\n'))
                 {
                     string row = line.TrimEnd('\r');
@@ -113,8 +219,22 @@ namespace RobloxKeeper
                     if (kind == "W|")
                     {
                         Watcher w = DeserializeWatcher(rest);
-                        if (w != null) watchers.Add(w);
+                        if (w == null) continue;
+                        // A file from before setups has watchers and no setup
+                        // line. They all belong to the first one.
+                        if (filling == null)
+                        {
+                            filling = new WatchSetup(FirstSetupName);
+                            setups.Add(filling);
+                        }
+                        filling.Watchers.Add(w);
                     }
+                    else if (kind == "S|")
+                    {
+                        filling = new WatchSetup(Unescape(rest));
+                        setups.Add(filling);
+                    }
+                    else if (kind == "C|") wanted = Unescape(rest);
                     else if (kind == "R|")
                     {
                         WatchRegion r = DeserializeRegion(rest);
@@ -129,6 +249,11 @@ namespace RobloxKeeper
                 // build that changed the format. Starting empty is
                 // recoverable; throwing during startup is not.
             }
+            finally
+            {
+                if (setups.Count == 0) setups.Add(new WatchSetup(FirstSetupName));
+                chosen = FindSetup(wanted) ?? setups[0];
+            }
         }
 
         public void Save()
@@ -137,7 +262,12 @@ namespace RobloxKeeper
             if (!string.IsNullOrEmpty(WebhookUrl))
                 sb.Append("U|").Append(Escape(WebhookUrl)).Append('\n');
             foreach (WatchRegion r in regions) sb.Append("R|").Append(SerializeRegion(r)).Append('\n');
-            foreach (Watcher w in watchers) sb.Append("W|").Append(SerializeWatcher(w)).Append('\n');
+            sb.Append("C|").Append(Escape(chosen.Name)).Append('\n');
+            foreach (WatchSetup s in setups)
+            {
+                sb.Append("S|").Append(Escape(s.Name)).Append('\n');
+                foreach (Watcher w in s.Watchers) sb.Append("W|").Append(SerializeWatcher(w)).Append('\n');
+            }
 
             try
             {
