@@ -34,6 +34,11 @@ namespace RobloxKeeper
         readonly Dictionary<string, long> offsets = new Dictionary<string, long>();
         readonly string dir;
 
+        // When watching began. A log that already existed then holds joins
+        // that happened before; one created since is a client started since,
+        // and everything in it is news.
+        public DateTime Started = DateTime.Now;
+
         public RobloxLogWatch() : this(RobloxLog.LogsDir) { }
         public RobloxLogWatch(string dir) { this.dir = dir; }
 
@@ -121,7 +126,9 @@ namespace RobloxKeeper
             }
             catch { return; }   // locked or gone; the next join will be seen as it happens
 
-            if (found) Joined(f.Name, last);
+            if (!found) return;
+            last.Earlier = f.CreationTime < Started;
+            Joined(f.Name, last);
         }
 
         void Report(string fileName, string line)

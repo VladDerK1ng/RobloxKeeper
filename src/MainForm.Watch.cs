@@ -237,7 +237,9 @@ namespace RobloxKeeper
             clientWhere[pid] = e;
             PublishWatchWork();
             HuntJoined(pid, e);
-            RulesJoined(pid);
+            // Not for a join from before the app started: a join rule would
+            // otherwise play on every client already in a game, at once.
+            if (!e.Earlier) RulesJoined(pid);
         }
 
         // Once a second, from the main loop.

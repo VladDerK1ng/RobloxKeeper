@@ -60,6 +60,39 @@ namespace RobloxKeeper.Tests
             }
         }
 
+        // A rule set to play a macro when a client joins must not fire on
+        // every client the moment the app starts, for joins that happened
+        // hours ago. A join already in a log from before watching started is
+        // told as earlier.
+        public static void TestAJoinFromBeforeWatchingStartedIsMarkedEarlier()
+        {
+            using (Rig r = new Rig())
+            {
+                r.Write(JoinA + "\r\n");
+                r.Watch.Started = File.GetCreationTime(Path.Combine(r.Dir, LogName)).AddSeconds(1);
+                r.Watch.Tick();
+                Assert.Equal(1, r.Joins.Count, "still known - the watchers need to know where it is");
+                Assert.True(r.Joins[0].Earlier, "but marked as having happened before");
+            }
+        }
+
+        // A client started after watching began can have its first join
+        // written before the log is first looked at. That is still news.
+        public static void TestAJoinInALogStartedSinceWatchingBeganIsNew()
+        {
+            using (Rig r = new Rig())
+            {
+                r.Write(JoinA + "\r\n");        // the log appeared after the watch was made
+                r.Watch.Tick();
+                Assert.Equal(1, r.Joins.Count, "reported");
+                Assert.False(r.Joins[0].Earlier, "as new");
+
+                r.Append(JoinB + "\r\n");
+                r.Watch.Tick();
+                Assert.False(r.Joins[1].Earlier, "and so is every join after");
+            }
+        }
+
         public static void TestANewJoinIsReportedAsItHappens()
         {
             using (Rig r = new Rig())

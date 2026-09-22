@@ -16,6 +16,10 @@ namespace RobloxKeeper
         // press.
         public string JobId;
         public int Reason;
+
+        // A join that was already in a log from before watching started: it
+        // says where a client is, but it is not something that just happened.
+        public bool Earlier;
     }
 
     // Reading what Roblox writes about itself.
