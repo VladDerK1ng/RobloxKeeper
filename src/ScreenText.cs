@@ -117,11 +117,12 @@ namespace RobloxKeeper
                 if (!Placed(asItIs) || !Placed(inColour))
                     return Join(Letters(Join(inColour)) > Letters(Join(asItIs)) ? inColour : asItIs);
 
-                // A third reading for dark letters inside a black outline,
-                // which neither of the others can see at all - see DarkFill.
-                List<TextLine> darkFill = ReadLines(DarkFill(image), eng);
+                // A third reading for letters with a plain fill inside an
+                // outline - chat over the scenery, a Secret egg's dark name -
+                // which the others read badly or not at all. See PlainGrey.
+                List<TextLine> plain = ReadLines(PlainGrey(image), eng);
                 List<TextLine> both = Merge(asItIs, inColour);
-                return Join(Placed(darkFill) ? MergeExtra(both, darkFill) : both);
+                return Join(Placed(plain) ? MergeExtra(both, plain) : both);
             }
             catch { return ""; }
         }
@@ -205,11 +206,12 @@ namespace RobloxKeeper
             return Combine(asItIs, inColour, true);
         }
 
-        // A reading that sees what the others cannot, and garbles what they
-        // can. The dark-fill reading picks out outlined dark letters nothing
-        // else reads, but it also reads white names off a dark panel, badly -
-        // "VIBdDerKIng" for "Vlad DerKing", measured. So it adds lines nobody
-        // else found, and replaces one only with strictly more letters.
+        // A reading that sees what the others cannot, and can garble what they
+        // read fine. The plain-grey reading picks out outlined letters nothing
+        // else reads, but on a whole window it also adds rougher copies of
+        // lines the others already have - "dDerKing", "805B" off the
+        // leaderboard, measured. So it adds lines nobody else found, and
+        // replaces one only with strictly more letters.
         public static List<TextLine> MergeExtra(IList<TextLine> kept, IList<TextLine> extra)
         {
             return Combine(kept, extra, false);
@@ -301,25 +303,32 @@ namespace RobloxKeeper
             return o;
         }
 
-        // Outlined dark lettering - a dark grey fill inside a black outline,
-        // which is how this game draws a Secret egg's name - reads to the
-        // recogniser as hollow letters: it takes the outline for the letter
-        // and the fill for the gaps, and reads nothing (measured, every scale
-        // and contrast tried). Picking out the fill alone, as solid black on
-        // white, leaves ordinary letters, and those it reads. The fill measured
-        // 46 with the outline at 0 and the scene behind well above 80, so the
-        // band keeps the fill and nothing either side of it.
-        const int FILL_FROM = 25, FILL_TO = 80;
+        // Letters with a plain fill inside an outline - how Roblox draws chat,
+        // and how this game draws a Secret egg's name - picked out as solid
+        // black on white.
+        //
+        // Measured on the owner's frames: the fill is plain grey, light (199)
+        // or dark (46), while the outline is black or takes on the colour of
+        // whatever is behind it - (49,40,31) over the brown wall - and the
+        // scenery itself is coloured. A dark name and a tinted outline are the
+        // same brightness, so no reading by brightness separates them, and the
+        // recogniser read nothing. Plainness does: channels within a few steps
+        // of each other, dark or light, is the letter; the rest is not.
+        const int PLAIN_SPREAD = 12;
+        const int PLAIN_DARK_FROM = 30, PLAIN_DARK_TO = 70, PLAIN_LIGHT_FROM = 170;
 
-        public static Pixels DarkFill(Pixels p)
+        public static Pixels PlainGrey(Pixels p)
         {
             Pixels o = new Pixels(p.Width, p.Height);
             int black = unchecked((int)0xFF000000), white = unchecked((int)0xFFFFFFFF);
             for (int i = 0; i < p.Argb.Length; i++)
             {
                 int c = p.Argb[i];
-                int v = Math.Max((c >> 16) & 0xFF, Math.Max((c >> 8) & 0xFF, c & 0xFF));
-                o.Argb[i] = v >= FILL_FROM && v <= FILL_TO ? black : white;
+                int r = (c >> 16) & 0xFF, g = (c >> 8) & 0xFF, b = c & 0xFF;
+                int max = Math.Max(r, Math.Max(g, b)), min = Math.Min(r, Math.Min(g, b));
+                bool plain = max - min <= PLAIN_SPREAD;
+                bool letter = plain && ((max >= PLAIN_DARK_FROM && max <= PLAIN_DARK_TO) || max >= PLAIN_LIGHT_FROM);
+                o.Argb[i] = letter ? black : white;
             }
             return o;
         }

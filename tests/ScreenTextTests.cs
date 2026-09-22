@@ -254,29 +254,93 @@ namespace RobloxKeeper.Tests
             Assert.Contains("Secret", ScreenText.Read(OutlinedBanner()), "the egg's rarity, in dark outlined letters");
         }
 
-        // Only the fill turns black; the outline and everything bright or
-        // lighter than a fill turns white, so the letters come out solid.
-        public static void TestTheDarkFillOfOutlinedLettersIsPickedOut()
+        // Roblox chat with its panel gone see-through, as measured on the
+        // owner's frame: small letters with a plain fill - light grey 199, or
+        // dark grey 46 for a Secret egg's name - in a dark outline that takes
+        // on the colour of the wall behind it, (52,41,30) and the like. The
+        // dark name and its outline are the same brightness, so no reading by
+        // brightness can separate them; it came back with "spawned in" and no
+        // egg at all.
+        static Pixels SeeThroughChat()
         {
-            Pixels p = new Pixels(5, 1);
-            p.Set(0, 0, Color.FromArgb(46, 46, 46).ToArgb());     // the fill
-            p.Set(1, 0, Color.FromArgb(0, 0, 0).ToArgb());        // the outline
-            p.Set(2, 0, Color.FromArgb(78, 184, 38).ToArgb());    // the grass behind
-            p.Set(3, 0, Color.FromArgb(235, 235, 235).ToArgb());  // white text
-            p.Set(4, 0, Color.FromArgb(120, 120, 120).ToArgb());  // mid grey, not a fill
-            Pixels o = ScreenText.DarkFill(p);
-            int black = Color.Black.ToArgb(), white = Color.White.ToArgb();
-            Assert.Equal(black, o.At(0, 0), "the fill");
-            Assert.Equal(white, o.At(1, 0), "not the outline");
-            Assert.Equal(white, o.At(2, 0), "not the scenery");
-            Assert.Equal(white, o.At(3, 0), "not white text");
-            Assert.Equal(white, o.At(4, 0), "not mid grey");
+            Color wall = Color.FromArgb(199, 139, 82), outline = Color.FromArgb(52, 41, 30);
+            Color light = Color.FromArgb(199, 199, 199), dark = Color.FromArgb(46, 46, 46);
+            using (Bitmap bmp = new Bitmap(420, 60))
+            using (Graphics g = Graphics.FromImage(bmp))
+            {
+                g.Clear(wall);
+                g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+                using (FontFamily family = new FontFamily("Segoe UI"))
+                {
+                    ChatRun(g, family, "Say hi to everyone playing now!", light, outline, 6, 4);
+                    float x = ChatRun(g, family, "A ", light, outline, 6, 22);
+                    x = ChatRun(g, family, "Secret Gargoyle Egg", dark, outline, x, 22);
+                    x = ChatRun(g, family, " spawned in ", light, outline, x, 22);
+                    ChatRun(g, family, "Demons!", Color.FromArgb(220, 30, 30), outline, x, 22);
+                    ChatRun(g, family, "Your friend SFM_Claudiu has joined the experience.", light, outline, 6, 40);
+                }
+                return Pixels.FromBitmap(bmp);
+            }
         }
 
-        // The fill reading also catches dark panels - measured, it reads the
-        // leaderboard's white names off its dark panel, garbled: "VIBdDerKIng"
-        // for "Vlad DerKing". It may add a line nobody else found, but only
-        // replaces one it read with strictly more.
+        // One run of a chat line, outlined, returning where the next starts.
+        static float ChatRun(Graphics g, FontFamily family, string text, Color fill, Color outline, float x, float y)
+        {
+            using (System.Drawing.Drawing2D.GraphicsPath path = new System.Drawing.Drawing2D.GraphicsPath())
+            {
+                path.AddString(text, family, (int)FontStyle.Bold, 13f, new PointF(x, y), StringFormat.GenericTypographic);
+                using (Pen pen = new Pen(outline, 2.5f))
+                {
+                    pen.LineJoin = System.Drawing.Drawing2D.LineJoin.Round;
+                    g.DrawPath(pen, path);
+                }
+                using (SolidBrush b = new SolidBrush(fill)) g.FillPath(b, path);
+                RectangleF bounds = path.GetBounds();
+                return text.EndsWith(" ") ? bounds.Right + 4 : bounds.Right + 1;
+            }
+        }
+
+        public static void TestDarkLettersInSeeThroughChatAreRead()
+        {
+            if (!ScreenText.Available) return;
+            Assert.Contains("Secret Gargoyle Egg", ScreenText.Read(SeeThroughChat()),
+                "the egg's name, in dark grey in a tinted outline");
+        }
+
+        // What separates a letter from its outline is not brightness but that
+        // the letter is plain grey and the outline is tinted by whatever is
+        // behind it. Plain grey - dark or light - turns black; anything with
+        // colour in it, and black itself, turns white.
+        public static void TestPlainGreyLettersArePickedOutFromTheirOutline()
+        {
+            Color[] pick = {
+                Color.FromArgb(46, 46, 46),      // a dark name's fill
+                Color.FromArgb(199, 199, 199),   // a white line's fill
+                Color.FromArgb(235, 235, 235)    // brighter white text
+            };
+            Color[] leave = {
+                Color.FromArgb(52, 41, 30),      // chat outline over the brown wall
+                Color.FromArgb(49, 40, 31),      // measured, the same
+                Color.FromArgb(199, 139, 82),    // the brown wall
+                Color.FromArgb(78, 184, 38),     // the green grass
+                Color.FromArgb(0, 0, 0),         // a black outline
+                Color.FromArgb(120, 120, 120)    // mid grey, neither
+            };
+            Pixels p = new Pixels(pick.Length + leave.Length, 1);
+            for (int i = 0; i < pick.Length; i++) p.Set(i, 0, pick[i].ToArgb());
+            for (int i = 0; i < leave.Length; i++) p.Set(pick.Length + i, 0, leave[i].ToArgb());
+
+            Pixels o = ScreenText.PlainGrey(p);
+            for (int i = 0; i < pick.Length; i++)
+                Assert.Equal(Color.Black.ToArgb(), o.At(i, 0), "picked out: " + pick[i]);
+            for (int i = 0; i < leave.Length; i++)
+                Assert.Equal(Color.White.ToArgb(), o.At(pick.Length + i, 0), "left out: " + leave[i]);
+        }
+
+        // An extra reading can read a line worse than the others do - a band
+        // reading tried on the leaderboard gave "VIBdDerKIng" for "Vlad
+        // DerKing". It may add a line nobody else found, but only replaces one
+        // it read with strictly more.
         public static void TestAnExtraReadingAddsLinesButNeverRewritesOneOnATie()
         {
             string merged = ScreenText.Join(ScreenText.MergeExtra(
