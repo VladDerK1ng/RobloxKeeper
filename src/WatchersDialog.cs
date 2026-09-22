@@ -217,6 +217,16 @@ namespace RobloxKeeper
             macros.Click += delegate { using (MacrosDialog d = new MacrosDialog(kit)) d.ShowDialog(this); };
             tips.SetToolTip(macros, "Keys and clicks played on a client - on their own, or when a watcher finds something.");
             Controls.Add(macros);
+
+            if (kit.Hunts != null)
+            {
+                Button hunt = WatchUi.Secondary("Hunt", 12 + 110 + 8, FOOT_Y, 110, 32);
+                hunt.BackColor = Theme.Card;
+                hunt.FlatAppearance.MouseOverBackColor = Theme.Inset;
+                hunt.Click += delegate { using (HuntDialog d = new HuntDialog(kit)) d.ShowDialog(this); };
+                tips.SetToolTip(hunt, "Move accounts from server to server of a game until a watcher finds something.");
+                Controls.Add(hunt);
+            }
         }
 
         // ---------- the list ----------
