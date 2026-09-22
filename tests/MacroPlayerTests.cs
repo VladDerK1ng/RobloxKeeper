@@ -99,6 +99,65 @@ namespace RobloxKeeper.Tests
             Assert.True(q.Offer(Job("Buy egg")), "once it has been taken to play, it may wait again");
         }
 
+        // ---------- held keys ----------
+
+        // A key rule on Ctrl+F1 fires the moment the keys go down, with
+        // Ctrl still held - so the macro's E arrived in the game as Ctrl+E.
+        // It waits for your hands to come off the keys first.
+        public static void TestPlayingWaitsForHeldModifiersToBeLetGo()
+        {
+            int polls = 0, slept = 0;
+            bool ok = MacroPlayer.WaitForKeysUp(
+                delegate(int vk) { return polls++ < 3 * MacroPlayer.Modifiers.Length; },   // held for three looks
+                delegate(int ms) { slept += ms; }, 2000);
+            Assert.True(ok, "let go, so it plays");
+            Assert.True(slept > 0 && slept < 2000, "after waiting a moment, not the whole time: " + slept + "ms");
+        }
+
+        public static void TestHeldModifiersThatStayHeldStopTheMacro()
+        {
+            int slept = 0;
+            bool ok = MacroPlayer.WaitForKeysUp(delegate(int vk) { return vk == 0x11; },   // Ctrl, for ever
+                                                delegate(int ms) { slept += ms; }, 2000);
+            Assert.False(ok, "not played with Ctrl down");
+            Assert.True(slept >= 2000, "after giving it two seconds");
+        }
+
+        public static void TestNothingHeldPlaysAtOnce()
+        {
+            int slept = 0;
+            Assert.True(MacroPlayer.WaitForKeysUp(delegate(int vk) { return false; }, delegate(int ms) { slept += ms; }, 2000), "plays");
+            Assert.Equal(0, slept, "without waiting");
+        }
+
+        // ---------- typing with real keys ----------
+
+        // What VkKeyScan says for a character on a US keyboard: the key in the
+        // low byte, Shift/Ctrl/Alt in the high byte, -1 for no key.
+        public static void TestACharacterWithAKeyIsTypedWithThatKey()
+        {
+            Assert.Equal("down A|up A", Keys(MacroPlayer.KeysFor(0x0041)), "a is the A key");
+            Assert.Equal("down Shift|down G|up G|up Shift", Keys(MacroPlayer.KeysFor(0x0147)), "G is Shift and the G key");
+            Assert.Equal("down /|up /", Keys(MacroPlayer.KeysFor(0x00BF)), "/ is its own key");
+        }
+
+        // No key for it, or one that needs Ctrl or Alt (AltGr on many
+        // layouts, where Ctrl or Alt would mean something else to the game):
+        // sent as the character itself.
+        public static void TestACharacterWithNoPlainKeyIsSentAsItself()
+        {
+            Assert.Equal(null, MacroPlayer.KeysFor(-1), "no key on this keyboard");
+            Assert.Equal(null, MacroPlayer.KeysFor(0x0651), "AltGr+Q, @ on a German keyboard");
+        }
+
+        static string Keys(List<KeyValuePair<byte, bool>> keys)
+        {
+            if (keys == null) return null;
+            List<string> s = new List<string>();
+            foreach (KeyValuePair<byte, bool> k in keys) s.Add((k.Value ? "down " : "up ") + MacroKeys.Name(k.Key));
+            return string.Join("|", s.ToArray());
+        }
+
         static MacroJob Job(string name)
         {
             Macro m = new Macro();

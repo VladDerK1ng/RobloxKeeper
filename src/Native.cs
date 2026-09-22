@@ -93,6 +93,13 @@ namespace RobloxKeeper
         public const uint SWP_NOMOVE = 0x0002, SWP_NOZORDER = 0x0004, SWP_NOACTIVATE = 0x0010;
 
         [DllImport("user32.dll")]
+        public static extern short GetAsyncKeyState(int vk);
+        // The key for a character on the current keyboard layout: the key in
+        // the low byte, Shift/Ctrl/Alt in the high byte, -1 if there is none.
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        public static extern short VkKeyScan(char ch);
+
+        [DllImport("user32.dll")]
         public static extern bool SetCursorPos(int x, int y);
         [DllImport("user32.dll")]
         public static extern bool GetCursorPos(out POINT p);

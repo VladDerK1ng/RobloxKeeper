@@ -39,6 +39,54 @@ namespace RobloxKeeper
             return held;
         }
 
+        // Ctrl, Shift, Alt and both Windows keys: held while a macro plays,
+        // every key it sends arrives as a shortcut instead.
+        public static readonly int[] Modifiers = { 0x10, 0x11, 0x12, 0x5B, 0x5C };
+        const int POLL_MS = 25;
+        const int LET_GO_MS = 2000;
+
+        // True once none of the modifiers is held, false if one still is
+        // after the time allowed.
+        //
+        // A key rule on Ctrl+F1 fires the moment the keys go down, with the
+        // finger still on Ctrl - so the macro's E arrived as Ctrl+E.
+        public static bool WaitForKeysUp(Func<int, bool> isDown, Action<int> sleep, int timeoutMs)
+        {
+            int waited = 0;
+            while (true)
+            {
+                bool held = false;
+                foreach (int vk in Modifiers) if (isDown(vk)) held = true;
+                if (!held) return true;
+                if (waited >= timeoutMs) return false;
+                sleep(POLL_MS);
+                waited += POLL_MS;
+            }
+        }
+
+        // The real key presses that type a character, from what VkKeyScan
+        // says about it on this keyboard - or null to send the character
+        // itself. Real keys are what Roblox reads, the same way it reads the
+        // nudge; a character needing Ctrl or Alt (AltGr on many layouts) is
+        // sent as itself, since Ctrl or Alt would mean something else to the
+        // game.
+        public static List<KeyValuePair<byte, bool>> KeysFor(int vkScan)
+        {
+            if (vkScan == -1 || (vkScan & 0xFFFF) == 0xFFFF) return null;
+            byte vk = (byte)(vkScan & 0xFF);
+            int mods = (vkScan >> 8) & 0xFF;
+            if ((mods & ~1) != 0) return null;
+            bool shift = (mods & 1) != 0;
+
+            const byte LSHIFT = 0xA0;
+            List<KeyValuePair<byte, bool>> keys = new List<KeyValuePair<byte, bool>>();
+            if (shift) keys.Add(new KeyValuePair<byte, bool>(LSHIFT, true));
+            keys.Add(new KeyValuePair<byte, bool>(vk, true));
+            keys.Add(new KeyValuePair<byte, bool>(vk, false));
+            if (shift) keys.Add(new KeyValuePair<byte, bool>(LSHIFT, false));
+            return keys;
+        }
+
         // Null when it played to the end; otherwise why not, in plain words.
         // Runs on a worker thread - it sleeps for as long as the macro lasts.
         public static string Play(Macro m, IntPtr hwnd)
@@ -47,14 +95,24 @@ namespace RobloxKeeper
             if (!FocusGate.TryEnter(15000)) return "something else was using the keyboard for too long";
             try
             {
+                if (!WaitForKeysUp(delegate(int vk) { return (Native.GetAsyncKeyState(vk) & 0x8000) != 0; },
+                                   delegate(int ms) { Thread.Sleep(ms); }, LET_GO_MS))
+                    return "Ctrl, Alt or Shift was still held down, and every key would have arrived as a shortcut";
+
                 IntPtr previous = Native.GetForegroundWindow();
                 Native.POINT cursor;
                 Native.GetCursorPos(out cursor);
 
                 bool wasMinimized = Native.IsIconic(hwnd);
                 if (wasMinimized) { Native.ShowWindow(hwnd, Native.SW_RESTORE); Thread.Sleep(180); }
-                InputSender.FocusWindow(hwnd);
-                Thread.Sleep(100);
+                // Already in front - a key rule on the client you are playing -
+                // needs no bringing forward, and the Alt tap that does it would
+                // go into the game.
+                if (Native.GetForegroundWindow() != hwnd)
+                {
+                    InputSender.FocusWindow(hwnd);
+                    Thread.Sleep(100);
+                }
 
                 string problem = null;
                 if (Native.GetForegroundWindow() != hwnd) problem = "Windows wouldn't bring the client to the front";
@@ -112,8 +170,13 @@ namespace RobloxKeeper
                     Mouse(a.Right ? Native.MOUSEEVENTF_RIGHTUP : Native.MOUSEEVENTF_LEFTUP);
                     break;
                 case InputActionKind.Char:
-                    Unicode(a.Char, true);
-                    Unicode(a.Char, false);
+                    List<KeyValuePair<byte, bool>> keys = KeysFor(Native.VkKeyScan(a.Char));
+                    if (keys == null)
+                    {
+                        Unicode(a.Char, true);
+                        Unicode(a.Char, false);
+                    }
+                    else foreach (KeyValuePair<byte, bool> k in keys) InputSender.SendScan(k.Key, k.Value);
                     break;
                 default:
                     if (a.Ms > 0) Thread.Sleep(a.Ms);
