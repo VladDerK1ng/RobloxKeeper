@@ -49,7 +49,12 @@ namespace RobloxKeeper
         readonly string path;
         readonly List<WatchSetup> setups = new List<WatchSetup>();
         readonly List<WatchRegion> regions = new List<WatchRegion>();
+        readonly List<Macro> macros = new List<Macro>();
         WatchSetup chosen;
+
+        // Separates the fields of one macro step, inside the list of steps.
+        // Like LIST, a character no keyboard produces.
+        static readonly char STEP_FIELD = (char)0x1E;
 
         public string WebhookUrl = "";
 
@@ -70,6 +75,18 @@ namespace RobloxKeeper
         // that way.
         public IList<WatchSetup> Setups { get { return setups.AsReadOnly(); } }
         public WatchSetup Chosen { get { return chosen; } }
+
+        // Not per setup: a setup chooses which watchers run, and any of them
+        // can name any macro.
+        public IList<Macro> Macros { get { return macros; } }
+
+        public Macro FindMacro(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return null;
+            foreach (Macro m in macros)
+                if (string.Equals(m.Name, name.Trim(), StringComparison.OrdinalIgnoreCase)) return m;
+            return null;
+        }
 
         // ---------- setups ----------
 
@@ -200,6 +217,7 @@ namespace RobloxKeeper
         {
             setups.Clear();
             regions.Clear();
+            macros.Clear();
             WebhookUrl = "";
             string wanted = null;
 
@@ -235,6 +253,11 @@ namespace RobloxKeeper
                         setups.Add(filling);
                     }
                     else if (kind == "C|") wanted = Unescape(rest);
+                    else if (kind == "M|")
+                    {
+                        Macro m = DeserializeMacro(rest);
+                        if (m != null) macros.Add(m);
+                    }
                     else if (kind == "R|")
                     {
                         WatchRegion r = DeserializeRegion(rest);
@@ -262,6 +285,7 @@ namespace RobloxKeeper
             if (!string.IsNullOrEmpty(WebhookUrl))
                 sb.Append("U|").Append(Escape(WebhookUrl)).Append('\n');
             foreach (WatchRegion r in regions) sb.Append("R|").Append(SerializeRegion(r)).Append('\n');
+            foreach (Macro m in macros) sb.Append("M|").Append(SerializeMacro(m)).Append('\n');
             sb.Append("C|").Append(Escape(chosen.Name)).Append('\n');
             foreach (WatchSetup s in setups)
             {
@@ -373,6 +397,50 @@ namespace RobloxKeeper
             r.DrawnHeight = ParseInt(f[8], 1);
             r.Scaling = (RegionScaling)ParseInt(f[9], 0);
             return r;
+        }
+
+        // A name, then the steps: each step's fields joined by STEP_FIELD, the
+        // steps joined by LIST, the whole escaped as one field.
+        public static string SerializeMacro(Macro m)
+        {
+            List<string> steps = new List<string>();
+            foreach (MacroStep s in m.Steps)
+                steps.Add(string.Join(STEP_FIELD.ToString(), new string[] {
+                    ((int)s.Kind).ToString(CultureInfo.InvariantCulture),
+                    s.Vk.ToString(CultureInfo.InvariantCulture),
+                    s.HoldMs.ToString(CultureInfo.InvariantCulture),
+                    s.X.ToString("R", CultureInfo.InvariantCulture),
+                    s.Y.ToString("R", CultureInfo.InvariantCulture),
+                    s.RightButton ? "1" : "0",
+                    s.Ms.ToString(CultureInfo.InvariantCulture),
+                    s.Text ?? "" }));
+            return Escape(m.Name) + FIELD + Escape(Join(steps.ToArray()));
+        }
+
+        public static Macro DeserializeMacro(string line)
+        {
+            if (string.IsNullOrEmpty(line)) return null;
+            string[] f = line.Split(FIELD);
+            Macro m = new Macro();
+            m.Name = Unescape(f[0]);
+            if (f.Length < 2) return m;
+
+            foreach (string one in Split(Unescape(f[1])))
+            {
+                string[] p = one.Split(STEP_FIELD);
+                if (p.Length < 8) continue;         // not a step we wrote
+                MacroStep s = new MacroStep();
+                s.Kind = (MacroStepKind)ParseInt(p[0], 0);
+                s.Vk = (byte)ParseInt(p[1], 0);
+                s.HoldMs = ParseInt(p[2], 50);
+                s.X = ParseDouble(p[3], 0);
+                s.Y = ParseDouble(p[4], 0);
+                s.RightButton = p[5] == "1";
+                s.Ms = ParseInt(p[6], 0);
+                s.Text = p[7];
+                m.Steps.Add(s);
+            }
+            return m;
         }
 
         // ---------- field helpers ----------
