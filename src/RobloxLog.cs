@@ -134,10 +134,14 @@ namespace RobloxKeeper
         // Null unless both halves are known, because a link missing the server
         // silently joins a different copy of the game - which looks exactly
         // like the feature being broken.
+        //
+        // Roblox's web address rather than roblox://, because this goes into a
+        // Discord message and Discord only makes http and https links
+        // clickable - a roblox:// link showed up as raw text.
         public static string JoinLink(string placeId, string jobId)
         {
             if (string.IsNullOrEmpty(placeId) || string.IsNullOrEmpty(jobId)) return null;
-            return "roblox://experiences/start?placeId=" + placeId + "&gameInstanceId=" + jobId;
+            return "https://www.roblox.com/games/start?placeId=" + placeId + "&gameInstanceId=" + jobId;
         }
 
         public static bool TimestampOf(string fileName, out DateTime openedUtc)

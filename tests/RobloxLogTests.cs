@@ -176,5 +176,15 @@ namespace RobloxKeeper.Tests
             Assert.Equal(null, RobloxLog.JoinLink(null, "abc"), "no place, no link");
         }
 
+        // The link goes into a Discord message, and Discord only makes http and
+        // https links clickable - the owner's messages showed a roblox:// link
+        // as raw text. Roblox's own web address for joining a server is one it
+        // will make clickable, and it opens the game the same way.
+        public static void TestAJoinLinkIsOneDiscordCanMakeClickable()
+        {
+            string link = RobloxLog.JoinLink("107778070777162", "4b05c139-5470-4aaa-aefb-2e0d5575dc65");
+            Assert.True(link.StartsWith("https://www.roblox.com/games/start?", StringComparison.Ordinal),
+                "Roblox's web address, not the roblox:// one: " + link);
+        }
     }
 }
