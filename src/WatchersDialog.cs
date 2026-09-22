@@ -223,9 +223,21 @@ namespace RobloxKeeper
             tips.SetToolTip(macros, "Keys and clicks played on a client - on their own, or when a watcher finds something.");
             Controls.Add(macros);
 
+            Button rules = WatchUi.Secondary("Rules", 12 + 110 + 8, FOOT_Y, 110, 32);
+            rules.BackColor = Theme.Card;
+            rules.FlatAppearance.MouseOverBackColor = Theme.Inset;
+            rules.Click += delegate
+            {
+                using (RulesDialog d = new RulesDialog(kit)) d.ShowDialog(this);
+                if (changed != null) changed();
+            };
+            tips.SetToolTip(rules, "Play a macro when you want: when a watcher finds something, every so often, "
+                + "when you press a key, or when a client joins a server.");
+            Controls.Add(rules);
+
             if (kit.Hunts != null)
             {
-                Button hunt = WatchUi.Secondary("Hunt", 12 + 110 + 8, FOOT_Y, 110, 32);
+                Button hunt = WatchUi.Secondary("Hunt", 12 + (110 + 8) * 2, FOOT_Y, 110, 32);
                 hunt.BackColor = Theme.Card;
                 hunt.FlatAppearance.MouseOverBackColor = Theme.Inset;
                 hunt.Click += delegate { using (HuntDialog d = new HuntDialog(kit)) d.ShowDialog(this); };

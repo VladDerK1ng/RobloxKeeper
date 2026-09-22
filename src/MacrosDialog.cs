@@ -155,7 +155,7 @@ namespace RobloxKeeper
             string name = kit.Store.Macros[index].Name;
             kit.Store.Macros.RemoveAt(index);
             int n = kit.Store.RenameMacroUses(name, null);
-            Commit("Macro " + name + " removed" + (n == 0 ? "." : ", and " + n + (n == 1 ? " watcher no longer plays it." : " watchers no longer play it.")));
+            Commit("Macro " + name + " removed" + (n == 0 ? "." : " - " + n + (n == 1 ? " watcher or rule" : " watchers and rules") + " played it and now play nothing."));
         }
 
         void Add()
