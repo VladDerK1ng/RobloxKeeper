@@ -219,6 +219,74 @@ namespace RobloxKeeper.Tests
             }
         }
 
+        // ---------- outlined dark lettering ----------
+
+        // How this game draws a Secret egg's name, measured on the owner's
+        // frame: a dark grey fill (46) inside a black outline, over bright
+        // green. Both readings came back with nothing - the recogniser takes
+        // the outline for the letters and the fill for the gaps between them.
+        static Pixels OutlinedBanner()
+        {
+            using (Bitmap bmp = new Bitmap(640, 90))
+            using (Graphics g = Graphics.FromImage(bmp))
+            {
+                g.Clear(Color.FromArgb(78, 184, 38));
+                g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+                using (System.Drawing.Drawing2D.GraphicsPath path = new System.Drawing.Drawing2D.GraphicsPath())
+                using (FontFamily family = new FontFamily("Segoe UI"))
+                {
+                    path.AddString("A Secret Gargoyle Egg spawned in Demons!", family, (int)FontStyle.Bold, 30f,
+                                   new Point(10, 22), StringFormat.GenericDefault);
+                    using (Pen outline = new Pen(Color.Black, 6))
+                    {
+                        outline.LineJoin = System.Drawing.Drawing2D.LineJoin.Round;
+                        g.DrawPath(outline, path);
+                    }
+                    using (SolidBrush fill = new SolidBrush(Color.FromArgb(46, 46, 46))) g.FillPath(fill, path);
+                }
+                return Pixels.FromBitmap(bmp);
+            }
+        }
+
+        public static void TestDarkLettersInsideABlackOutlineAreRead()
+        {
+            if (!ScreenText.Available) return;
+            Assert.Contains("Secret", ScreenText.Read(OutlinedBanner()), "the egg's rarity, in dark outlined letters");
+        }
+
+        // Only the fill turns black; the outline and everything bright or
+        // lighter than a fill turns white, so the letters come out solid.
+        public static void TestTheDarkFillOfOutlinedLettersIsPickedOut()
+        {
+            Pixels p = new Pixels(5, 1);
+            p.Set(0, 0, Color.FromArgb(46, 46, 46).ToArgb());     // the fill
+            p.Set(1, 0, Color.FromArgb(0, 0, 0).ToArgb());        // the outline
+            p.Set(2, 0, Color.FromArgb(78, 184, 38).ToArgb());    // the grass behind
+            p.Set(3, 0, Color.FromArgb(235, 235, 235).ToArgb());  // white text
+            p.Set(4, 0, Color.FromArgb(120, 120, 120).ToArgb());  // mid grey, not a fill
+            Pixels o = ScreenText.DarkFill(p);
+            int black = Color.Black.ToArgb(), white = Color.White.ToArgb();
+            Assert.Equal(black, o.At(0, 0), "the fill");
+            Assert.Equal(white, o.At(1, 0), "not the outline");
+            Assert.Equal(white, o.At(2, 0), "not the scenery");
+            Assert.Equal(white, o.At(3, 0), "not white text");
+            Assert.Equal(white, o.At(4, 0), "not mid grey");
+        }
+
+        // The fill reading also catches dark panels - measured, it reads the
+        // leaderboard's white names off its dark panel, garbled: "VIBdDerKIng"
+        // for "Vlad DerKing". It may add a line nobody else found, but only
+        // replaces one it read with strictly more.
+        public static void TestAnExtraReadingAddsLinesButNeverRewritesOneOnATie()
+        {
+            string merged = ScreenText.Join(ScreenText.MergeExtra(
+                new TextLine[] { Line(1640, 145, 90, "Vlad DerKing") },
+                new TextLine[] { Line(1640, 145, 90, "VIBdDerKIng"), Line(580, 215, 385, "Secret Gargoyle Egg") }));
+            Assert.Contains("Vlad DerKing", merged, "the good reading kept");
+            Assert.False(merged.Contains("VIBdDerKIng"), "not swapped for a garbled copy");
+            Assert.Contains("Secret Gargoyle Egg", merged, "and the line only it found, added");
+        }
+
         public static void TestColourBecomesTheBrightnessOfItsBrightestPart()
         {
             Pixels p = new Pixels(2, 1);

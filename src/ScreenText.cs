@@ -117,7 +117,11 @@ namespace RobloxKeeper
                 if (!Placed(asItIs) || !Placed(inColour))
                     return Join(Letters(Join(inColour)) > Letters(Join(asItIs)) ? inColour : asItIs);
 
-                return Join(Merge(asItIs, inColour));
+                // A third reading for dark letters inside a black outline,
+                // which neither of the others can see at all - see DarkFill.
+                List<TextLine> darkFill = ReadLines(DarkFill(image), eng);
+                List<TextLine> both = Merge(asItIs, inColour);
+                return Join(Placed(darkFill) ? MergeExtra(both, darkFill) : both);
             }
             catch { return ""; }
         }
@@ -198,15 +202,35 @@ namespace RobloxKeeper
         // lose a line - red or blue on white - it loses nearly all of it.
         public static List<TextLine> Merge(IList<TextLine> asItIs, IList<TextLine> inColour)
         {
-            List<TextLine> kept = new List<TextLine>(asItIs);
-            foreach (TextLine line in inColour)
+            return Combine(asItIs, inColour, true);
+        }
+
+        // A reading that sees what the others cannot, and garbles what they
+        // can. The dark-fill reading picks out outlined dark letters nothing
+        // else reads, but it also reads white names off a dark panel, badly -
+        // "VIBdDerKIng" for "Vlad DerKing", measured. So it adds lines nobody
+        // else found, and replaces one only with strictly more letters.
+        public static List<TextLine> MergeExtra(IList<TextLine> kept, IList<TextLine> extra)
+        {
+            return Combine(kept, extra, false);
+        }
+
+        static List<TextLine> Combine(IList<TextLine> first, IList<TextLine> other, bool trustOtherOnNearTie)
+        {
+            List<TextLine> kept = new List<TextLine>(first);
+            foreach (TextLine line in other)
             {
                 List<int> same = new List<int>();
                 int theirs = 0;
                 for (int i = 0; i < kept.Count; i++)
                     if (SameLine(kept[i].Box, line.Box)) { same.Add(i); theirs += Letters(kept[i].Text); }
 
-                if (same.Count > 0 && Letters(line.Text) * 5 < theirs * 4) continue;
+                if (same.Count > 0)
+                {
+                    int mine = Letters(line.Text);
+                    bool better = trustOtherOnNearTie ? mine * 5 >= theirs * 4 : mine > theirs;
+                    if (!better) continue;
+                }
                 for (int i = same.Count - 1; i >= 0; i--) kept.RemoveAt(same[i]);
                 kept.Add(line);
             }
@@ -277,6 +301,29 @@ namespace RobloxKeeper
             return o;
         }
 
+        // Outlined dark lettering - a dark grey fill inside a black outline,
+        // which is how this game draws a Secret egg's name - reads to the
+        // recogniser as hollow letters: it takes the outline for the letter
+        // and the fill for the gaps, and reads nothing (measured, every scale
+        // and contrast tried). Picking out the fill alone, as solid black on
+        // white, leaves ordinary letters, and those it reads. The fill measured
+        // 46 with the outline at 0 and the scene behind well above 80, so the
+        // band keeps the fill and nothing either side of it.
+        const int FILL_FROM = 25, FILL_TO = 80;
+
+        public static Pixels DarkFill(Pixels p)
+        {
+            Pixels o = new Pixels(p.Width, p.Height);
+            int black = unchecked((int)0xFF000000), white = unchecked((int)0xFFFFFFFF);
+            for (int i = 0; i < p.Argb.Length; i++)
+            {
+                int c = p.Argb[i];
+                int v = Math.Max((c >> 16) & 0xFF, Math.Max((c >> 8) & 0xFF, c & 0xFF));
+                o.Argb[i] = v >= FILL_FROM && v <= FILL_TO ? black : white;
+            }
+            return o;
+        }
+
         static int Letters(string s)
         {
             int n = 0;
@@ -290,7 +337,7 @@ namespace RobloxKeeper
         //
         // Blocking is right here: this is called from the watch thread, which
         // exists to do exactly this and nothing else, and reading a region
-        // both ways takes about ten to fifteen milliseconds.
+        // all three ways takes about ten to thirty milliseconds.
         static T Wait<T>(IAsyncOperation<T> op)
         {
             using (ManualResetEvent done = new ManualResetEvent(false))
