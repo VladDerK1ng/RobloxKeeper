@@ -27,6 +27,28 @@ namespace RobloxKeeper
             return n + " " + thing + (n == 1 ? "" : "s");
         }
 
+        // The setup picker on the main window, and the line beside it. They
+        // share the status line's 262px: the picker, a gap, then the line.
+        public const int SETUP_PICKER_W = 124;
+        public const int SETUP_LINE_W = 130;
+
+        // Only when there is something to switch between, so someone with one
+        // setup sees the main window exactly as before.
+        public static bool ShowsSetupPicker(int setups)
+        {
+            return setups > 1;
+        }
+
+        // The status line with half the room: the picker already says which
+        // watchers, so this says how they are doing. "today" is left off when
+        // the counts get too long for it.
+        public static string SetupStatusLine(int enabled, int total, int clientsWatched, int hitsToday, bool withToday)
+        {
+            if (total == 0) return "no watchers yet";
+            if (enabled == 0) return total == 1 ? "switched off" : "all switched off";
+            return Count(clientsWatched, "client") + " · " + Count(hitsToday, "hit") + (withToday ? " today" : "");
+        }
+
         // What each client's row in the watchers list says. Minimized and not
         // in a game are said plainly, because a client that silently reports
         // nothing forever looks exactly like a watcher that does not work.
@@ -143,6 +165,8 @@ namespace RobloxKeeper
         bool noWebhookSaid;
         Button btnWatchers;
         Label lblWatchers;
+        ThemedPicker cmbSetup;
+        bool fillingSetup;
 
         void StartWatching()
         {
@@ -242,13 +266,69 @@ namespace RobloxKeeper
 
         void UpdateWatchStatus()
         {
-            if (lblWatchers == null) return;
+            if (lblWatchers == null || watchStore == null) return;
+            bool picker = Watching.ShowsSetupPicker(watchStore.Setups.Count);
+            ShowSetups(picker);
+
             WatchWork w = watchWork;
             int enabled = 0;
             foreach (Watcher x in w.Watchers) if (x.Enabled) enabled++;
-            string text = Watching.StatusLine(enabled, w.Watchers.Length,
-                Watching.ClientsWatched(w.Clients, w.Watchers), watchHits.Today(DateTime.Now));
+            int clients = Watching.ClientsWatched(w.Clients, w.Watchers);
+            int hits = watchHits.Today(DateTime.Now);
+            string text;
+            if (!picker) text = Watching.StatusLine(enabled, w.Watchers.Length, clients, hits);
+            else
+            {
+                text = Watching.SetupStatusLine(enabled, w.Watchers.Length, clients, hits, true);
+                if (TextRenderer.MeasureText(text, lblWatchers.Font).Width > lblWatchers.Width)
+                    text = Watching.SetupStatusLine(enabled, w.Watchers.Length, clients, hits, false);
+            }
             if (lblWatchers.Text != text) lblWatchers.Text = text;
+        }
+
+        // The picker beside the Watchers button, filled only when the setups
+        // have changed - refilling it every second would close it while open.
+        void ShowSetups(bool picker)
+        {
+            if (cmbSetup == null) return;
+            if (cmbSetup.Visible != picker)
+            {
+                cmbSetup.Visible = picker;
+                int x = picker ? Ui.PAD + Watching.SETUP_PICKER_W + 8 : Ui.PAD;
+                lblWatchers.Bounds = new Rectangle(x, lblWatchers.Top,
+                    picker ? Watching.SETUP_LINE_W : 262, lblWatchers.Height);
+            }
+            if (!picker) return;
+
+            List<string> names = new List<string>();
+            foreach (WatchSetup s in watchStore.Setups) names.Add(s.Name);
+            int chosen = watchStore.Setups.IndexOf(watchStore.Chosen);
+            bool same = names.Count == cmbSetup.Items.Count && chosen == cmbSetup.SelectedIndex;
+            for (int i = 0; same && i < names.Count; i++) same = names[i] == cmbSetup.Items[i];
+            if (same) return;
+
+            fillingSetup = true;
+            try
+            {
+                cmbSetup.Items.Clear();
+                cmbSetup.Items.AddRange(names);
+                cmbSetup.SelectedIndex = chosen;
+                cmbSetup.Invalidate();
+            }
+            finally { fillingSetup = false; }
+        }
+
+        // One click: every watcher swaps, and the watch thread with them.
+        void ChooseSetup(string name)
+        {
+            if (fillingSetup || watchStore == null) return;
+            WatchSetup s = watchStore.FindSetup(name);
+            if (s == null || ReferenceEquals(s, watchStore.Chosen)) return;
+            watchStore.Choose(s.Name);
+            watchStore.Save();
+            watchEngine.ForgetImages();
+            Log("Now watching with the " + s.Name + " setup.");
+            PublishWatchWork();
         }
 
         void OpenWatchers()

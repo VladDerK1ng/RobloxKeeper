@@ -32,6 +32,44 @@ namespace RobloxKeeper.Tests
             Assert.Equal("1 watcher, switched off", Watching.StatusLine(0, 1, 0, 0), "and the singular");
         }
 
+        // ---------- the setup picker on the main window ----------
+
+        // Only once there is something to switch between. Someone with one
+        // setup sees the main window exactly as before.
+        public static void TestTheMainWindowOffersSetupsOnlyWhenThereIsAChoice()
+        {
+            Assert.False(Watching.ShowsSetupPicker(1), "one setup, nothing to choose");
+            Assert.True(Watching.ShowsSetupPicker(2), "two, and switching is one click");
+        }
+
+        // Beside the picker the line has half the room, so it says less.
+        public static void TestTheLineBesideTheSetupPickerSaysLess()
+        {
+            Assert.Equal("2 clients · 4 hits today", Watching.SetupStatusLine(3, 3, 2, 4, true), "clients and hits");
+            Assert.Equal("2 clients · 4 hits", Watching.SetupStatusLine(3, 3, 2, 4, false), "without today when tight");
+            Assert.Equal("1 client · 1 hit today", Watching.SetupStatusLine(1, 1, 1, 1, true), "the singular");
+            Assert.Equal("no watchers yet", Watching.SetupStatusLine(0, 0, 0, 0, true), "an empty setup");
+            Assert.Equal("all switched off", Watching.SetupStatusLine(0, 2, 0, 0, true), "nothing on");
+            Assert.Equal("switched off", Watching.SetupStatusLine(0, 1, 0, 0, true), "its one watcher off");
+        }
+
+        // And never more than fits: a line that wraps in a one-line row is cut
+        // in half.
+        public static void TestTheShortLineAlwaysFitsBesideThePicker()
+        {
+            using (System.Drawing.Font f = new System.Drawing.Font("Segoe UI", 8.25f))
+            {
+                foreach (string s in new string[] {
+                    Watching.SetupStatusLine(20, 20, 20, 9999, false),
+                    Watching.SetupStatusLine(0, 20, 0, 0, true),
+                    Watching.SetupStatusLine(0, 0, 0, 0, true) })
+                    Assert.True(System.Windows.Forms.TextRenderer.MeasureText(s, f).Width <= Watching.SETUP_LINE_W,
+                        "\"" + s + "\" fits in " + Watching.SETUP_LINE_W + "px");
+            }
+            Assert.True(Ui.PAD + Watching.SETUP_PICKER_W + 8 + Watching.SETUP_LINE_W <= 282,
+                "picker and line together stop short of the Watchers button");
+        }
+
         public static void TestHitsAreCountedForTodayOnly()
         {
             HitCounter h = new HitCounter();

@@ -403,6 +403,16 @@ namespace RobloxKeeper
             lblWatchers = Ui.RowLabel("", Ui.PAD, watchRow, ROW_H, 262, 8.25f, Theme.Muted);
             card.Controls.Add(lblWatchers);
 
+            // Shown once there are two setups or more, and then the line
+            // above moves over to make room for it.
+            cmbSetup = Ui.DarkCombo(Ui.PAD, watchRow, Watching.SETUP_PICKER_W);
+            cmbSetup.Visible = false;
+            cmbSetup.SelectedIndexChanged += delegate { ChooseSetup(cmbSetup.Text); };
+            Explain(cmbSetup,
+                "Which set of watchers is in use - one for each game, say. Make and name them in Watchers, "
+                + "then switch between them here in one click.");
+            card.Controls.Add(cmbSetup);
+
             btnWatchers = Ui.AccentButton("Watchers", BTN_X, watchRow, BTN_W, ROW_H);
             btnWatchers.Font = new Font("Segoe UI", 8.25f, FontStyle.Bold);
             btnWatchers.Click += delegate { OpenWatchers(); };
