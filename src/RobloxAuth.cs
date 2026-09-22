@@ -134,6 +134,11 @@ namespace RobloxKeeper
             error = null;
             if (string.IsNullOrEmpty(cookie)) { error = "no saved session for this account"; return null; }
 
+            // Worked before only because the update check or a Discord post had
+            // usually switched this on first. Hopping asks for tickets on its
+            // own, so it is switched on here.
+            ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
+
             string csrf = null;
             for (int attempt = 0; attempt < 2; attempt++)
             {
