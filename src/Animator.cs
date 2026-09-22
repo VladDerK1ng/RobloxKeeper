@@ -151,6 +151,7 @@ namespace RobloxKeeper
             public Anim Anim;
             public Control Owner;       // watched so a closed window stops its animations
             public Action OnFrame;
+            public double Drawn = double.NaN;   // the value it was last drawn at
         }
 
         // Whether the person using this wants interfaces to move at all.
@@ -240,11 +241,20 @@ namespace RobloxKeeper
                 // throws. Drop it instead.
                 if (entry.Owner.IsDisposed) { entries.RemoveAt(i); continue; }
 
-                // Ticked either way, and the frame is drawn either way - the
-                // last one is what settles the control on its exact final
-                // appearance rather than a frame short of it.
+                // Drawn only if it was moving - which includes the last frame,
+                // the one that settles it exactly on its final appearance - or
+                // its value changed since it was last drawn, which is how a
+                // change that arrives at once (animations off) is shown.
+                // Everything else has settled and is left alone: drawing it
+                // anyway repainted every control that had ever animated, sixty
+                // times a second, whenever anything at all was moving.
+                bool wasMoving = entry.Anim.Running;
                 entry.Anim.Tick(now);
-                Frame(entry);
+                if (wasMoving || entry.Anim.Value != entry.Drawn)
+                {
+                    entry.Drawn = entry.Anim.Value;
+                    Frame(entry);
+                }
 
                 // Asked after the frame, not before: a frame can start the
                 // next movement - a pulse turning round - and deciding first

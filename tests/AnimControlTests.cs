@@ -91,6 +91,68 @@ namespace RobloxKeeper.Tests
             }
         }
 
+        // Hovering one button must not repaint every other control that has
+        // ever animated. They were all drawn on every frame, sixty a second,
+        // for as long as anything anywhere was moving.
+        public static void TestOnlyWhatIsMovingIsRepainted()
+        {
+            using (Control still = new Control())
+            using (Control moving = new Control())
+            {
+                IntPtr h1 = still.Handle, h2 = moving.Handle;
+                DateTime t0 = DateTime.Now.AddMinutes(20);
+                TimeSpan span = TimeSpan.FromMilliseconds(200);
+
+                Anim settled = new Anim(0);
+                settled.To(1, span, t0);
+                Animator.Follow(still, settled);
+                Anim busy = new Anim(0);
+                Animator.Follow(moving, busy);
+                try
+                {
+                    Animator.StepAt(t0.AddMilliseconds(300));       // the first finishes and is drawn once more
+
+                    busy.To(1, span, t0.AddMilliseconds(400));
+                    int stillPaints = 0, movingPaints = 0;
+                    InvalidateEventHandler a = delegate { stillPaints++; };
+                    InvalidateEventHandler b = delegate { movingPaints++; };
+                    still.Invalidated += a;
+                    moving.Invalidated += b;
+                    Animator.StepAt(t0.AddMilliseconds(450));
+                    Animator.StepAt(t0.AddMilliseconds(500));
+                    still.Invalidated -= a;
+                    moving.Invalidated -= b;
+
+                    Assert.Equal(0, stillPaints, "the one that has settled is left alone");
+                    Assert.Equal(2, movingPaints, "the one that is moving is drawn each frame");
+                }
+                finally { Animator.Remove(still); Animator.Remove(moving); }
+            }
+        }
+
+        // With Windows' animations switched off a change arrives at once, and
+        // still has to be drawn.
+        public static void TestAChangeThatArrivesAtOnceIsStillDrawn()
+        {
+            using (Control c = new Control())
+            {
+                IntPtr h = c.Handle;
+                DateTime t0 = DateTime.Now.AddMinutes(30);
+                Anim a = new Anim(0);
+                int frames = 0;
+                Animator.Run(c, a, delegate { frames++; });
+                try
+                {
+                    a.To(1, TimeSpan.Zero, t0);
+                    Animator.StepAt(t0.AddMilliseconds(16));
+                    Assert.Equal(1, frames, "drawn once, at its new value");
+                    Animator.StepAt(t0.AddMilliseconds(32));
+                    Assert.Equal(1, frames, "and not again");
+                }
+                finally { Animator.Remove(c); }
+            }
+        }
+
         // The status dot was set busy and never moved.
         public static void TestABusyDotStartsBreathing()
         {
