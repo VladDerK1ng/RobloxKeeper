@@ -64,6 +64,9 @@ namespace RobloxKeeper
             this.remember = remember;
         }
 
+        // How long a line that has gone is remembered for.
+        public TimeSpan Remember { get { return remember; } }
+
         // The word a watcher is looking for, or null for every line. With one,
         // only lines containing it are considered at all, and two readings are
         // compared by what sits next to it - see SameMessage.

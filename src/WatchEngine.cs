@@ -174,6 +174,7 @@ namespace RobloxKeeper
             public FireControl Fire;
             public ChatFeed Chat;
             public bool ChatPrimed;
+            public DateTime ChatReadAt;
             public string Problem;
         }
 
@@ -253,12 +254,18 @@ namespace RobloxKeeper
 
         void RunChat(Watcher w, WatchedClient c, Slot slot, WatchCheck k, DateTime now)
         {
+            // Not read for longer than the chat is remembered - watching was
+            // stopped, or the client sat minimized - and what was there has
+            // been forgotten. What is there now is no newer than it was.
+            bool lapsed = slot.ChatPrimed && now - slot.ChatReadAt >= slot.Chat.Remember;
+            slot.ChatReadAt = now;
+
             IList<string> fresh = slot.Chat.NewLines(k.Text, now);
 
             // Whatever is in the box the first time it is read was said before
             // anyone was looking. Reporting it would send a burst of old
             // messages every time the app starts or a client changes server.
-            if (!slot.ChatPrimed) { slot.ChatPrimed = true; return; }
+            if (!slot.ChatPrimed || lapsed) { slot.ChatPrimed = true; return; }
 
             // Every new line is its own piece of news, so chat is not held back
             // by the confirm count or the cooldown.

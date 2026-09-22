@@ -402,6 +402,80 @@ namespace RobloxKeeper.Tests
             Assert.Equal(5, r.Found.Count, "one message per egg");
         }
 
+        // Watching stops while nothing is switched on - a setup with every
+        // watcher off, say - and starts again when something is. The chat is
+        // only remembered for ten minutes, so after a longer break what is
+        // still sitting in it looked new, and was sent again.
+        public static void TestChatStillOnScreenAfterALongBreakIsNotReported()
+        {
+            Rig r = new Rig();
+            WatchedClient c = Client(100, "a");
+            Watcher w = Chat("Secret chat", "Secret");
+
+            r.Reader.Text = "A Secret Kraken Egg spawned in Angels!";
+            r.Pass(c, w);
+            r.Engine.Stop();
+            r.Now = r.Now.AddMinutes(30);
+            r.Pass(c, w);
+            Assert.Equal(0, r.Found.Count, "the same old line, half an hour later");
+        }
+
+        // The same break, from a client left minimized: it cannot be read, so
+        // nothing on it is remembered as still there.
+        public static void TestChatStillOnScreenAfterBeingMinimizedAWhileIsNotReported()
+        {
+            Rig r = new Rig();
+            WatchedClient c = Client(100, "a");
+            Watcher w = Chat("Secret chat", "Secret");
+
+            r.Reader.Text = "A Secret Kraken Egg spawned in Angels!";
+            r.Pass(c, w);
+            r.Capture.States[100] = WatchState.Minimized;
+            for (int minute = 0; minute < 15; minute++) { r.Pass(c, w); r.Now = r.Now.AddMinutes(1); }
+            r.Capture.States.Remove(100);
+            r.Pass(c, w);
+            Assert.Equal(0, r.Found.Count, "restored, with the same chat in it");
+        }
+
+        // The other side: a short break forgets nothing, so a message that
+        // turned up during it is still news.
+        public static void TestAMessageSaidDuringAShortBreakIsStillReported()
+        {
+            Rig r = new Rig();
+            WatchedClient c = Client(100, "a");
+            Watcher w = Chat("Secret chat", "Secret");
+
+            r.Reader.Text = "A Secret Kraken Egg spawned in Angels!";
+            r.Pass(c, w);
+            r.Now = r.Now.AddMinutes(2);
+            r.Reader.Text = "A Secret Kraken Egg spawned in Angels!\nA Secret Centaur Egg spawned in Angels!";
+            r.Pass(c, w);
+            Assert.Equal(1, r.Found.Count, "the new egg");
+            Assert.Contains("Centaur", r.Found[0].Line, "and only the new egg");
+        }
+
+        // Choosing another setup and then this one again hands the engine
+        // other watchers and then these again. The chat on screen all along is
+        // not news the second time round.
+        public static void TestSwitchingSetupsAndBackDoesNotResendTheChat()
+        {
+            Rig r = new Rig();
+            WatchedClient c = Client(100, "a");
+            WatchStore s = new WatchStore(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "rk-unsaved.dat"));
+            s.Watchers.Add(Chat("Secret chat", "Secret"));
+            s.AddSetup("Other game", false);
+            s.Watchers.Add(Words("Boss", "boss"));
+
+            r.Reader.Text = "A Secret Kraken Egg spawned in Angels!";
+            s.Choose(WatchStore.FirstSetupName);
+            r.Pass(c, new List<Watcher>(s.Watchers).ToArray());
+            s.Choose("Other game");
+            for (int i = 0; i < 4; i++) r.Pass(c, new List<Watcher>(s.Watchers).ToArray());
+            s.Choose(WatchStore.FirstSetupName);
+            for (int i = 0; i < 4; i++) r.Pass(c, new List<Watcher>(s.Watchers).ToArray());
+            Assert.Equal(0, r.Found.Count, "the same old line, both times");
+        }
+
         // A different server is a different chat. What was said in the last
         // one must not make the same words in this one look old.
         public static void TestChatStartsOverWhenTheClientChangesServer()
