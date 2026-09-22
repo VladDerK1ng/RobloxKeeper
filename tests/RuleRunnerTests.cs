@@ -164,6 +164,24 @@ namespace RobloxKeeper.Tests
             Assert.Equal(0, run.Happened(new Rule[] { off, noMacro }, Found("w", "x", 100), Clients, 0, Busy, T0).Count, "neither");
         }
 
+        // Windows is asked for each key once, however many rules use it, and
+        // only for rules that are on and could fire.
+        public static void TestTheHotkeysToAskWindowsForAreEachKeyOnce()
+        {
+            Rule a = new Rule(); a.Name = "a"; a.Macro = "m"; a.When = RuleWhen.Hotkey; a.HotkeyVk = 0x70; a.Ctrl = true; a.On = RuleOn.InFront;
+            Rule b = a.Copy(); b.Name = "b";
+            Rule c = a.Copy(); c.Name = "c"; c.HotkeyVk = 0x71; c.Enabled = false;
+            Rule d = a.Copy(); d.Name = "d"; d.HotkeyVk = 0x72; d.Shift = true; d.Alt = true;
+            List<int> keys = RuleHotkeys.Wanted(new Rule[] { a, b, c, d, OnWatcher(null, null) });
+            Assert.Equal(2, keys.Count, "Ctrl+F1 once, Ctrl+Alt+Shift+F3 once, the switched-off F2 not at all");
+            Assert.Equal(RuleHotkeys.Key(0x70, true, false, false), keys[0], "Ctrl+F1");
+
+            byte vk; bool ctrl, alt, shift;
+            RuleHotkeys.Split(keys[1], out vk, out ctrl, out alt, out shift);
+            Assert.Equal((byte)0x72, vk, "F3");
+            Assert.True(ctrl && alt && shift, "with all three");
+        }
+
         public static void TestTimesTravelsWithTheFiring()
         {
             RuleRunner run = new RuleRunner();

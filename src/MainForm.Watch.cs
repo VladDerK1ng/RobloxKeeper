@@ -212,6 +212,7 @@ namespace RobloxKeeper
         void StopWatching()
         {
             if (watchEngine != null) watchEngine.Stop();
+            ReleaseHotkeys();
         }
 
         void OnUi(MethodInvoker a)
@@ -236,6 +237,7 @@ namespace RobloxKeeper
             clientWhere[pid] = e;
             PublishWatchWork();
             HuntJoined(pid, e);
+            RulesJoined(pid);
         }
 
         // Once a second, from the main loop.
@@ -251,6 +253,7 @@ namespace RobloxKeeper
             }
             foreach (int pid in gone) clientWhere.Remove(pid);
             PublishWatchWork();
+            RulesTick();
         }
 
         // Hands the watch thread a fresh snapshot, and runs the thread only
@@ -271,6 +274,7 @@ namespace RobloxKeeper
             if (any && !watchEngine.Running) watchEngine.Start(delegate { return watchWork; });
             else if (!any && watchEngine.Running) watchEngine.Stop();
 
+            RefreshHotkeys();
             UpdateWatchStatus();
         }
 
@@ -380,6 +384,7 @@ namespace RobloxKeeper
 
             if (w == null || w.SendDiscord) SendToDiscord(w, d);
             if (w != null && !string.IsNullOrEmpty(w.ThenMacro)) PlayThen(w, d);
+            RulesFound(d);
             HuntFound(d);
             UpdateWatchStatus();
         }
@@ -400,11 +405,18 @@ namespace RobloxKeeper
                 return;
             }
             if (d.Pid <= 0 || !ruleGate.Allow(w, d.Pid, d.When)) return;
+            QueueMacro(m, d.Pid, string.IsNullOrEmpty(d.AccountName) ? d.ClientLabel : d.ClientLabel + " - " + d.AccountName, 1);
+        }
 
+        // One queue for every macro a watcher or a rule sets off, played one
+        // at a time off the UI thread.
+        void QueueMacro(Macro m, int pid, string label, int times)
+        {
             MacroJob job = new MacroJob();
             job.Macro = m.Copy();
-            job.Pid = d.Pid;
-            job.Label = string.IsNullOrEmpty(d.AccountName) ? d.ClientLabel : d.ClientLabel + " - " + d.AccountName;
+            job.Pid = pid;
+            job.Label = label;
+            job.Times = Math.Max(1, times);
             if (!macroQueue.Offer(job))
             {
                 Log("Didn't play " + m.Name + " on " + job.Label + ": " + MacroQueue.MAX_WAITING
@@ -435,11 +447,20 @@ namespace RobloxKeeper
                     j = macroQueue.Take();
                     if (j == null) { pumping = false; return; }
                 }
+                // Several times is the steps over again, in one turn at the
+                // front rather than handing focus back and forth between.
+                Macro play = j.Macro;
+                if (j.Times > 1)
+                {
+                    play = j.Macro.Copy();
+                    for (int i = 1; i < j.Times; i++)
+                        foreach (MacroStep s in j.Macro.Steps) play.Steps.Add(s.Copy());
+                }
                 string problem;
-                try { problem = MacroPlayer.Play(j.Macro, WindowCapture.GameWindow(j.Pid)); }
+                try { problem = MacroPlayer.Play(play, WindowCapture.GameWindow(j.Pid)); }
                 catch (Exception ex) { problem = ex.Message; }
                 string said = problem == null
-                    ? "Played " + j.Macro.Name + " on " + j.Label + "."
+                    ? "Played " + j.Macro.Name + (j.Times > 1 ? " " + j.Times + " times" : "") + " on " + j.Label + "."
                     : j.Macro.Name + " on " + j.Label + " didn't finish: " + problem + ".";
                 OnUi(delegate { Log(said); });
             }

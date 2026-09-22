@@ -819,6 +819,7 @@ namespace RobloxKeeper
         // A second launch broadcasts this message instead of opening another window.
         protected override void WndProc(ref Message m)
         {
+            if (OnHotkey(ref m)) return;
             if (Program.WM_SHOWME != 0 && m.Msg == (int)Program.WM_SHOWME)
             {
                 RestoreFromTray();

@@ -145,6 +145,7 @@ namespace RobloxKeeper
         public Macro Macro;
         public int Pid;
         public string Label;       // "Client 2 - VladDerKing", for the activity list
+        public int Times = 1;      // played this many times in a row, while it holds the front
     }
 
     // Macros set off by watchers, played one at a time.

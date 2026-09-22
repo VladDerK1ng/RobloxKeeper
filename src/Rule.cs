@@ -124,6 +124,38 @@ namespace RobloxKeeper
         }
     }
 
+    // The keys to ask Windows for, as its own modifier bits over the key -
+    // MOD_ALT 1, MOD_CONTROL 2, MOD_SHIFT 4 - so a key is one number.
+    static class RuleHotkeys
+    {
+        public static int Key(byte vk, bool ctrl, bool alt, bool shift)
+        {
+            int mods = (alt ? 1 : 0) | (ctrl ? 2 : 0) | (shift ? 4 : 0);
+            return (mods << 8) | vk;
+        }
+
+        public static void Split(int key, out byte vk, out bool ctrl, out bool alt, out bool shift)
+        {
+            vk = (byte)(key & 0xFF);
+            int mods = key >> 8;
+            alt = (mods & 1) != 0; ctrl = (mods & 2) != 0; shift = (mods & 4) != 0;
+        }
+
+        // Each key once, however many rules share it, and only for rules
+        // that are switched on and could fire.
+        public static List<int> Wanted(IList<Rule> rules)
+        {
+            List<int> keys = new List<int>();
+            foreach (Rule r in rules)
+            {
+                if (r == null || !r.Enabled || r.When != RuleWhen.Hotkey || r.Problem() != null) continue;
+                int k = Key(r.HotkeyVk, r.Ctrl, r.Alt, r.Shift);
+                if (!keys.Contains(k)) keys.Add(k);
+            }
+            return keys;
+        }
+    }
+
     // Something that happened which a rule may be waiting for. Timers are not
     // happenings - the clock is, and RuleRunner.Tick reads it.
     class RuleHappening
