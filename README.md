@@ -116,6 +116,11 @@ That's it. The script generates the app icon (`make-icon.ps1`) and produces `Rob
 `csc.exe` from the .NET Framework already on your machine. It is the single build command in the
 repository - CI runs this same script, so a local build and a published build never drift apart.
 
+It builds even while RobloxKeeper is running (the window's X hides it to the tray rather than exiting).
+Windows won't overwrite a running program but will rename one, so the running copy is moved aside as
+`RobloxKeeper.old.exe` and keeps going, and the new build takes its place - exit from the tray icon and
+start it again to use it. The next build deletes the old copy once it has stopped.
+
 ### Running the tests
 
 ```bat
