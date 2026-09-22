@@ -359,11 +359,7 @@ namespace RobloxKeeper
 
         public static Button Secondary(string text, int x, int y, int w, int h)
         {
-            Button b = Ui.AccentButton(text, x, y, w, h);
-            b.BackColor = Theme.Inset;
-            b.Font = new Font("Segoe UI", 8.25f, FontStyle.Bold);
-            b.FlatAppearance.MouseOverBackColor = Theme.Bg;
-            return b;
+            return Ui.PlainButton(text, x, y, w, h);
         }
 
         public static Button Primary(string text, int x, int y, int w, int h)
@@ -604,8 +600,6 @@ namespace RobloxKeeper
             Controls.Add(lblProblem);
 
             Button cancel = WatchUi.Secondary("Cancel", W - 12 - 116 - 8 - 96, FOOT_Y, 96, 32);
-            cancel.BackColor = Theme.Card;
-            cancel.FlatAppearance.MouseOverBackColor = Theme.Inset;
             cancel.Click += delegate { DialogResult = DialogResult.Cancel; Close(); };
             Controls.Add(cancel);
 

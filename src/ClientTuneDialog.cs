@@ -131,17 +131,11 @@ namespace RobloxKeeper
             ok.Click += delegate { Commit(false); };
             Controls.Add(ok);
 
-            Button reset = Ui.AccentButton("Use default", 124, footer, 112, 32);
-            reset.BackColor = Theme.Card;
-            reset.Font = new Font("Segoe UI", 8.25f, FontStyle.Bold);
-            reset.FlatAppearance.MouseOverBackColor = Theme.Inset;
+            Button reset = Ui.PlainButton("Use default", 124, footer, 112, 32);
             reset.Click += delegate { Commit(true); };
             Controls.Add(reset);
 
-            Button cancel = Ui.AccentButton("Cancel", 12, footer, 100, 32);
-            cancel.BackColor = Theme.Card;
-            cancel.Font = new Font("Segoe UI", 8.25f, FontStyle.Bold);
-            cancel.FlatAppearance.MouseOverBackColor = Theme.Inset;
+            Button cancel = Ui.PlainButton("Cancel", 12, footer, 100, 32);
             cancel.Click += delegate { DialogResult = DialogResult.Cancel; Close(); };
             Controls.Add(cancel);
 

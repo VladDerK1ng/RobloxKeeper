@@ -290,8 +290,6 @@ namespace RobloxKeeper
             Controls.Add(lblProblem);
 
             Button cancel = WatchUi.Secondary("Cancel", W - 12 - 116 - 8 - 96, FOOT_Y, 96, 32);
-            cancel.BackColor = Theme.Card;
-            cancel.FlatAppearance.MouseOverBackColor = Theme.Inset;
             cancel.Click += delegate { DialogResult = DialogResult.Cancel; Close(); };
             Controls.Add(cancel);
             Button save = WatchUi.Primary("Save", W - 12 - 116, FOOT_Y, 116, 32);
@@ -596,8 +594,6 @@ namespace RobloxKeeper
             lblProblem.BackColor = Theme.Bg;
             Controls.Add(lblProblem);
             Button cancel = WatchUi.Secondary("Cancel", W - 12 - 90 - 8 - 90, FOOT_Y, 90, 32);
-            cancel.BackColor = Theme.Card;
-            cancel.FlatAppearance.MouseOverBackColor = Theme.Inset;
             cancel.Click += delegate { DialogResult = DialogResult.Cancel; Close(); };
             Controls.Add(cancel);
             Button save = WatchUi.Primary("Save", W - 12 - 90, FOOT_Y, 90, 32);

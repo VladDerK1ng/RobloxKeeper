@@ -158,8 +158,6 @@ namespace RobloxKeeper
             btnGo.Click += delegate { StartOrStop(); };
             Controls.Add(btnGo);
             Button close = WatchUi.Secondary("Close", W - 12 - 110, FOOT_Y, 110, 32);
-            close.BackColor = Theme.Card;
-            close.FlatAppearance.MouseOverBackColor = Theme.Inset;
             close.Click += delegate { Close(); };
             Controls.Add(close);
             CancelButton = close;

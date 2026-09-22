@@ -340,10 +340,7 @@ namespace RobloxKeeper
             if (mode == RegionPickMode.Region) BuildRegionControls(card, scaling);
             else BuildPictureControls(card);
 
-            Button cancel = Ui.AccentButton("Cancel", Ui.PAD, SIDE_H - 48, 96, 30);
-            cancel.BackColor = Theme.Inset;
-            cancel.Font = new Font("Segoe UI", 8.25f, FontStyle.Bold);
-            cancel.FlatAppearance.MouseOverBackColor = Theme.Bg;
+            Button cancel = Ui.PlainButton("Cancel", Ui.PAD, SIDE_H - 48, 96, 30);
             cancel.Click += delegate { DialogResult = DialogResult.Cancel; Close(); };
             card.Controls.Add(cancel);
 
@@ -389,10 +386,7 @@ namespace RobloxKeeper
             nameBox.ForeColor = Theme.Text;
             card.Controls.Add(nameBox);
 
-            Button test = Ui.AccentButton("Test - read it now", Ui.PAD, 326, INNER, 28);
-            test.BackColor = Theme.Inset;
-            test.Font = new Font("Segoe UI", 8.25f, FontStyle.Bold);
-            test.FlatAppearance.MouseOverBackColor = Theme.Bg;
+            Button test = Ui.PlainButton("Test - read it now", Ui.PAD, 326, INNER, 28);
             test.Click += delegate { TestRead(); };
             test.Visible = read != null;
             card.Controls.Add(test);

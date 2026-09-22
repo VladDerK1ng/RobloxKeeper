@@ -153,6 +153,95 @@ namespace RobloxKeeper.Tests
             }
         }
 
+        // ---------- buttons ----------
+
+        static void Mouse(Control c, bool enter)
+        {
+            typeof(Control).GetMethod(enter ? "OnMouseEnter" : "OnMouseLeave",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+                .Invoke(c, new object[] { EventArgs.Empty });
+        }
+
+        static void Settle() { Animator.StepAt(DateTime.Now.AddSeconds(5)); }
+
+        // The owner's report: the dark buttons turned purple under the mouse
+        // and stayed purple. The fade was set up while the button was still
+        // purple and went "back" to that, whatever colour it was given after.
+        public static void TestAPlainButtonGoesBackToItsOwnColourAfterTheMouseLeaves()
+        {
+            using (Button b = WatchUi.Secondary("Macros", 0, 0, 110, 32))
+            {
+                IntPtr h = b.Handle;
+                int rest = b.BackColor.ToArgb();
+                try
+                {
+                    Mouse(b, true);
+                    Settle();
+                    Assert.NotEqual(rest, b.BackColor.ToArgb(), "lit while the mouse is on it");
+                    Assert.NotEqual(Theme.AccentHover.ToArgb(), b.BackColor.ToArgb(), "but not purple");
+                    Mouse(b, false);
+                    Settle();
+                    Assert.Equal(rest, b.BackColor.ToArgb(), "back to its own colour");
+                }
+                finally { Animator.Remove(b); }
+            }
+        }
+
+        // A button recoloured where it is used fades between the colours it
+        // was given there.
+        public static void TestAButtonRecolouredAfterItIsMadeFadesBetweenItsNewColours()
+        {
+            using (Button b = Ui.AccentButton("Reset", 0, 0, 100, 30))
+            {
+                IntPtr h = b.Handle;
+                Color rest = Color.FromArgb(40, 90, 60), lit = Color.FromArgb(60, 120, 80);
+                b.BackColor = rest;
+                b.FlatAppearance.MouseOverBackColor = lit;
+                try
+                {
+                    Mouse(b, true);
+                    Settle();
+                    Assert.Equal(lit.ToArgb(), b.BackColor.ToArgb(), "its own hover colour");
+                    Mouse(b, false);
+                    Settle();
+                    Assert.Equal(rest.ToArgb(), b.BackColor.ToArgb(), "its own resting colour");
+                }
+                finally { Animator.Remove(b); }
+            }
+        }
+
+        // A button that opens a window never hears the mouse leave it - the
+        // window is in the way - and stayed lit after the window closed.
+        public static void TestAClickedButtonSettlesBack()
+        {
+            using (Button b = Ui.AccentButton("Watchers", 0, 0, 100, 30))
+            {
+                IntPtr h = b.Handle;
+                int rest = b.BackColor.ToArgb();
+                try
+                {
+                    Mouse(b, true);
+                    Settle();
+                    b.PerformClick();
+                    Settle();
+                    Assert.Equal(rest, b.BackColor.ToArgb(), "not left lit");
+                }
+                finally { Animator.Remove(b); }
+            }
+        }
+
+        // "Why are the buttons black": the plain ones were darker than the
+        // cards they sit on. They are a visible grey now, lighter than both
+        // the cards and the window behind them.
+        public static void TestPlainButtonsAreLighterThanWhatTheySitOn()
+        {
+            using (Button b = WatchUi.Secondary("Send a test", 0, 0, 100, 30))
+            {
+                Assert.True(b.BackColor.GetBrightness() > Theme.Card.GetBrightness(), "lighter than a card");
+                Assert.True(b.BackColor.GetBrightness() > Theme.Bg.GetBrightness(), "and than the window");
+            }
+        }
+
         // The status dot was set busy and never moved.
         public static void TestABusyDotStartsBreathing()
         {

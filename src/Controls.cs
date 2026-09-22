@@ -191,36 +191,87 @@ namespace RobloxKeeper
             return b;
         }
 
+        // A plain button: for everything that isn't a window's main action.
+        public static Button PlainButton(string text, int x, int y, int w, int h)
+        {
+            Button b = AccentButton(text, x, y, w, h);
+            b.Font = new Font("Segoe UI", 8.25f, FontStyle.Bold);
+            b.BackColor = Theme.Button;
+            b.FlatAppearance.MouseOverBackColor = Theme.ButtonHover;
+            return b;
+        }
+
         // Fade a button between two colours on hover, instead of letting
         // WinForms snap between them.
         //
         // FlatAppearance's own hover colour has to be turned off first, by
         // setting it to whatever the button currently is - otherwise WinForms
         // paints its version over the top and the fade never shows.
+        //
+        // The colours are the button's own, whenever they are set. Buttons are
+        // made purple and recoloured where they are used - plain ones grey, a
+        // Cancel the colour of its card - and a fade that kept the colours it
+        // started with turned every one of those purple under the mouse and
+        // left it purple. So a BackColor or hover colour set from outside
+        // becomes what it rests at or lights up to.
         public static void Glow(Button b, Color resting, Color lit)
         {
             Anim hover = new Anim(0);
+            Color[] colours = { resting, lit };     // resting, lit - replaced when set from outside
+            bool fading = false;                    // the change is ours, not a new colour
+            Color wroteOver = Color.Empty;
 
-            EventHandler repaint = delegate
+            Action repaint = delegate
             {
-                Color now = Anim.Blend(resting, lit, hover.Value);
-                b.BackColor = now;
-                b.FlatAppearance.MouseOverBackColor = now;
-                b.FlatAppearance.MouseDownBackColor = Anim.Blend(now, Color.Black, 0.12);
+                Color now = Anim.Blend(colours[0], colours[1], hover.Value);
+                fading = true;
+                try
+                {
+                    b.BackColor = now;
+                    b.FlatAppearance.MouseOverBackColor = now;
+                    b.FlatAppearance.MouseDownBackColor = Anim.Blend(now, Color.Black, 0.12);
+                    wroteOver = now;
+                }
+                finally { fading = false; }
             };
 
-            b.MouseEnter += delegate
+            b.BackColorChanged += delegate
             {
+                if (fading) return;
+                colours[0] = b.BackColor;
+                hover.To(0, TimeSpan.Zero, DateTime.Now);
+            };
+
+            // FlatAppearance says nothing when its hover colour is set, so it
+            // is looked at when the mouse arrives: if it isn't what the fade
+            // last wrote, somebody chose it.
+            EventHandler adoptHover = delegate
+            {
+                Color over = b.FlatAppearance.MouseOverBackColor;
+                if (over != wroteOver && !over.IsEmpty) colours[1] = over;
+            };
+
+            Action fade = delegate { Animator.Run(b, hover, repaint); };
+            b.MouseEnter += delegate(object s, EventArgs e)
+            {
+                adoptHover(s, e);
                 hover.To(1, Animator.Time(Animator.Quick), DateTime.Now);
-                Animator.Run(b, hover, delegate { repaint(null, EventArgs.Empty); });
+                fade();
             };
             b.MouseLeave += delegate
             {
                 hover.To(0, Animator.Time(Animator.Quick), DateTime.Now);
-                Animator.Run(b, hover, delegate { repaint(null, EventArgs.Empty); });
+                fade();
+            };
+            // A button that opens a window never hears the mouse leave - the
+            // window is in the way - and stayed lit after it closed.
+            b.Click += delegate
+            {
+                hover.To(0, Animator.Time(Animator.Quick), DateTime.Now);
+                fade();
             };
 
-            repaint(null, EventArgs.Empty);
+            repaint();
         }
 
         public static ThemedPicker DarkCombo(int x, int y, int w)
