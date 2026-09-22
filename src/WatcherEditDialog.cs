@@ -22,6 +22,7 @@ namespace RobloxKeeper
         public Func<IList<string>> Accounts;       // saved account names
         public Action<string> Log;
         public bool CanReadText = true;
+        public IHuntControl Hunts;                  // null where there is no main window, as in tests
 
         public WatchedClient[] RunningClients()
         {

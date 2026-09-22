@@ -64,6 +64,14 @@ namespace RobloxKeeper
         }
 
         public int Count { get { return visited.Count; } }
+
+        public List<string> RecentIds(DateTime now)
+        {
+            List<string> ids = new List<string>();
+            foreach (KeyValuePair<string, DateTime> v in visited)
+                if (now - v.Value < Recent) ids.Add(v.Key);
+            return ids;
+        }
     }
 
     // A game's public servers, from the same public list the website's

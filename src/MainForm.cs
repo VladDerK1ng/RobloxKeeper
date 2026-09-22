@@ -320,10 +320,18 @@ namespace RobloxKeeper
             // and three features below all want the same answer.
             int foregroundPid = PerformanceManager.ForegroundPid();
 
-            // PIDs are recycled, so a label must not outlive its process.
+            // PIDs are recycled, so a label must not outlive its process. Every
+            // Roblox process counts as alive, window or not: a client this app
+            // just launched has no window for its first seconds, and pruning
+            // against windowed clients only threw its account name away.
             List<int> alivePids = new List<int>();
-            foreach (ClientInfo ci in clients) alivePids.Add(ci.Pid);
+            foreach (Process p in snapshot)
+            {
+                try { if (ClientTracker.IsClient(p)) alivePids.Add(p.Id); }
+                catch { }
+            }
             clientLabels.Prune(alivePids);
+            HuntTick(alivePids);
 
             perf.Prune(clients);
             perf.ApplyPending(clients, foregroundPid);

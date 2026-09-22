@@ -1,7 +1,46 @@
 using System;
+using System.Collections.Generic;
 
 namespace RobloxKeeper
 {
+    // What the Hunt window was last set to, kept for next time.
+    class HuntSettings
+    {
+        public string GameLink = "";
+        public int LookSeconds = 60;
+        public bool StayWhenFound = true;
+        public string[] Accounts = new string[0];
+    }
+
+    // What the Hunt window and the watchers list need from the running hunt.
+    interface IHuntControl
+    {
+        string Start(HuntSettings s);        // null when it started, otherwise why not
+        void Stop();
+        bool Running { get; }
+        IList<string> Lines(DateTime now);   // one per account
+    }
+
+    // The rules around starting a hunt, kept apart so they can be tested.
+    static class Hunting
+    {
+        // Null when a hunt may start. hasSignIn: is this account's session
+        // saved; watched: does a switched-on watcher look at its client.
+        public static string StartProblem(string placeId, IList<string> accounts,
+                                          Func<string, bool> hasSignIn, Func<string, bool> watched)
+        {
+            if (string.IsNullOrEmpty(placeId)) return "Paste the link of the game to hunt in.";
+            if (accounts == null || accounts.Count == 0) return "Tick at least one account to hunt with.";
+            foreach (string a in accounts)
+                if (!hasSignIn(a))
+                    return a + " has no saved sign-in, so its client can't be moved. Sign it in again in Accounts.";
+            foreach (string a in accounts)
+                if (!watched(a))
+                    return "No switched-on watcher in this setup looks at " + a + "'s client, so a hunt would never find anything.";
+            return null;
+        }
+    }
+
     enum HuntStage { Starting, Hopping, Joining, Looking, Waiting, Found, Stopped }
 
     enum HuntOrder { None, Hop }

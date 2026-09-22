@@ -27,6 +27,14 @@ namespace RobloxKeeper
             return n + " " + thing + (n == 1 ? "" : "s");
         }
 
+        // While a hunt is on, the line says so instead - it is the thing most
+        // worth knowing at a glance.
+        public static string HuntStatusLine(int hunting, int servers, bool besidePicker)
+        {
+            if (besidePicker) return "hunting · " + Count(servers, "server");
+            return "Hunting · " + Count(hunting, "account") + " · " + Count(servers, "server") + " so far";
+        }
+
         // The setup picker on the main window, and the line beside it. They
         // share the status line's 262px: the picker, a gap, then the line.
         public const int SETUP_PICKER_W = 124;
@@ -195,6 +203,7 @@ namespace RobloxKeeper
             // Asked once and kept, so the answer cannot change from one look
             // at the watchers list to the next.
             watchKit.CanReadText = ScreenText.Available;
+            watchKit.Hunts = this;
 
             logWatch.Joined = OnClientJoined;
             PublishWatchWork();
@@ -226,6 +235,7 @@ namespace RobloxKeeper
             if (pid <= 0) return;
             clientWhere[pid] = e;
             PublishWatchWork();
+            HuntJoined(pid, e);
         }
 
         // Once a second, from the main loop.
@@ -276,7 +286,8 @@ namespace RobloxKeeper
             int clients = Watching.ClientsWatched(w.Clients, w.Watchers);
             int hits = watchHits.Today(DateTime.Now);
             string text;
-            if (!picker) text = Watching.StatusLine(enabled, w.Watchers.Length, clients, hits);
+            if (HuntsActive() > 0) text = Watching.HuntStatusLine(HuntsActive(), HuntServers(), picker);
+            else if (!picker) text = Watching.StatusLine(enabled, w.Watchers.Length, clients, hits);
             else
             {
                 text = Watching.SetupStatusLine(enabled, w.Watchers.Length, clients, hits, true);
@@ -369,6 +380,7 @@ namespace RobloxKeeper
 
             if (w == null || w.SendDiscord) SendToDiscord(w, d);
             if (w != null && !string.IsNullOrEmpty(w.ThenMacro)) PlayThen(w, d);
+            HuntFound(d);
             UpdateWatchStatus();
         }
 
