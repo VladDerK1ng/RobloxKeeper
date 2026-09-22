@@ -29,6 +29,17 @@ namespace RobloxKeeper.Tests
                 Assert.Equal(45, back.Hunt.LookSeconds, "the time");
                 Assert.False(back.Hunt.StayWhenFound, "keep going");
                 Assert.Equal(2, back.Hunt.Accounts.Length, "both accounts");
+                Assert.Equal(ServerSize.Any, back.Hunt.Servers.Size, "any server unless changed");
+
+                back.Hunt.Servers.Size = ServerSize.Busiest;
+                back.Hunt.Servers.MinPlayers = 6;
+                back.Hunt.Servers.MaxPlayers = 20;
+                back.Save();
+                WatchStore again = new WatchStore(path);
+                again.Load();
+                Assert.Equal(ServerSize.Busiest, again.Hunt.Servers.Size, "the busiest");
+                Assert.Equal(6, again.Hunt.Servers.MinPlayers, "at least six");
+                Assert.Equal(20, again.Hunt.Servers.MaxPlayers, "at most twenty");
             }
             finally { try { File.Delete(path); } catch { } }
         }

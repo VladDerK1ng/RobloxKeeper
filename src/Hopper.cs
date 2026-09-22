@@ -8,7 +8,7 @@ namespace RobloxKeeper
     // order of it can be tested.
     interface IHopWorld
     {
-        ServerPage Servers(string placeId, string cursor, out string error);
+        ServerPage Servers(string placeId, string cursor, bool fullestFirst, out string error);
         string Ticket(string cookie, out string error);
         void Close(int pid);
         int Start(string launchUrl, out string error);
@@ -22,6 +22,7 @@ namespace RobloxKeeper
         public string PlaceId;
         public int CurrentPid;             // 0 when the account has no client open
         public Func<string, bool> Avoid;   // servers not to go to
+        public ServerPrefs Prefs;          // null for any server
     }
 
     class HopResult
@@ -49,18 +50,21 @@ namespace RobloxKeeper
 
             PublicServer pick = null;
             string cursor = null;
+            bool fullestFirst = req.Prefs != null && req.Prefs.Size == ServerSize.Busiest;
             for (int page = 0; page < PAGES && pick == null; page++)
             {
                 string error;
-                ServerPage p = world.Servers(req.PlaceId, cursor, out error);
+                ServerPage p = world.Servers(req.PlaceId, cursor, fullestFirst, out error);
                 if (p == null) { result.Problem = error ?? "couldn't get the list of servers"; return result; }
-                pick = ServerPicker.Pick(p.Servers, req.Avoid, rng);
+                pick = ServerPicker.Pick(p.Servers, req.Avoid, rng, req.Prefs);
                 cursor = p.NextCursor;
                 if (cursor == null) break;
             }
             if (pick == null)
             {
-                result.Problem = "no server with room that hasn't been visited in the last half hour";
+                result.Problem = req.Prefs != null && (req.Prefs.MinPlayers > 0 || req.Prefs.MaxPlayers > 0)
+                    ? "no server with room and the number of players asked for that hasn't been visited in the last half hour"
+                    : "no server with room that hasn't been visited in the last half hour";
                 return result;
             }
 
@@ -88,9 +92,9 @@ namespace RobloxKeeper
     // The real world: Roblox's server list and ticket, and this PC's clients.
     class LiveHopWorld : IHopWorld
     {
-        public ServerPage Servers(string placeId, string cursor, out string error)
+        public ServerPage Servers(string placeId, string cursor, bool fullestFirst, out string error)
         {
-            return RobloxServers.Fetch(placeId, cursor, out error);
+            return RobloxServers.Fetch(placeId, cursor, fullestFirst, out error);
         }
 
         public string Ticket(string cookie, out string error)

@@ -12,7 +12,7 @@ namespace RobloxKeeper
     {
         const int W = 560;
         const int TOP = WatchUi.TITLEBAR_H + 6;
-        const int SET_H = 300;
+        const int SET_H = 356;
         const int NOW_Y = TOP + SET_H + 12;
         const int NOW_H = 130;
         const int FOOT_Y = NOW_Y + NOW_H + 12;
@@ -23,7 +23,8 @@ namespace RobloxKeeper
         readonly WatchKit kit;
         readonly List<ThemedCheckBox> accountChecks = new List<ThemedCheckBox>();
         TextBox gameBox;
-        ThemedNumeric numLook;
+        ThemedNumeric numLook, numMin, numMax;
+        ThemedPicker cmbServers;
         ThemedCheckBox chkStay;
         Label lblLines, lblProblem;
         Button btnGo;
@@ -58,6 +59,13 @@ namespace RobloxKeeper
         public void SetGame(string link) { gameBox.Text = link; }
         public void SetLook(int seconds) { numLook.Value = seconds; }
 
+        public void SetServers(ServerSize size, int minPlayers, int maxPlayers)
+        {
+            cmbServers.SelectedIndex = (int)size;
+            numMin.Value = minPlayers;
+            numMax.Value = maxPlayers;
+        }
+
         public void TickAccount(string name, bool on)
         {
             foreach (ThemedCheckBox c in accountChecks)
@@ -85,13 +93,29 @@ namespace RobloxKeeper
             set.Controls.Add(numLook);
             set.Controls.Add(Ui.RowLabel("seconds in each server", FIELD_X + 72, 74, 26, 200, 9f, Theme.Muted));
 
-            chkStay = Ui.DarkCheck("Stay in a server when a watcher finds something there", Ui.PAD, 106, 9f);
+            set.Controls.Add(Ui.RowLabel("Servers", Ui.PAD, 106, 26, 80, 9f, Theme.Muted));
+            cmbServers = Ui.DarkCombo(FIELD_X, 106, INNER - FIELD_X + Ui.PAD);
+            cmbServers.Items.Add("Any server");
+            cmbServers.Items.Add("The emptiest - for something anyone can take");
+            cmbServers.Items.Add("The busiest - for players to find, like a bounty");
+            cmbServers.SelectedIndex = 0;
+            set.Controls.Add(cmbServers);
+
+            set.Controls.Add(Ui.RowLabel("Players", Ui.PAD, 138, 26, 80, 9f, Theme.Muted));
+            numMin = Ui.DarkNumeric(FIELD_X, 138, 56, 0, 100, 0);
+            set.Controls.Add(numMin);
+            set.Controls.Add(Ui.RowLabel("to", FIELD_X + 62, 138, 26, 22, 9f, Theme.Muted));
+            numMax = Ui.DarkNumeric(FIELD_X + 88, 138, 56, 0, 100, 0);
+            set.Controls.Add(numMax);
+            set.Controls.Add(Ui.RowLabel("in the server - 0 means no limit", FIELD_X + 152, 138, 26, 220, 8.25f, Theme.Muted));
+
+            chkStay = Ui.DarkCheck("Stay in a server when a watcher finds something there", Ui.PAD, 172, 9f);
             chkStay.AutoSize = true;
             set.Controls.Add(chkStay);
 
-            set.Controls.Add(Ui.CaptionLabel("ACCOUNTS", Ui.PAD, 138));
+            set.Controls.Add(Ui.CaptionLabel("ACCOUNTS", Ui.PAD, 204));
             ScrollPanel list = new ScrollPanel();
-            list.Location = new Point(Ui.PAD, 156);
+            list.Location = new Point(Ui.PAD, 222);
             list.Size = new Size(INNER, 82);
             list.BackColor = Theme.Card;
             list.AutoScroll = true;
@@ -114,7 +138,7 @@ namespace RobloxKeeper
 
             Label hint = Ui.MutedLabel(
                 "Each account's client is closed and opened again in the next server, so only accounts "
-                + "saved in Accounts can hunt. The watchers of the setup in use do the looking.", Ui.PAD, 246, 8.25f);
+                + "saved in Accounts can hunt. The watchers of the setup in use do the looking.", Ui.PAD, 312, 8.25f);
             hint.MaximumSize = new Size(INNER, 0);
             set.Controls.Add(hint);
 
@@ -146,6 +170,10 @@ namespace RobloxKeeper
             gameBox.Text = s.GameLink ?? "";
             numLook.Value = Math.Max(10, Math.Min(600, s.LookSeconds));
             chkStay.Checked = s.StayWhenFound;
+            ServerPrefs servers = s.Servers ?? new ServerPrefs();
+            cmbServers.SelectedIndex = (int)servers.Size;
+            numMin.Value = servers.MinPlayers;
+            numMax.Value = servers.MaxPlayers;
             if (s.Accounts != null) foreach (string a in s.Accounts) TickAccount(a, true);
         }
 
@@ -155,6 +183,9 @@ namespace RobloxKeeper
             s.GameLink = gameBox.Text.Trim();
             s.LookSeconds = numLook.Value;
             s.StayWhenFound = chkStay.Checked;
+            s.Servers.Size = (ServerSize)Math.Max(0, cmbServers.SelectedIndex);
+            s.Servers.MinPlayers = numMin.Value;
+            s.Servers.MaxPlayers = numMax.Value;
             List<string> picked = new List<string>();
             foreach (ThemedCheckBox c in accountChecks) if (c.Checked) picked.Add((string)c.Tag);
             s.Accounts = picked.ToArray();

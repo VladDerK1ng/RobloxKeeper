@@ -10,6 +10,7 @@ namespace RobloxKeeper
         public int LookSeconds = 60;
         public bool StayWhenFound = true;
         public string[] Accounts = new string[0];
+        public ServerPrefs Servers = new ServerPrefs();
     }
 
     // What the Hunt window and the watchers list need from the running hunt.

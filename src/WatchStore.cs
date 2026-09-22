@@ -282,6 +282,9 @@ namespace RobloxKeeper
                         if (f.Length > 1) Hunt.LookSeconds = ParseInt(f[1], 60);
                         if (f.Length > 2) Hunt.StayWhenFound = f[2] != "0";
                         if (f.Length > 3) Hunt.Accounts = Split(Unescape(f[3]));
+                        if (f.Length > 4) Hunt.Servers.Size = (ServerSize)ParseInt(f[4], 0);
+                        if (f.Length > 5) Hunt.Servers.MinPlayers = ParseInt(f[5], 0);
+                        if (f.Length > 6) Hunt.Servers.MaxPlayers = ParseInt(f[6], 0);
                     }
                     else if (kind == "M|")
                     {
@@ -317,7 +320,9 @@ namespace RobloxKeeper
             foreach (WatchRegion r in regions) sb.Append("R|").Append(SerializeRegion(r)).Append('\n');
             foreach (Macro m in macros) sb.Append("M|").Append(SerializeMacro(m)).Append('\n');
             sb.Append("H|").Append(Escape(Hunt.GameLink)).Append(FIELD).Append(Hunt.LookSeconds).Append(FIELD)
-              .Append(Hunt.StayWhenFound ? "1" : "0").Append(FIELD).Append(Escape(Join(Hunt.Accounts))).Append('\n');
+              .Append(Hunt.StayWhenFound ? "1" : "0").Append(FIELD).Append(Escape(Join(Hunt.Accounts))).Append(FIELD)
+              .Append((int)Hunt.Servers.Size).Append(FIELD).Append(Hunt.Servers.MinPlayers).Append(FIELD)
+              .Append(Hunt.Servers.MaxPlayers).Append('\n');
             sb.Append("C|").Append(Escape(chosen.Name)).Append('\n');
             foreach (WatchSetup s in setups)
             {

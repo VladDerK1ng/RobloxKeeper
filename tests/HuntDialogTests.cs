@@ -89,6 +89,23 @@ namespace RobloxKeeper.Tests
             finally { try { File.Delete(path); } catch { } }
         }
 
+        // Busy servers for a bounty, quiet ones for something anyone can
+        // take - chosen here and passed on to the hunt.
+        public static void TestWhichServersToPreferIsPassedOn()
+        {
+            FakeHunts f = new FakeHunts();
+            using (HuntDialog d = new HuntDialog(Kit(TempStore(), f)))
+            {
+                d.SetGame("107778070777162");
+                d.TickAccount("alt1", true);
+                d.SetServers(ServerSize.Busiest, 6, 20);
+                Assert.Equal(null, d.StartOrStop(), "started");
+            }
+            Assert.Equal(ServerSize.Busiest, f.Started.Servers.Size, "the busiest");
+            Assert.Equal(6, f.Started.Servers.MinPlayers, "at least six playing");
+            Assert.Equal(20, f.Started.Servers.MaxPlayers, "at most twenty");
+        }
+
         public static void TestWhyItCannotStartIsShown()
         {
             FakeHunts f = new FakeHunts();

@@ -61,6 +61,63 @@ namespace RobloxKeeper.Tests
             Assert.Equal(null, ServerPicker.Pick(new List<PublicServer>(), Nothing, new Random(1)), "none at all");
         }
 
+        // ---------- which servers a hunt prefers ----------
+
+        static List<PublicServer> Mixed()
+        {
+            List<PublicServer> list = new List<PublicServer>();
+            int[] counts = { 1, 2, 3, 5, 8, 11, 12, 14, 20, 23, 25 };
+            foreach (int n in counts) list.Add(S("p" + n, n, 25));
+            return list;
+        }
+
+        static ServerPrefs Prefs(ServerSize size, int min, int max)
+        {
+            ServerPrefs p = new ServerPrefs();
+            p.Size = size; p.MinPlayers = min; p.MaxPlayers = max;
+            return p;
+        }
+
+        // Something anyone can pick up: go where there are fewest people.
+        public static void TestTheEmptiestServersCanBePreferred()
+        {
+            for (int seed = 0; seed < 20; seed++)
+            {
+                PublicServer s = ServerPicker.Pick(Mixed(), Nothing, new Random(seed), Prefs(ServerSize.Emptiest, 0, 0));
+                Assert.True(s.Playing <= 5, "one of the emptiest, seed " + seed + " got " + s.Playing);
+            }
+        }
+
+        // A bounty to hunt: go where the people are - but never a full one,
+        // and still preferring room for two.
+        public static void TestTheBusiestServersCanBePreferred()
+        {
+            for (int seed = 0; seed < 20; seed++)
+            {
+                PublicServer s = ServerPicker.Pick(Mixed(), Nothing, new Random(seed), Prefs(ServerSize.Busiest, 0, 0));
+                Assert.True(s.Playing >= 12 && s.Playing <= 23, "one of the busiest with room for two, seed " + seed + " got " + s.Playing);
+            }
+        }
+
+        public static void TestPlayerLimitsAreKept()
+        {
+            for (int seed = 0; seed < 20; seed++)
+            {
+                PublicServer s = ServerPicker.Pick(Mixed(), Nothing, new Random(seed), Prefs(ServerSize.Any, 5, 12));
+                Assert.True(s.Playing >= 5 && s.Playing <= 12, "between 5 and 12, seed " + seed + " got " + s.Playing);
+            }
+            Assert.Equal(null, ServerPicker.Pick(Mixed(), Nothing, new Random(1), Prefs(ServerSize.Any, 30, 0)),
+                "nobody has thirty");
+        }
+
+        // The list is asked for fullest first when the fullest are wanted,
+        // so they are on the first page rather than the tenth.
+        public static void TestTheBusiestAreAskedForFirst()
+        {
+            Assert.Contains("sortOrder=Desc", RobloxServers.PageUrl("1", null, true), "fullest first");
+            Assert.Contains("sortOrder=Asc", RobloxServers.PageUrl("1", null, false), "emptiest first");
+        }
+
         public static void TestServersVisitedLatelyAreRemembered()
         {
             HopHistory h = new HopHistory();

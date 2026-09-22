@@ -17,6 +17,7 @@ namespace RobloxKeeper
         readonly HopHistory hopHistory = new HopHistory();
         readonly Random hopRandom = new Random();
         string huntPlace;
+        ServerPrefs huntServers = new ServerPrefs();
 
         bool IHuntControl.Running
         {
@@ -43,6 +44,7 @@ namespace RobloxKeeper
 
             StopHunts(false);
             huntPlace = place;
+            huntServers = (s.Servers ?? new ServerPrefs()).Copy();
             foreach (string a in s.Accounts)
             {
                 Hunt h = new Hunt(a);
@@ -120,6 +122,7 @@ namespace RobloxKeeper
             r.PlaceId = huntPlace;
             r.CurrentPid = huntPids.ContainsKey(h.Account) ? huntPids[h.Account] : 0;
             r.Avoid = delegate(string id) { return avoid.ContainsKey(id); };
+            r.Prefs = huntServers.Copy();
             Random rng = new Random(hopRandom.Next());
 
             ThreadPool.QueueUserWorkItem(delegate

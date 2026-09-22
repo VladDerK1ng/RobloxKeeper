@@ -16,9 +16,12 @@ namespace RobloxKeeper.Tests
             public readonly List<string> Did = new List<string>();
             public string StartedWith;
 
-            public ServerPage Servers(string placeId, string cursor, out string error)
+            public bool AskedFullestFirst;
+
+            public ServerPage Servers(string placeId, string cursor, bool fullestFirst, out string error)
             {
                 error = ListError;
+                AskedFullestFirst = fullestFirst;
                 int page = cursor == null ? 0 : int.Parse(cursor);
                 Did.Add("list " + page);
                 if (ListError != null) return null;
@@ -134,6 +137,17 @@ namespace RobloxKeeper.Tests
             HopResult r = Hopper.Hop(req, w, new Random(1));
             Assert.Equal(null, r.Problem, "started");
             Assert.Equal("list 0|ticket|start", string.Join("|", w.Did.ToArray()), "no close");
+        }
+
+        public static void TestAHuntThatWantsBusyServersAsksForThemFirst()
+        {
+            World w = new World();
+            w.Pages.Add(Page(null, "c1c5a3b9-4938-4cd8-9418-ca1a217858ae"));
+            HopRequest req = Request(null);
+            req.Prefs = new ServerPrefs();
+            req.Prefs.Size = ServerSize.Busiest;
+            Hopper.Hop(req, w, new Random(1));
+            Assert.True(w.AskedFullestFirst, "fullest first");
         }
 
         // By then the old client is gone, and saying so matters.
