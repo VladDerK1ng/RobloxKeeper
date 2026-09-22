@@ -21,6 +21,10 @@ namespace RobloxKeeper
         const string REFERER = "https://www.roblox.com/";
         const string PLACE_LAUNCHER =
             "https://assetgame.roblox.com/game/PlaceLauncher.ashx?request=RequestGame&browserTrackerId={0}&placeId={1}&isPlayTogetherGame=false";
+        // One particular server - what the website's Join button on a server
+        // in the Servers tab asks for.
+        const string PLACE_LAUNCHER_JOB =
+            "https://assetgame.roblox.com/game/PlaceLauncher.ashx?request=RequestGameJob&browserTrackerId={0}&placeId={1}&gameId={2}&isPlayTogetherGame=false";
 
         // A place id out of whatever the user pasted: a full game link, a link
         // with tracking parameters on it, or just the number.
@@ -43,6 +47,13 @@ namespace RobloxKeeper
         public static string BuildLaunchUrl(string ticket, string placeId,
                                             string browserTrackerId, long launchTimeMs)
         {
+            return BuildLaunchUrl(ticket, placeId, browserTrackerId, launchTimeMs, null);
+        }
+
+        // With a job id, into that server; without, wherever Roblox puts it.
+        public static string BuildLaunchUrl(string ticket, string placeId,
+                                            string browserTrackerId, long launchTimeMs, string jobId)
+        {
             if (string.IsNullOrEmpty(ticket)) return null;
             if (string.IsNullOrEmpty(placeId)) return null;
 
@@ -51,7 +62,9 @@ namespace RobloxKeeper
             if (string.IsNullOrEmpty(browserTrackerId))
                 browserTrackerId = AccountStore.NewBrowserTrackerId();
 
-            string launcher = string.Format(PLACE_LAUNCHER, browserTrackerId, placeId);
+            string launcher = string.IsNullOrEmpty(jobId)
+                ? string.Format(PLACE_LAUNCHER, browserTrackerId, placeId)
+                : string.Format(PLACE_LAUNCHER_JOB, browserTrackerId, placeId, Uri.EscapeDataString(jobId));
 
             StringBuilder sb = new StringBuilder();
             sb.Append("roblox-player:1");

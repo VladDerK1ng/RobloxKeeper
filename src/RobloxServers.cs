@@ -21,6 +21,51 @@ namespace RobloxKeeper
         public string NextCursor;
     }
 
+    // Which server to go to next.
+    static class ServerPicker
+    {
+        // Among servers with room, and not to be avoided - the one the client
+        // is in, ones visited lately, ones another of our clients is in. Two
+        // free places are preferred over the last one, which can be taken by
+        // the time the client arrives. Random among what is left, so two
+        // accounts picking from one list rarely land together.
+        public static PublicServer Pick(IList<PublicServer> servers, Func<string, bool> avoid, Random rng)
+        {
+            List<PublicServer> spaces = new List<PublicServer>();
+            List<PublicServer> lastSlot = new List<PublicServer>();
+            foreach (PublicServer s in servers)
+            {
+                if (s == null || !s.HasRoom || string.IsNullOrEmpty(s.Id) || avoid(s.Id)) continue;
+                if (s.MaxPlayers - s.Playing >= 2) spaces.Add(s);
+                else lastSlot.Add(s);
+            }
+            List<PublicServer> from = spaces.Count > 0 ? spaces : lastSlot;
+            return from.Count == 0 ? null : from[rng.Next(from.Count)];
+        }
+    }
+
+    // Servers visited lately, so a hunt does not go round in a small circle.
+    class HopHistory
+    {
+        public static readonly TimeSpan Recent = TimeSpan.FromMinutes(30);
+
+        readonly Dictionary<string, DateTime> visited =
+            new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
+
+        public void Visited(string jobId, DateTime at)
+        {
+            if (!string.IsNullOrEmpty(jobId)) visited[jobId] = at;
+        }
+
+        public bool WasRecent(string jobId, DateTime now)
+        {
+            DateTime at;
+            return !string.IsNullOrEmpty(jobId) && visited.TryGetValue(jobId, out at) && now - at < Recent;
+        }
+
+        public int Count { get { return visited.Count; } }
+    }
+
     // A game's public servers, from the same public list the website's
     // Servers tab shows. No sign-in is needed or sent.
     static class RobloxServers
