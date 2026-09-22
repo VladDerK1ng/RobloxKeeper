@@ -780,6 +780,11 @@ namespace RobloxKeeper
             menu.Items.Add("Open", null, delegate { RestoreFromTray(); });
             menu.Items.Add("Nudge now", null, delegate { NudgeAll("tray"); });
             menu.Items.Add("Trim client memory", null, delegate { OnTrimAllClicked(); });
+            // A hunt closes and reopens clients every minute or so, and the
+            // app usually sits in the tray while it does - so it can be
+            // stopped from here. Only offered while one is running.
+            ToolStripItem stopHunt = menu.Items.Add("Stop hunting", null, delegate { StopHunts(true); });
+            menu.Opening += delegate { stopHunt.Visible = HuntsActive() > 0; };
             menu.Items.Add("Exit", null, delegate { Close(); });
             tray.ContextMenuStrip = menu;
             tray.DoubleClick += delegate { RestoreFromTray(); };
