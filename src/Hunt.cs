@@ -42,6 +42,51 @@ namespace RobloxKeeper
         }
     }
 
+    // One move at a time, across every hunting account.
+    //
+    // Accounts due to move in the same second picked from the same server
+    // list at the same moment, and told to prefer the emptiest or busiest few,
+    // two landed together one time in four. One at a time, each move is done -
+    // and the server it went to remembered - before the next account picks.
+    // It is also gentler on Roblox, which turns away server lists asked for
+    // too quickly.
+    class HopLine
+    {
+        readonly List<string> waiting = new List<string>();
+        string moving;
+
+        public bool Moving { get { return moving != null; } }
+
+        // True: move now. False: wait - it is in the line.
+        public bool Ask(string account)
+        {
+            if (moving == null) { moving = account; return true; }
+            if (!Same(moving, account) && waiting.FindIndex(delegate(string a) { return Same(a, account); }) < 0)
+                waiting.Add(account);
+            return false;
+        }
+
+        // This account's move is over. Returns the next to move, whose turn it
+        // now is, or null. Only the account moving can finish the turn.
+        public string Done(string account)
+        {
+            if (moving == null || !Same(moving, account)) return null;
+            moving = null;
+            if (waiting.Count == 0) return null;
+            moving = waiting[0];
+            waiting.RemoveAt(0);
+            return moving;
+        }
+
+        public void Clear()
+        {
+            moving = null;
+            waiting.Clear();
+        }
+
+        static bool Same(string a, string b) { return string.Equals(a, b, StringComparison.OrdinalIgnoreCase); }
+    }
+
     enum HuntStage { Starting, Hopping, Joining, Looking, Waiting, Found, Stopped }
 
     enum HuntOrder { None, Hop }

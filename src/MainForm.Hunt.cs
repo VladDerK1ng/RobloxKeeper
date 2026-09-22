@@ -15,6 +15,7 @@ namespace RobloxKeeper
         // the client labels, because a client just started has no window yet.
         readonly Dictionary<string, int> huntPids = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         readonly HopHistory hopHistory = new HopHistory();
+        readonly HopLine hopLine = new HopLine();
         readonly Random hopRandom = new Random();
         string huntPlace;
         ServerPrefs huntServers = new ServerPrefs();
@@ -67,6 +68,7 @@ namespace RobloxKeeper
             foreach (Hunt h in hunts.Values) h.Stop();
             hunts.Clear();
             huntPids.Clear();
+            hopLine.Clear();
             if (say && any) Log("Hunt stopped. Every client stays where it is.");
             UpdateWatchStatus();
         }
@@ -98,14 +100,37 @@ namespace RobloxKeeper
                     if (!alivePids.Contains(pid)) huntPids[h.Account] = 0;              // closed by someone
                     else if (clientLabels.NameFor(pid) == null) clientLabels.Assign(pid, h.Account);
                 }
-                if (h.Tick(now) == HuntOrder.Hop) StartHop(h, now);
+                // One account moves at a time; one due while another is
+                // moving waits its turn, and HopDone starts it.
+                if (h.Tick(now) == HuntOrder.Hop && hopLine.Ask(h.Account)) StartHop(h, now);
+            }
+        }
+
+        // The move is over, one way or another: hand the turn on.
+        void NextInLine(string account)
+        {
+            string next = hopLine.Done(account);
+            while (next != null)
+            {
+                Hunt waiting;
+                if (hunts.TryGetValue(next, out waiting) && waiting.Active)
+                {
+                    StartHop(waiting, DateTime.Now);
+                    return;
+                }
+                next = hopLine.Done(next);      // stopped while it waited
             }
         }
 
         void StartHop(Hunt h, DateTime now)
         {
             RobloxAccount acc = accounts == null ? null : accounts.Find(h.Account);
-            if (acc == null || !acc.IsUsable) { h.HopFailed("no saved sign-in for this account", now); return; }
+            if (acc == null || !acc.IsUsable)
+            {
+                h.HopFailed("no saved sign-in for this account", now);
+                NextInLine(h.Account);
+                return;
+            }
 
             // Not where it is, not where it has been lately, not where another
             // of our clients is. Worked out here, on the UI thread, and handed
@@ -137,19 +162,26 @@ namespace RobloxKeeper
         void HopDone(Hunt h, HopResult res)
         {
             Hunt current;
-            if (!hunts.TryGetValue(h.Account, out current) || !ReferenceEquals(current, h)) return;   // stopped meanwhile
+            // Stopped meanwhile. The line was cleared when it stopped, so
+            // there is no turn to hand on.
+            if (!hunts.TryGetValue(h.Account, out current) || !ReferenceEquals(current, h)) return;
             DateTime now = DateTime.Now;
             if (res.Problem != null)
             {
                 h.HopFailed(res.Problem, now);
                 Log(h.Account + " couldn't move to another server: " + res.Problem + ".");
                 if (h.Stage == HuntStage.Stopped) Log("Hunt with " + h.Account + " stopped: " + h.Describe(now) + ".");
-                return;
             }
-            huntPids[h.Account] = res.Pid;
-            clientLabels.Assign(res.Pid, h.Account);
-            hopHistory.Visited(res.JobId, now);
-            h.HopStarted(now);
+            else
+            {
+                huntPids[h.Account] = res.Pid;
+                clientLabels.Assign(res.Pid, h.Account);
+                // Remembered before the next account picks, so it won't pick
+                // the same server.
+                hopHistory.Visited(res.JobId, now);
+                h.HopStarted(now);
+            }
+            NextInLine(h.Account);
         }
 
         // From the log watch: some client joined a server.

@@ -129,6 +129,48 @@ namespace RobloxKeeper.Tests
             Assert.Equal(HuntStage.Stopped, h.Stage, "stopped");
         }
 
+        // ---------- one move at a time ----------
+
+        // Accounts due to move in the same second picked from the same list
+        // at the same moment, and with the emptiest or busiest few to choose
+        // from, two landed together one time in four.
+        public static void TestOnlyOneAccountMovesAtATime()
+        {
+            HopLine line = new HopLine();
+            Assert.True(line.Ask("VladDerKing"), "the first moves at once");
+            Assert.False(line.Ask("alt1"), "the second waits");
+            Assert.False(line.Ask("farm2"), "and the third");
+            Assert.False(line.Ask("alt1"), "asking again doesn't queue it twice");
+
+            Assert.Equal("alt1", line.Done("VladDerKing"), "then the next in line");
+            Assert.Equal("farm2", line.Done("alt1"), "and the one after");
+            Assert.Equal(null, line.Done("farm2"), "then nobody");
+            Assert.True(line.Ask("VladDerKing"), "and the line is free again");
+        }
+
+        // A move that finishes after its hunt was stopped doesn't hand the
+        // turn to anyone.
+        public static void TestOnlyTheAccountMovingCanFinishItsTurn()
+        {
+            HopLine line = new HopLine();
+            line.Ask("VladDerKing");
+            line.Ask("alt1");
+            Assert.Equal(null, line.Done("somebody else"), "not the one moving");
+            Assert.True(line.Moving, "still moving");
+            Assert.Equal("alt1", line.Done("VladDerKing"), "the real one");
+        }
+
+        public static void TestClearingTheLineForgetsEveryone()
+        {
+            HopLine line = new HopLine();
+            line.Ask("VladDerKing");
+            line.Ask("alt1");
+            line.Clear();
+            Assert.False(line.Moving, "nobody moving");
+            Assert.True(line.Ask("farm2"), "free");
+            Assert.Equal(null, line.Done("farm2"), "and alt1 is no longer waiting");
+        }
+
         public static void TestItSaysWhereItIsUpTo()
         {
             Hunt h = New();
