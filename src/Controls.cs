@@ -184,11 +184,43 @@ namespace RobloxKeeper
             b.FlatAppearance.BorderSize = 0;
             b.BackColor = Theme.Accent;
             b.ForeColor = Color.White;
-            b.FlatAppearance.MouseOverBackColor = Theme.AccentHover;
             b.Cursor = Cursors.Hand;
+            Glow(b, Theme.Accent, Theme.AccentHover);
             b.Font = new Font("Segoe UI", 9.75f, FontStyle.Bold);
             b.TabStop = false;
             return b;
+        }
+
+        // Fade a button between two colours on hover, instead of letting
+        // WinForms snap between them.
+        //
+        // FlatAppearance's own hover colour has to be turned off first, by
+        // setting it to whatever the button currently is - otherwise WinForms
+        // paints its version over the top and the fade never shows.
+        public static void Glow(Button b, Color resting, Color lit)
+        {
+            Anim hover = new Anim(0);
+
+            EventHandler repaint = delegate
+            {
+                Color now = Anim.Blend(resting, lit, hover.Value);
+                b.BackColor = now;
+                b.FlatAppearance.MouseOverBackColor = now;
+                b.FlatAppearance.MouseDownBackColor = Anim.Blend(now, Color.Black, 0.12);
+            };
+
+            b.MouseEnter += delegate
+            {
+                hover.To(1, Animator.Time(Animator.Quick), DateTime.Now);
+                Animator.Run(b, hover, delegate { repaint(null, EventArgs.Empty); });
+            };
+            b.MouseLeave += delegate
+            {
+                hover.To(0, Animator.Time(Animator.Quick), DateTime.Now);
+                Animator.Run(b, hover, delegate { repaint(null, EventArgs.Empty); });
+            };
+
+            repaint(null, EventArgs.Empty);
         }
 
         public static ThemedPicker DarkCombo(int x, int y, int w)

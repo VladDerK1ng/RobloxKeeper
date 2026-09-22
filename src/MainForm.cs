@@ -663,16 +663,23 @@ namespace RobloxKeeper
             if (!chkMulti.Checked)
             {
                 statusDot.ForeColor = Theme.Muted;
+                statusDot.Busy = false;
                 lblMultiStatus.Text = MultiStatus.DISABLED;
             }
             else if (keeper.Held)
             {
                 statusDot.ForeColor = Theme.Green;
+                statusDot.Busy = false;
                 lblMultiStatus.Text = MultiStatus.ACTIVE;
             }
             else
             {
+                // Only this state breathes. Waiting is the one where nothing
+                // visible is happening and the user has no other way to tell
+                // "still going" from "stuck" - the other two are settled, and
+                // a dot that pulsed in all three would say nothing at all.
                 statusDot.ForeColor = Theme.Amber;
+                statusDot.Busy = true;
                 lblMultiStatus.Text = MultiStatus.WAITING;
             }
 

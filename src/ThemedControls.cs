@@ -28,27 +28,40 @@ namespace RobloxKeeper
 
         public static void Chevron(Graphics g, int cx, int cy, int size, Color color, bool up)
         {
+            Chevron(g, cx, cy, size, color, up ? 1.0 : 0.0);
+        }
+
+        // Part way through turning over. 0 points down, 1 points up, and
+        // anything between is a chevron mid-flip - which is what a dropdown
+        // arrow does while its list is opening.
+        public static void Chevron(Graphics g, int cx, int cy, int size, Color color, double turned)
+        {
+            if (turned < 0) turned = 0;
+            if (turned > 1) turned = 1;
+            float h = (float)(size * (1.0 - 2.0 * turned));
             using (Pen pen = new Pen(color, 1.6f))
             {
                 pen.StartCap = LineCap.Round;
                 pen.EndCap = LineCap.Round;
                 pen.LineJoin = LineJoin.Round;
-                int h = up ? -size : size;
-                g.DrawLines(pen, new Point[]
+                g.DrawLines(pen, new PointF[]
                 {
-                    new Point(cx - size, cy - h / 2),
-                    new Point(cx, cy + h / 2),
-                    new Point(cx + size, cy - h / 2)
+                    new PointF(cx - size, cy - h / 2f),
+                    new PointF(cx, cy + h / 2f),
+                    new PointF(cx + size, cy - h / 2f)
                 });
             }
         }
+
     }
 
     class ThemedCheckBox : CheckBox
     {
         const int BOX = 16;
         const int GAP = 9;
-        bool hot;
+
+        readonly Anim hover = new Anim(0);
+        readonly Anim ticked;
 
         public ThemedCheckBox()
         {
@@ -57,11 +70,33 @@ namespace RobloxKeeper
             Cursor = Cursors.Hand;
             TabStop = false;
             AutoSize = true;
+            ticked = new Anim(Checked ? 1 : 0);
         }
 
-        protected override void OnMouseEnter(EventArgs e) { hot = true; Invalidate(); base.OnMouseEnter(e); }
-        protected override void OnMouseLeave(EventArgs e) { hot = false; Invalidate(); base.OnMouseLeave(e); }
-        protected override void OnCheckedChanged(EventArgs e) { Invalidate(); base.OnCheckedChanged(e); }
+        void Slide(Anim a, double to, TimeSpan how)
+        {
+            a.To(to, Animator.Time(how), DateTime.Now);
+            Animator.Follow(this, a);
+            Invalidate();
+        }
+
+        protected override void OnMouseEnter(EventArgs e)
+        {
+            Slide(hover, 1, Animator.Quick);
+            base.OnMouseEnter(e);
+        }
+
+        protected override void OnMouseLeave(EventArgs e)
+        {
+            Slide(hover, 0, Animator.Quick);
+            base.OnMouseLeave(e);
+        }
+
+        protected override void OnCheckedChanged(EventArgs e)
+        {
+            Slide(ticked, Checked ? 1 : 0, Animator.Quick);
+            base.OnCheckedChanged(e);
+        }
 
         public override Size GetPreferredSize(Size proposed)
         {
@@ -77,45 +112,70 @@ namespace RobloxKeeper
             using (SolidBrush bg = new SolidBrush(BackColor)) g.FillRectangle(bg, ClientRectangle);
             g.SmoothingMode = SmoothingMode.AntiAlias;
 
+            double on = ticked.Value;
+            double lit = hover.Value;
+
             Rectangle box = new Rectangle(0, (Height - BOX) / 2, BOX, BOX);
             using (GraphicsPath p = Draw.Rounded(box, 4))
             {
-                if (Checked)
+                // The box fills with colour as the tick arrives, rather than
+                // swapping between two states.
+                Color empty = Theme.Inset;
+                Color full = Anim.Blend(Theme.Accent, Theme.AccentHover, lit);
+                using (SolidBrush b = new SolidBrush(Anim.Blend(empty, full, on)))
+                    g.FillPath(b, p);
+
+                // The outline belongs to the empty box, so it fades out as the
+                // box fills - otherwise it darkens the edge of a ticked one.
+                if (on < 1)
                 {
-                    using (SolidBrush b = new SolidBrush(hot ? Theme.AccentHover : Theme.Accent))
-                        g.FillPath(b, p);
-                }
-                else
-                {
-                    using (SolidBrush b = new SolidBrush(Theme.Inset)) g.FillPath(b, p);
-                    using (Pen pen = new Pen(hot ? Theme.AccentHover : Theme.Muted, 1.3f))
+                    Color edge = Anim.Blend(Theme.Muted, Theme.AccentHover, lit);
+                    using (Pen pen = new Pen(Color.FromArgb((int)(255 * (1 - on)), edge), 1.3f))
                         g.DrawPath(pen, p);
                 }
             }
 
-            if (Checked)
+            // The tick draws itself on: the short stroke first, then the long
+            // one, which is the order a person would draw it.
+            if (on > 0.01)
             {
-                using (Pen pen = new Pen(Color.White, 2f))
+                Point a = new Point(box.Left + 4, box.Top + 8);
+                Point b = new Point(box.Left + 7, box.Top + 11);
+                Point c = new Point(box.Left + 12, box.Top + 5);
+
+                using (Pen pen = new Pen(Color.FromArgb((int)(255 * Math.Min(1, on * 2)), Color.White), 2f))
                 {
                     pen.StartCap = LineCap.Round;
                     pen.EndCap = LineCap.Round;
                     pen.LineJoin = LineJoin.Round;
-                    g.DrawLines(pen, new Point[]
+
+                    // Two thirds of the stroke length is the long arm, so the
+                    // first third draws the short one.
+                    if (on <= 0.34)
+                        g.DrawLine(pen, a, Along(a, b, on / 0.34));
+                    else
                     {
-                        new Point(box.Left + 4, box.Top + 8),
-                        new Point(box.Left + 7, box.Top + 11),
-                        new Point(box.Left + 12, box.Top + 5)
-                    });
+                        g.DrawLine(pen, a, b);
+                        g.DrawLine(pen, b, Along(b, c, (on - 0.34) / 0.66));
+                    }
                 }
             }
 
             if (Text.Length > 0)
             {
                 Rectangle t = new Rectangle(BOX + GAP, 0, Width - BOX - GAP, Height);
-                TextRenderer.DrawText(g, Text, Font, t, hot ? Theme.Text : ForeColor,
+                TextRenderer.DrawText(g, Text, Font, t, Anim.Blend(ForeColor, Theme.Text, lit),
                     TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.NoPadding |
                     TextFormatFlags.NoPrefix);
             }
+        }
+
+        static Point Along(Point from, Point to, double t)
+        {
+            if (t < 0) t = 0;
+            if (t > 1) t = 1;
+            return new Point((int)Math.Round(from.X + (to.X - from.X) * t),
+                             (int)Math.Round(from.Y + (to.Y - from.Y) * t));
         }
     }
 
@@ -127,7 +187,9 @@ namespace RobloxKeeper
         const int TRACK_H = 20;
         const int KNOB = 14;
         const int GAP = 9;
-        bool hot;
+
+        readonly Anim hover = new Anim(0);
+        readonly Anim on;
 
         public ThemedToggle()
         {
@@ -136,11 +198,33 @@ namespace RobloxKeeper
             Cursor = Cursors.Hand;
             TabStop = false;
             AutoSize = true;
+            on = new Anim(Checked ? 1 : 0);
         }
 
-        protected override void OnMouseEnter(EventArgs e) { hot = true; Invalidate(); base.OnMouseEnter(e); }
-        protected override void OnMouseLeave(EventArgs e) { hot = false; Invalidate(); base.OnMouseLeave(e); }
-        protected override void OnCheckedChanged(EventArgs e) { Invalidate(); base.OnCheckedChanged(e); }
+        void Slide(Anim a, double to, TimeSpan how)
+        {
+            a.To(to, Animator.Time(how), DateTime.Now);
+            Animator.Follow(this, a);
+            Invalidate();
+        }
+
+        protected override void OnMouseEnter(EventArgs e)
+        {
+            Slide(hover, 1, Animator.Quick);
+            base.OnMouseEnter(e);
+        }
+
+        protected override void OnMouseLeave(EventArgs e)
+        {
+            Slide(hover, 0, Animator.Quick);
+            base.OnMouseLeave(e);
+        }
+
+        protected override void OnCheckedChanged(EventArgs e)
+        {
+            Slide(on, Checked ? 1 : 0, Animator.Slide);
+            base.OnCheckedChanged(e);
+        }
 
         public override Size GetPreferredSize(Size proposed)
         {
@@ -155,26 +239,40 @@ namespace RobloxKeeper
             using (SolidBrush bg = new SolidBrush(BackColor)) g.FillRectangle(bg, ClientRectangle);
             g.SmoothingMode = SmoothingMode.AntiAlias;
 
+            double lit = hover.Value;
+            double set = on.Value;
+
             Size t = TextRenderer.MeasureText(Text, Font, new Size(int.MaxValue, int.MaxValue),
                 TextFormatFlags.NoPadding);
             TextRenderer.DrawText(g, Text, Font, new Rectangle(0, 0, t.Width + 2, Height),
-                Checked ? Theme.Text : Theme.Muted,
+                Anim.Blend(Theme.Muted, Theme.Text, set),
                 TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.NoPadding |
                 TextFormatFlags.NoPrefix);
 
             Rectangle track = new Rectangle(Width - TRACK_W - 1, (Height - TRACK_H) / 2, TRACK_W, TRACK_H);
             using (GraphicsPath p = Draw.Rounded(track, TRACK_H / 2))
             {
-                Color fill = Checked ? (hot ? Theme.AccentHover : Theme.Accent) : Theme.Inset;
-                using (SolidBrush b = new SolidBrush(fill)) g.FillPath(b, p);
-                if (!Checked)
-                    using (Pen pen = new Pen(hot ? Theme.Muted : Color.FromArgb(60, 60, 82), 1.3f))
+                Color lightUp = Anim.Blend(Theme.Accent, Theme.AccentHover, lit);
+                using (SolidBrush b = new SolidBrush(Anim.Blend(Theme.Inset, lightUp, set)))
+                    g.FillPath(b, p);
+
+                // The border belongs to the off state and fades as it fills.
+                if (set < 1)
+                {
+                    Color edge = Anim.Blend(Color.FromArgb(60, 60, 82), Theme.Muted, lit);
+                    using (Pen pen = new Pen(Color.FromArgb((int)(255 * (1 - set)), edge), 1.3f))
                         g.DrawPath(pen, p);
+                }
             }
 
-            int knobX = Checked ? track.Right - KNOB - 3 : track.Left + 3;
+            // The knob slides between the two ends rather than appearing at
+            // one of them. This is the whole reason a pill reads as a switch.
+            int left = track.Left + 3;
+            int right = track.Right - KNOB - 3;
+            int knobX = (int)Math.Round(left + (right - left) * set);
+
             Rectangle knob = new Rectangle(knobX, track.Top + (TRACK_H - KNOB) / 2, KNOB, KNOB);
-            using (SolidBrush b = new SolidBrush(Checked ? Color.White : Theme.Muted))
+            using (SolidBrush b = new SolidBrush(Anim.Blend(Theme.Muted, Color.White, set)))
                 g.FillEllipse(b, knob);
         }
     }
@@ -187,7 +285,6 @@ namespace RobloxKeeper
 
         int minimum = 1, maximum = 99, value = 1;
         int hotZone;   // 0 none, 1 up, 2 down
-        bool hot;
 
         public event EventHandler ValueChanged;
 
@@ -251,14 +348,30 @@ namespace RobloxKeeper
             if (z != hotZone) { hotZone = z; Invalidate(); }
         }
 
-        protected override void OnMouseEnter(EventArgs e) { hot = true; Invalidate(); base.OnMouseEnter(e); }
+        readonly Anim hover = new Anim(0);
+        readonly Anim upLit = new Anim(0);
+        readonly Anim downLit = new Anim(0);
+
+        void Glow(Anim a, double to)
+        {
+            a.To(to, Animator.Time(Animator.Quick), DateTime.Now);
+            Animator.Follow(this, a);
+            Invalidate();
+        }
+
+        protected override void OnMouseEnter(EventArgs e)
+        {
+            Glow(hover, 1);
+            base.OnMouseEnter(e);
+        }
 
         protected override void OnMouseLeave(EventArgs e)
         {
             base.OnMouseLeave(e);
-            hot = false;
-            if (hotZone != 0) hotZone = 0;
-            Invalidate();
+            hotZone = 0;
+            Glow(hover, 0);
+            Glow(upLit, 0);
+            Glow(downLit, 0);
         }
 
         protected override void OnPaint(PaintEventArgs e)
@@ -271,7 +384,8 @@ namespace RobloxKeeper
             using (GraphicsPath p = Draw.Rounded(box, 5))
             {
                 using (SolidBrush b = new SolidBrush(Theme.Inset)) g.FillPath(b, p);
-                using (Pen pen = new Pen(hot ? Theme.Muted : Color.FromArgb(58, 58, 80), 1f))
+                using (Pen pen = new Pen(
+                    Anim.Blend(Color.FromArgb(58, 58, 80), Theme.Muted, hover.Value), 1f))
                     g.DrawPath(pen, p);
             }
 
@@ -279,11 +393,16 @@ namespace RobloxKeeper
             TextRenderer.DrawText(g, value.ToString(), Font, text, ForeColor,
                 TextFormatFlags.VerticalCenter | TextFormatFlags.HorizontalCenter | TextFormatFlags.NoPadding);
 
+            // Each arrow lights on its own, so it is obvious which one a
+            // click is about to hit.
+            Glow(upLit, hotZone == 1 ? 1 : 0);
+            Glow(downLit, hotZone == 2 ? 1 : 0);
+
             int cx = Width - SPIN_W / 2 - 3;
             Draw.Chevron(g, cx, Height / 2 - 5, 3,
-                hotZone == 1 ? Theme.AccentHover : Theme.Muted, true);
+                Anim.Blend(Theme.Muted, Theme.AccentHover, upLit.Value), true);
             Draw.Chevron(g, cx, Height / 2 + 5, 3,
-                hotZone == 2 ? Theme.AccentHover : Theme.Muted, false);
+                Anim.Blend(Theme.Muted, Theme.AccentHover, downLit.Value), false);
         }
     }
 
@@ -299,7 +418,9 @@ namespace RobloxKeeper
             new System.Collections.Generic.List<string>();
 
         int selected = -1;
-        bool hot;
+
+        readonly Anim hover = new Anim(0);
+        readonly Anim opened = new Anim(0);
 
         // The list currently on screen, if any. It is modeless: a modal one
         // disables the owner window, which means a click on this control never
@@ -344,8 +465,15 @@ namespace RobloxKeeper
             set { base.Text = value; }
         }
 
-        protected override void OnMouseEnter(EventArgs e) { hot = true; Invalidate(); base.OnMouseEnter(e); }
-        protected override void OnMouseLeave(EventArgs e) { hot = false; Invalidate(); base.OnMouseLeave(e); }
+        protected override void OnMouseEnter(EventArgs e) { Glow(hover, 1); base.OnMouseEnter(e); }
+        protected override void OnMouseLeave(EventArgs e) { Glow(hover, 0); base.OnMouseLeave(e); }
+
+        void Glow(Anim a, double to)
+        {
+            a.To(to, Animator.Time(Animator.Quick), DateTime.Now);
+            Animator.Follow(this, a);
+            Invalidate();
+        }
 
         // Should this click open the list?
         //
@@ -394,13 +522,14 @@ namespace RobloxKeeper
                 if (pop.Chosen >= 0) SelectedIndex = pop.Chosen;
                 openList = null;
                 closedAt = DateTime.Now;
-                Invalidate();
+                Glow(opened, 0);
                 pop.Dispose();
             };
 
             openList = pop;
             pop.Show(FindForm());
-            Invalidate();
+            pop.FadeIn();
+            Glow(opened, 1);
         }
 
         protected override void OnMouseWheel(MouseEventArgs e)
@@ -421,7 +550,8 @@ namespace RobloxKeeper
             using (GraphicsPath p = Draw.Rounded(box, 5))
             {
                 using (SolidBrush b = new SolidBrush(Theme.Inset)) g.FillPath(b, p);
-                using (Pen pen = new Pen(hot ? Theme.Muted : Color.FromArgb(58, 58, 80), 1f))
+                using (Pen pen = new Pen(
+                    Anim.Blend(Color.FromArgb(58, 58, 80), Theme.Muted, hover.Value), 1f))
                     g.DrawPath(pen, p);
             }
 
@@ -430,8 +560,11 @@ namespace RobloxKeeper
                 TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.NoPadding |
                 TextFormatFlags.EndEllipsis);
 
+            // The chevron turns over as the list opens, so the control says
+            // which way it is about to go.
+            Glow(opened, IsListOpen ? 1 : 0);
             Draw.Chevron(g, Width - BUTTON_W / 2 - 4, Height / 2, 4,
-                hot ? Theme.Text : Theme.Muted, false);
+                Anim.Blend(Theme.Muted, Theme.Text, hover.Value), opened.Value);
         }
     }
 
@@ -470,6 +603,33 @@ namespace RobloxKeeper
             // is no DialogResult to set - Chosen already records whether a row
             // was picked, and the owner reads it when the window closes.
             Deactivate += delegate { Close(); };
+        }
+
+        // The list arrives rather than appearing. Opacity and a few pixels of
+        // travel - enough to show where it came from, short enough that
+        // nobody waits for it.
+        //
+        // Called after Show, because a form has no window handle before that
+        // and setting Opacity on one that does not exist has no effect.
+        public void FadeIn()
+        {
+            if (!Animator.MotionWanted) return;
+
+            Point resting = Location;
+            int from = resting.Y - 6;
+
+            Opacity = 0;
+            Location = new Point(resting.X, from);
+
+            Anim slide = new Anim(0);
+            slide.To(1, Animator.Time(Animator.Quick), DateTime.Now);
+            Animator.Run(this, slide, delegate
+            {
+                if (IsDisposed) return;
+                double t = slide.Value;
+                Opacity = t;
+                Location = new Point(resting.X, (int)Math.Round(from + (resting.Y - from) * t));
+            });
         }
 
         // A choice has been recorded, so losing activation is the close we asked
@@ -553,7 +713,7 @@ namespace RobloxKeeper
     class WindowButton : Control
     {
         public bool IsClose;
-        bool hot;
+        readonly Anim hover = new Anim(0);
 
         public WindowButton(bool isClose)
         {
@@ -566,17 +726,27 @@ namespace RobloxKeeper
             BackColor = Theme.Bg;
         }
 
-        protected override void OnMouseEnter(EventArgs e) { hot = true; Invalidate(); base.OnMouseEnter(e); }
-        protected override void OnMouseLeave(EventArgs e) { hot = false; Invalidate(); base.OnMouseLeave(e); }
+        protected override void OnMouseEnter(EventArgs e) { Glow(1); base.OnMouseEnter(e); }
+        protected override void OnMouseLeave(EventArgs e) { Glow(0); base.OnMouseLeave(e); }
+
+        void Glow(double to)
+        {
+            hover.To(to, Animator.Time(Animator.Quick), DateTime.Now);
+            Animator.Follow(this, hover);
+            Invalidate();
+        }
 
         protected override void OnPaint(PaintEventArgs e)
         {
             Graphics g = e.Graphics;
-            Color back = hot ? (IsClose ? Color.FromArgb(232, 72, 85) : Color.FromArgb(52, 52, 74)) : BackColor;
-            using (SolidBrush b = new SolidBrush(back)) g.FillRectangle(b, ClientRectangle);
+            double lit = hover.Value;
+
+            Color highlight = IsClose ? Color.FromArgb(232, 72, 85) : Color.FromArgb(52, 52, 74);
+            using (SolidBrush b = new SolidBrush(Anim.Blend(BackColor, highlight, lit)))
+                g.FillRectangle(b, ClientRectangle);
 
             g.SmoothingMode = SmoothingMode.AntiAlias;
-            Color fg = hot ? Color.White : Theme.Muted;
+            Color fg = Anim.Blend(Theme.Muted, Color.White, lit);
             int cx = Width / 2, cy = Height / 2, r = 5;
             using (Pen pen = new Pen(fg, 1.4f))
             {
@@ -596,6 +766,48 @@ namespace RobloxKeeper
     // above its own line box and never quite centres against the text beside it.
     class Dot : Control
     {
+        // A dot that breathes while a client is being worked on, and sits
+        // still otherwise. Stillness is the point: if every dot pulsed all the
+        // time the list would be noise, and the one that matters would not
+        // stand out.
+        bool busy;
+        readonly Anim breath = new Anim(0);
+        bool breathingIn = true;
+
+        public bool Busy
+        {
+            get { return busy; }
+            set
+            {
+                if (busy == value) return;
+                busy = value;
+                if (busy) Breathe();
+                else
+                {
+                    breath.To(0, Animator.Time(Animator.Quick), DateTime.Now);
+                    Animator.Follow(this, breath);
+                }
+                Invalidate();
+            }
+        }
+
+        void Breathe()
+        {
+            if (!busy) return;
+            if (!Animator.MotionWanted) return;
+            breathingIn = !breathingIn;
+            breath.To(breathingIn ? 1 : 0, TimeSpan.FromMilliseconds(900), DateTime.Now);
+            Animator.Run(this, breath, OnBreathFrame);
+        }
+
+        void OnBreathFrame()
+        {
+            Invalidate();
+            // One breath ends, the next begins - for as long as there is
+            // something to be busy about.
+            if (!breath.Running && busy) Breathe();
+        }
+
         public Dot()
         {
             SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint |
@@ -615,8 +827,23 @@ namespace RobloxKeeper
             using (SolidBrush bg = new SolidBrush(BackColor)) g.FillRectangle(bg, ClientRectangle);
             g.SmoothingMode = SmoothingMode.AntiAlias;
             const int D = 9;
+            float cx = Width / 2f, cy = Height / 2f;
+            double pulse = breath.Value;
+
+            // A halo that swells and fades, drawn under the dot so the dot
+            // itself never moves or changes size - a list of jiggling dots is
+            // hard to read.
+            if (pulse > 0.01)
+            {
+                float halo = (float)(D + 5 * pulse);
+                int alpha = (int)(70 * (1 - pulse));
+                if (alpha > 0)
+                    using (SolidBrush glow = new SolidBrush(Color.FromArgb(alpha, ForeColor)))
+                        g.FillEllipse(glow, cx - halo / 2f, cy - halo / 2f, halo, halo);
+            }
+
             using (SolidBrush b = new SolidBrush(ForeColor))
-                g.FillEllipse(b, (Width - D) / 2f, (Height - D) / 2f, D, D);
+                g.FillEllipse(b, cx - D / 2f, cy - D / 2f, D, D);
         }
     }
 
