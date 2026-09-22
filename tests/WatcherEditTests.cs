@@ -352,6 +352,31 @@ namespace RobloxKeeper.Tests
                 Assert.False(ReferenceEquals(w, d.Collect()), "never the watcher the watch thread is reading");
         }
 
+        // Then: the macros to choose from, and the one chosen comes back out.
+        public static void TestTheEditorOffersTheMacrosToPlayNext()
+        {
+            WatchKit k = Kit("");
+            Macro buy = new Macro();
+            buy.Name = "Buy egg";
+            buy.Steps.Add(MacroStep.Key(0x45, 50));
+            k.Store.Macros.Add(buy);
+
+            Watcher w = Good();
+            using (WatcherEditDialog d = new WatcherEditDialog(w, k))
+            {
+                Assert.Equal(2, d.ThenChoices, "nothing, or the one macro");
+                Assert.Equal(null, d.Collect().ThenMacro, "nothing chosen yet");
+                d.ChooseThen("Buy egg");
+                Assert.Equal("Buy egg", d.Collect().ThenMacro, "chosen");
+            }
+
+            // A macro that has gone is kept rather than silently dropped by
+            // opening and saving the watcher.
+            w.ThenMacro = "Gone macro";
+            using (WatcherEditDialog d = new WatcherEditDialog(w, k))
+                Assert.Equal("Gone macro", d.Collect().ThenMacro, "kept as it was");
+        }
+
         // The test button runs what is typed, not what was last saved.
         public static void TestTheTestButtonRunsTheWatcherAsTyped()
         {

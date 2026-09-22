@@ -554,7 +554,8 @@ namespace RobloxKeeper
         string templateFile, maskFile;
 
         TextBox nameBox, wordsBox, chatBox, hookBox, resultBox;
-        ThemedPicker cmbKind, cmbMode, cmbWho, cmbWhere, cmbClient;
+        ThemedPicker cmbKind, cmbMode, cmbWho, cmbWhere, cmbClient, cmbThen;
+        readonly List<string> thenNames = new List<string>();
         ThemedCheckBox chkCase, chkWhole, chkDiscord, chkTray, chkSound, chkLog;
         ThemedNumeric numTolerance, numConfirm, numCooldown;
         Panel textPanel, chatPanel, picturePanel, firingPanel;
@@ -584,6 +585,7 @@ namespace RobloxKeeper
         protected override void Dispose(bool disposing)
         {
             if (disposing && thumb != null && thumb.Image != null) thumb.Image.Dispose();
+            if (disposing) tips.Dispose();
             base.Dispose(disposing);
         }
 
@@ -779,6 +781,35 @@ namespace RobloxKeeper
             hookBox = WatchUi.SecretInput(Ui.PAD, 118, INNER);
             card.Controls.Add(hookBox);
             card.Controls.Add(Ui.MutedLabel("Optional. Blank uses the one in the watchers list.", Ui.PAD, 144, 8.25f));
+
+            card.Controls.Add(Ui.RowLabel("Then play", Ui.PAD, 172, ROW_H, 90, 9f, Theme.Muted));
+            cmbThen = Ui.DarkCombo(FIELD_X, 172, FIELD_W);
+            card.Controls.Add(cmbThen);
+            tips.SetToolTip(cmbThen, "A macro played on the client that saw it - at most once every "
+                + "15 seconds on each client. Make macros from the Macros button in the watchers list.");
+        }
+
+        readonly ToolTip tips = new ToolTip();
+
+        public int ThenChoices { get { return cmbThen.Items.Count; } }
+
+        public void ChooseThen(string macro)
+        {
+            int at = thenNames.FindIndex(delegate(string n) { return string.Equals(n, macro, StringComparison.OrdinalIgnoreCase); });
+            cmbThen.SelectedIndex = at < 0 ? 0 : at + 1;
+        }
+
+        // Every macro, and the one this watcher names even if it has gone -
+        // so opening and saving it never drops it without being asked to.
+        void FillThen(string select)
+        {
+            thenNames.Clear();
+            foreach (Macro m in kit.Store.Macros) AddName(thenNames, m.Name);
+            AddName(thenNames, select);
+            cmbThen.Items.Clear();
+            cmbThen.Items.Add("Nothing");
+            cmbThen.Items.AddRange(thenNames);
+            ChooseThen(select);
         }
 
         void BuildTry(Card card)
@@ -826,6 +857,7 @@ namespace RobloxKeeper
             chkSound.Checked = w.PlaySound;
             chkLog.Checked = w.WriteLog;
             hookBox.Text = w.WebhookUrl ?? "";
+            FillThen(w.ThenMacro);
 
             FillClients();
             ShowKind();
@@ -865,6 +897,7 @@ namespace RobloxKeeper
             w.PlaySound = chkSound.Checked;
             w.WriteLog = chkLog.Checked;
             w.WebhookUrl = WatcherForm.Blank(hookBox.Text);
+            w.ThenMacro = cmbThen.SelectedIndex <= 0 ? null : thenNames[cmbThen.SelectedIndex - 1];
             return w;
         }
 

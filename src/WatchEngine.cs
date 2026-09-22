@@ -283,6 +283,7 @@ namespace RobloxKeeper
         {
             DetectionEvent d = new DetectionEvent();
             d.WatcherName = w.Name;
+            d.Pid = c.Pid;
             d.AccountName = c.AccountName;
             d.ClientLabel = c.Label;
             d.PlaceId = c.PlaceId;

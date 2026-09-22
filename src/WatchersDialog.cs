@@ -16,7 +16,8 @@ namespace RobloxKeeper
         {
             string where = w.WholeWindow ? "the whole window" : "the box called \"" + w.RegionName + "\"";
             string who = w.Accounts == null || w.Accounts.Length == 0 ? "every client" : string.Join(", ", w.Accounts);
-            return WatcherForm.KindName(w.Kind) + " · " + where + " · " + who;
+            string then = string.IsNullOrEmpty(w.ThenMacro) ? "" : " · then plays " + w.ThenMacro;
+            return WatcherForm.KindName(w.Kind) + " · " + where + " · " + who + then;
         }
 
         // Why a watcher cannot run right now, for its row, or null. Text and

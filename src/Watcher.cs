@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace RobloxKeeper
 {
@@ -52,6 +53,12 @@ namespace RobloxKeeper
         // somebody actually wants two channels.
         public string WebhookUrl;
 
+        // Then: a macro played on the client that saw it, by name, or null.
+        // At most once every MacroGapSeconds per client - a chat watcher fires
+        // for every line, and a busy chat must not play it back to back.
+        public string ThenMacro;
+        public int MacroGapSeconds = 15;
+
         public bool WholeWindow { get { return string.IsNullOrEmpty(RegionName); } }
 
         public static Watcher Default(string name, WatchKind kind)
@@ -84,6 +91,22 @@ namespace RobloxKeeper
         }
     }
 
+    // Whether a watcher's macro may play on a client now, or played there too
+    // recently. By watcher name, because editing a watcher replaces it.
+    class RuleGate
+    {
+        readonly Dictionary<string, DateTime> last = new Dictionary<string, DateTime>();
+
+        public bool Allow(Watcher w, int pid, DateTime now)
+        {
+            string key = (w.Name ?? "") + "\n" + pid;
+            DateTime was;
+            if (last.TryGetValue(key, out was) && now - was < TimeSpan.FromSeconds(w.MacroGapSeconds)) return false;
+            last[key] = now;
+            return true;
+        }
+    }
+
     // What happened, on which client.
     //
     // Everything downstream - the Discord post, the tray balloon, the activity
@@ -93,6 +116,7 @@ namespace RobloxKeeper
     class DetectionEvent
     {
         public string WatcherName;
+        public int Pid;                // which client process, for a macro to play on
         public string AccountName;     // null for a client we did not launch
         public string ClientLabel;     // "Client 3"
         public string PlaceId;

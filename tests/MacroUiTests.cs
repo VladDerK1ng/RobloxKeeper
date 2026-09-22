@@ -110,6 +110,30 @@ namespace RobloxKeeper.Tests
             finally { try { File.Delete(path); } catch { } }
         }
 
+        public static void TestRenamingOrRemovingAMacroCarriesItsWatchersAlong()
+        {
+            string path = TempStore();
+            try
+            {
+                WatchKit k = Kit(path);
+                k.Store.Macros.Add(Named("Buy"));
+                Watcher w = Watcher.Default("Secret chat", WatchKind.ChatLine);
+                w.ThenMacro = "Buy";
+                k.Store.Watchers.Add(w);
+                using (MacrosDialog d = new MacrosDialog(k))
+                {
+                    d.ReplaceAt(0, Named("Buy egg"));
+                    Assert.Equal("Buy egg", k.Store.Watchers[0].ThenMacro, "renamed along with it");
+                    d.RemoveAt(0);
+                    Assert.Equal(null, k.Store.Watchers[0].ThenMacro, "and let go of when it is removed");
+                }
+                WatchStore back = new WatchStore(path);
+                back.Load();
+                Assert.Equal(null, back.Watchers[0].ThenMacro, "saved that way");
+            }
+            finally { try { File.Delete(path); } catch { } }
+        }
+
         // ---------- the editor ----------
 
         public static void TestTheEditorBuildsUpStepsInOrder()

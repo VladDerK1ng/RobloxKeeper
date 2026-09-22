@@ -368,7 +368,69 @@ namespace RobloxKeeper
             }
 
             if (w == null || w.SendDiscord) SendToDiscord(w, d);
+            if (w != null && !string.IsNullOrEmpty(w.ThenMacro)) PlayThen(w, d);
             UpdateWatchStatus();
+        }
+
+        // ---------- then: a macro ----------
+
+        readonly MacroQueue macroQueue = new MacroQueue();
+        readonly RuleGate ruleGate = new RuleGate();
+        readonly object pumpGate = new object();
+        bool pumping;
+
+        void PlayThen(Watcher w, DetectionEvent d)
+        {
+            Macro m = watchStore.FindMacro(w.ThenMacro);
+            if (m == null)
+            {
+                Log(w.Name + " should play the macro " + w.ThenMacro + ", but there is no macro by that name any more.");
+                return;
+            }
+            if (d.Pid <= 0 || !ruleGate.Allow(w, d.Pid, d.When)) return;
+
+            MacroJob job = new MacroJob();
+            job.Macro = m.Copy();
+            job.Pid = d.Pid;
+            job.Label = string.IsNullOrEmpty(d.AccountName) ? d.ClientLabel : d.ClientLabel + " - " + d.AccountName;
+            if (!macroQueue.Offer(job))
+            {
+                Log("Didn't play " + m.Name + " on " + job.Label + ": " + MacroQueue.MAX_WAITING
+                    + " macros are already waiting their turn.");
+                return;
+            }
+
+            lock (pumpGate)
+            {
+                if (pumping) return;
+                pumping = true;
+            }
+            Thread t = new Thread(PumpMacros);
+            t.IsBackground = true;
+            t.Name = "Macros";
+            t.Start();
+        }
+
+        // One at a time, off the UI thread: a macro sleeps for as long as it
+        // plays.
+        void PumpMacros()
+        {
+            while (true)
+            {
+                MacroJob j;
+                lock (pumpGate)
+                {
+                    j = macroQueue.Take();
+                    if (j == null) { pumping = false; return; }
+                }
+                string problem;
+                try { problem = MacroPlayer.Play(j.Macro, WindowCapture.GameWindow(j.Pid)); }
+                catch (Exception ex) { problem = ex.Message; }
+                string said = problem == null
+                    ? "Played " + j.Macro.Name + " on " + j.Label + "."
+                    : j.Macro.Name + " on " + j.Label + " didn't finish: " + problem + ".";
+                OnUi(delegate { Log(said); });
+            }
         }
 
         static string Clip(string s, int max)

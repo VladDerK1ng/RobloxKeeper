@@ -80,6 +80,26 @@ namespace RobloxKeeper
         // can name any macro.
         public IList<Macro> Macros { get { return macros; } }
 
+        // Every watcher, in every setup, that plays the macro called `was`
+        // is pointed at `now` instead - null for a macro that was removed.
+        // Replaced by copies, never changed in place: the watch thread may be
+        // reading the originals. Returns how many.
+        public int RenameMacroUses(string was, string now)
+        {
+            int n = 0;
+            foreach (WatchSetup s in setups)
+                for (int i = 0; i < s.Watchers.Count; i++)
+                {
+                    Watcher w = s.Watchers[i];
+                    if (!string.Equals(w.ThenMacro, was, StringComparison.OrdinalIgnoreCase)) continue;
+                    Watcher copy = DeserializeWatcher(SerializeWatcher(w));
+                    copy.ThenMacro = now;
+                    s.Watchers[i] = copy;
+                    n++;
+                }
+            return n;
+        }
+
         public Macro FindMacro(string name)
         {
             if (string.IsNullOrEmpty(name)) return null;
@@ -328,7 +348,9 @@ namespace RobloxKeeper
             sb.Append(w.ShowTray ? "1" : "0").Append(FIELD);
             sb.Append(w.PlaySound ? "1" : "0").Append(FIELD);
             sb.Append(w.WriteLog ? "1" : "0").Append(FIELD);
-            sb.Append(Escape(w.WebhookUrl));
+            sb.Append(Escape(w.WebhookUrl)).Append(FIELD);
+            sb.Append(Escape(w.ThenMacro)).Append(FIELD);
+            sb.Append(w.MacroGapSeconds);
             return sb.ToString();
         }
 
@@ -360,6 +382,8 @@ namespace RobloxKeeper
             if (f.Length > 17) w.PlaySound = f[17] == "1";
             if (f.Length > 18) w.WriteLog = f[18] != "0";
             if (f.Length > 19) w.WebhookUrl = Blank(Unescape(f[19]));
+            if (f.Length > 20) w.ThenMacro = Blank(Unescape(f[20]));
+            if (f.Length > 21) w.MacroGapSeconds = ParseInt(f[21], 15);
             return w;
         }
 

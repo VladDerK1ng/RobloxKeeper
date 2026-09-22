@@ -141,15 +141,21 @@ namespace RobloxKeeper
 
         public void ReplaceAt(int index, Macro m)
         {
+            string was = kit.Store.Macros[index].Name;
             kit.Store.Macros[index] = m;
+            // Watchers name the macro they play; a rename carries them along.
+            if (!string.Equals(was, m.Name, StringComparison.Ordinal)) kit.Store.RenameMacroUses(was, m.Name);
             Commit("Macro " + m.Name + " saved.");
         }
 
+        // Watchers that played it keep watching and telling you; they just
+        // play nothing now.
         public void RemoveAt(int index)
         {
             string name = kit.Store.Macros[index].Name;
             kit.Store.Macros.RemoveAt(index);
-            Commit("Macro " + name + " removed.");
+            int n = kit.Store.RenameMacroUses(name, null);
+            Commit("Macro " + name + " removed" + (n == 0 ? "." : ", and " + n + (n == 1 ? " watcher no longer plays it." : " watchers no longer play it.")));
         }
 
         void Add()
