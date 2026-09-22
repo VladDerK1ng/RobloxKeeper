@@ -385,7 +385,7 @@ namespace RobloxKeeper
                 mask = MaskFrom(m);
             }
 
-            ImageHit hit = ImageMatch.Find(k.Crop, template, mask, w.Tolerance);
+            ImageHit hit = ImageMatch.FindQuick(k.Crop, template, mask, w.Tolerance);
             k.Score = hit.Score;
             k.Seen = hit.Found;
         }
