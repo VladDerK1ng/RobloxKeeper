@@ -209,6 +209,13 @@ namespace RobloxKeeper
             close.Click += delegate { Close(); };
             Controls.Add(close);
             CancelButton = close;
+
+            Button macros = WatchUi.Secondary("Macros", 12, FOOT_Y, 110, 32);
+            macros.BackColor = Theme.Card;
+            macros.FlatAppearance.MouseOverBackColor = Theme.Inset;
+            macros.Click += delegate { using (MacrosDialog d = new MacrosDialog(kit)) d.ShowDialog(this); };
+            tips.SetToolTip(macros, "Keys and clicks played on a client - on their own, or when a watcher finds something.");
+            Controls.Add(macros);
         }
 
         // ---------- the list ----------

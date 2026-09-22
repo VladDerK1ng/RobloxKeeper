@@ -11,10 +11,17 @@ namespace RobloxKeeper
     class KeyCaptureDialog : Form
     {
         readonly Label prompt;
+        readonly bool anyKey;
         public byte Captured;
 
-        public KeyCaptureDialog()
+        public KeyCaptureDialog() : this(false) { }
+
+        // A macro is built and started by the person using it, and opening
+        // the chat to type is a thing a macro is for - so it may use any key.
+        // The unattended nudge keeps the safe list.
+        public KeyCaptureDialog(bool anyKey)
         {
+            this.anyKey = anyKey;
             FormBorderStyle = FormBorderStyle.None;
             StartPosition = FormStartPosition.CenterParent;
             ClientSize = new Size(320, 120);
@@ -76,7 +83,7 @@ namespace RobloxKeeper
             }
 
             byte vk = (byte)e.KeyCode;
-            if (!NudgeKeys.IsSafe(vk))
+            if (!anyKey && !NudgeKeys.IsSafe(vk))
             {
                 // Named rather than just refused, so it is obvious this is a
                 // rule and not a dead dialog.
