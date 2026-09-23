@@ -21,10 +21,17 @@ namespace RobloxKeeper
         const string REFERER = "https://www.roblox.com/";
         const string PLACE_LAUNCHER =
             "https://assetgame.roblox.com/game/PlaceLauncher.ashx?request=RequestGame&browserTrackerId={0}&placeId={1}&isPlayTogetherGame=false";
-        // One particular server - what the website's Join button on a server
-        // in the Servers tab asks for.
+        // One particular server, asked for exactly the way the website's Join
+        // button in a game's Servers tab asks: its own launcher, and a fresh
+        // join attempt each time.
+        //
+        // The shorter form this used to send - no attempt id, the old asset
+        // host - joined fine, but on Roblox 0.740 the client it started froze
+        // for five to eight seconds at a time, all session long: 10 freezes in
+        // three minutes, against 0 for a plain join of the same account with
+        // the same tracker (measured 23 Sep 2026).
         const string PLACE_LAUNCHER_JOB =
-            "https://assetgame.roblox.com/game/PlaceLauncher.ashx?request=RequestGameJob&browserTrackerId={0}&placeId={1}&gameId={2}&isPlayTogetherGame=false";
+            "https://www.roblox.com/Game/PlaceLauncher.ashx?request=RequestGameJob&browserTrackerId={0}&placeId={1}&gameId={2}&isPlayTogetherGame=false&joinAttemptId={3}&joinAttemptOrigin=publicServerListJoin";
 
         // A place id out of whatever the user pasted: a full game link, a link
         // with tracking parameters on it, or just the number.
@@ -59,6 +66,64 @@ namespace RobloxKeeper
         // placelauncherurl is a URL nested inside this one, so it has to be
         // percent-encoded: left raw, its own ? and & terminate the outer URL
         // and Roblox receives a truncated request.
+        // The browser tracker this device already uses - the one a website
+        // launch sends - out of Roblox's own appStorage.json.
+        //
+        // Every launch sends this rather than an account's own. Sending an
+        // account's own tracker made Roblox 0.740 clients freeze for five
+        // seconds at a time, all session long, and Roblox then adopts it as the
+        // device's, so each launch also changed the device's identity for every
+        // later one. Website launches, which send the device's, never froze.
+        public static string TrackerFromAppStorage(string json)
+        {
+            if (string.IsNullOrEmpty(json)) return null;
+            Match m = Regex.Match(json, @"""BrowserTrackerId""\s*:\s*""?(\d+)");
+            return m.Success ? m.Groups[1].Value : null;
+        }
+
+        public static string AppStoragePath
+        {
+            get
+            {
+                return System.IO.Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "Roblox", "LocalStorage", "appStorage.json");
+            }
+        }
+
+        // Null when the file is missing or unreadable. Opened so that Roblox
+        // can go on writing it while it is read: a reader that denies writers
+        // makes a client's own write fail.
+        public static string DeviceTracker()
+        {
+            try
+            {
+                using (System.IO.FileStream fs = new System.IO.FileStream(AppStoragePath, System.IO.FileMode.Open,
+                           System.IO.FileAccess.Read, System.IO.FileShare.ReadWrite | System.IO.FileShare.Delete))
+                using (System.IO.StreamReader r = new System.IO.StreamReader(fs))
+                    return TrackerFromAppStorage(r.ReadToEnd());
+            }
+            catch { return null; }
+        }
+
+        // The device's tracker when it is known; the account's own only when
+        // it is not, so a launch never goes out with none.
+        public static string LaunchTracker(string deviceTracker, string accountTracker)
+        {
+            return string.IsNullOrEmpty(deviceTracker) ? accountTracker : deviceTracker;
+        }
+
+        // A launch link from roblox.com in the in-app browser carries that
+        // browser profile's own tracker, in the client's parameter and again
+        // inside the launcher link. Both are swapped for the device's, so this
+        // launch looks like any other.
+        public static string WithTracker(string launchUrl, string tracker)
+        {
+            if (launchUrl == null || string.IsNullOrEmpty(tracker)) return launchUrl;
+            string url = Regex.Replace(launchUrl, @"(\+browsertrackerid:)\d+", "${1}" + tracker, RegexOptions.IgnoreCase);
+            return Regex.Replace(url, @"(browserTrackerId%3D)\d+", "${1}" + tracker, RegexOptions.IgnoreCase);
+        }
+
         public static string BuildLaunchUrl(string ticket, string placeId,
                                             string browserTrackerId, long launchTimeMs)
         {
@@ -79,7 +144,8 @@ namespace RobloxKeeper
 
             string launcher = string.IsNullOrEmpty(jobId)
                 ? string.Format(PLACE_LAUNCHER, browserTrackerId, placeId)
-                : string.Format(PLACE_LAUNCHER_JOB, browserTrackerId, placeId, Uri.EscapeDataString(jobId));
+                : string.Format(PLACE_LAUNCHER_JOB, browserTrackerId, placeId, Uri.EscapeDataString(jobId),
+                                Guid.NewGuid().ToString());
 
             StringBuilder sb = new StringBuilder();
             sb.Append("roblox-player:1");

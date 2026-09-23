@@ -13,6 +13,8 @@ namespace RobloxKeeper.Tests
         {
             public readonly List<ServerPage> Pages = new List<ServerPage>();
             public string ListError, TicketError, StartError;
+            public string Device;
+            public string DeviceTracker() { return Device; }
             public readonly List<string> Did = new List<string>();
             public string StartedWith;
 
@@ -160,5 +162,18 @@ namespace RobloxKeeper.Tests
             Assert.Contains("closed", r.Problem, "the old one is closed");
             Assert.Contains("no installed Roblox", r.Problem, "and why the new one didn't start");
         }
+
+        // A hop starts a client too, so it follows the same rule as a launch:
+        // the device's own tracker.
+        public static void TestAHopSendsTheDevicesTracker()
+        {
+            World w = new World();
+            w.Device = "555000111";
+            w.Pages.Add(Page(null, "c1c5a3b9-4938-4cd8-9418-ca1a217858ae"));
+            Hopper.Hop(Request(null), w, new Random(1));
+            Assert.Contains("browsertrackerid:555000111", w.StartedWith, "the device's own");
+            Assert.False(w.StartedWith.Contains("12345%26"), "not the account's inside the launcher link");
+        }
+
     }
 }

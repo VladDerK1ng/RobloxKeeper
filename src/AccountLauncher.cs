@@ -124,7 +124,8 @@ namespace RobloxKeeper
                     continue;
                 }
 
-                string url = RobloxAuth.BuildLaunchUrl(ticket, dest[i].Place, seat.TrackerId, RobloxAuth.NowMs(), dest[i].Job);
+                string url = RobloxAuth.BuildLaunchUrl(ticket, dest[i].Place,
+                    RobloxAuth.LaunchTracker(world.DeviceTracker(), seat.TrackerId), RobloxAuth.NowMs(), dest[i].Job);
                 bool moving = seat.RunningPid > 0;
                 if (moving) world.Close(seat.RunningPid);
 

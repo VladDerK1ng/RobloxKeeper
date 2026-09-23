@@ -22,6 +22,10 @@ namespace RobloxKeeper.Tests
             public readonly Dictionary<string, PlayerWhere> Presence = new Dictionary<string, PlayerWhere>();   // cookie -> where
             public int NextPid = 100;
             public bool NoTickets;
+            public string Device;
+            public string LastUrl;
+
+            public string DeviceTracker() { return Device; }
 
             public ServerPage Servers(string placeId, string cursor, bool fullestFirst, out string error)
             {
@@ -45,6 +49,7 @@ namespace RobloxKeeper.Tests
             public int Start(string launchUrl, out string error)
             {
                 error = null;
+                LastUrl = launchUrl;
                 string job = launchUrl.Contains("gameId%3D") ? launchUrl.Substring(launchUrl.IndexOf("gameId%3D") + 9, 8) : "any";
                 string place = launchUrl.Contains("placeId%3D") ? launchUrl.Substring(launchUrl.IndexOf("placeId%3D") + 10).Split('%')[0] : "?";
                 Did.Add("start " + place + " " + job);
@@ -297,5 +302,28 @@ namespace RobloxKeeper.Tests
             Assert.Contains("hunting", got[0].Problem, "why");
             Assert.Equal("", w.Steps("start"), "not started");
         }
+
+        // ---------- which tracker the client is given ----------
+
+        // The device's own tracker, as a website launch sends. Each account's
+        // own tracker made Roblox 0.740 clients freeze for five seconds at a
+        // time, all session long (measured 23 Sep 2026).
+        public static void TestALaunchSendsTheDevicesTracker()
+        {
+            FakeWorld w = new FakeWorld();
+            w.Device = "555000111";
+            Run(Req(JoinWhere.Any, Seat("a")), w);
+            Assert.Contains("browsertrackerid:555000111", w.LastUrl, "the device's own");
+            Assert.False(w.LastUrl.Contains("123456789"), "not the account's");
+        }
+
+        public static void TestTheAccountsTrackerIsUsedOnlyWhenTheDevicesIsUnknown()
+        {
+            FakeWorld w = new FakeWorld();
+            w.Device = null;
+            Run(Req(JoinWhere.Any, Seat("a")), w);
+            Assert.Contains("browsertrackerid:123456789", w.LastUrl, "the account's, as a fallback");
+        }
+
     }
 }

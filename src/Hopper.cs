@@ -12,6 +12,7 @@ namespace RobloxKeeper
         string Ticket(string cookie, out string error);
         void Close(int pid);
         int Start(string launchUrl, out string error);
+        string DeviceTracker();
     }
 
     class HopRequest
@@ -72,7 +73,8 @@ namespace RobloxKeeper
             string ticket = world.Ticket(req.Cookie, out why);
             if (ticket == null) { result.Problem = why ?? "Roblox gave no launch ticket"; return result; }
 
-            string url = RobloxAuth.BuildLaunchUrl(ticket, req.PlaceId, req.TrackerId, RobloxAuth.NowMs(), pick.Id);
+            string url = RobloxAuth.BuildLaunchUrl(ticket, req.PlaceId,
+                RobloxAuth.LaunchTracker(world.DeviceTracker(), req.TrackerId), RobloxAuth.NowMs(), pick.Id);
             if (req.CurrentPid > 0) world.Close(req.CurrentPid);
 
             int pid = world.Start(url, out why);
@@ -101,6 +103,8 @@ namespace RobloxKeeper
         {
             return RobloxAuth.RequestTicket(cookie, out error);
         }
+
+        public string DeviceTracker() { return RobloxAuth.DeviceTracker(); }
 
         // Asked to close as its own close button would, then made to if it
         // hasn't within eight seconds.

@@ -723,7 +723,7 @@ namespace RobloxKeeper
                 LiveHopWorld world = new LiveHopWorld();
                 if (runningPid > 0) world.Close(runningPid);
                 string why;
-                int pid = world.Start(launchUrl, out why);
+                int pid = world.Start(RobloxAuth.WithTracker(launchUrl, world.DeviceTracker()), out why);
                 if (pid > 0)
                 {
                     host.Launched(pid, account);
