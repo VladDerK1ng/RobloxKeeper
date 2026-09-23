@@ -121,7 +121,7 @@ namespace RobloxKeeper
 
         DateTime lastAutoTrim = DateTime.Now;
 
-        public PerformanceManager() { Applier = Apply; }
+        public PerformanceManager() { Applier = Apply; Capper = SetMemoryCap; }
 
         // A tune Windows refused, and when to try it again. Recording a refusal
         // as though it had worked - which is what the old code did - left
@@ -223,28 +223,114 @@ namespace RobloxKeeper
             foreach (ClientInfo ci in clients) Forget(ci.Pid);
         }
 
-        // Trims any client over the ceiling, skipping the one in the foreground
-        // so the game being played never takes the paging hitch.
-        public long CeilingTick(List<ClientInfo> clients, int ceilingMb, int foregroundPid)
+        // Holding a client to a memory ceiling. Swapped out by the tests.
+        // ceilingMb 0 lets it go.
+        public delegate bool CapFunc(int pid, int ceilingMb, out string error);
+        public CapFunc Capper;
+
+        // What Windows is holding each client to, and when a refused one may
+        // be asked again.
+        readonly Dictionary<int, int> caps = new Dictionary<int, int>();
+        readonly Dictionary<int, DateTime> capRetry = new Dictionary<int, DateTime>();
+
+        // The memory ceiling, once a tick; 0 when it is off.
+        //
+        // It used to empty a background client's whole working set whenever
+        // it crossed the line. A game that really uses more than the line
+        // climbs straight back, so it was emptied again seconds later - steady
+        // stutter, and never actually under the line. A hard maximum is a
+        // ceiling: Windows keeps the client at or under it by moving out only
+        // the pages it has used least. It is set once, lifted while the client
+        // is the one in front - the game being played is never held back - and
+        // put back when it goes behind.
+        public void CeilingTick(List<ClientInfo> clients, int ceilingMb, int foregroundPid)
         {
-            if (ceilingMb <= 0) return 0;
-            long freed = 0;
             foreach (ClientInfo ci in clients)
             {
-                if (ci.Pid == foregroundPid) continue;
-                if (!OverCeiling(ci.WorkingSet, ceilingMb)) continue;
-                if (!Trim(ci.Pid)) continue;
-                try
-                {
-                    using (Process p = Process.GetProcessById(ci.Pid))
-                    {
-                        long after = p.WorkingSet64;
-                        if (ci.WorkingSet > after) freed += ci.WorkingSet - after;
-                    }
-                }
-                catch { }
+                int want = ceilingMb > 0 && ci.Pid != foregroundPid ? ceilingMb : 0;
+                int have;
+                caps.TryGetValue(ci.Pid, out have);
+                if (want == have) continue;
+                SetCap(ci.Pid, want);
             }
-            return freed;
+        }
+
+        // Everything let go - the ceiling can't be left holding clients once
+        // nothing is managing it.
+        public void LiftCeiling()
+        {
+            List<int> pids = new List<int>(caps.Keys);
+            pids.Sort();
+            foreach (int pid in pids) SetCap(pid, 0);
+        }
+
+        void SetCap(int pid, int mb)
+        {
+            DateTime next;
+            if (capRetry.TryGetValue(pid, out next) && Clock() < next) return;
+
+            string error;
+            if (Capper(pid, mb, out error))
+            {
+                capRetry.Remove(pid);
+                if (mb == 0) caps.Remove(pid);
+                else caps[pid] = mb;
+                return;
+            }
+
+            bool first = !capRetry.ContainsKey(pid);
+            capRetry[pid] = Clock().AddSeconds(60);
+            if (first)
+                Log((mb == 0 ? "Couldn't let go of PID " + pid + "'s memory ceiling: "
+                             : "Couldn't hold PID " + pid + " under " + mb + " MB: ")
+                    + error + ". Trying again in a minute.");
+        }
+
+        // The minimum and maximum Windows is given. The client's own minimum is
+        // kept unless it is above what a ceiling allows.
+        public static void CapLimits(int ceilingMb, long currentMin, out long min, out long max)
+        {
+            max = (long)ceilingMb * 1024 * 1024;
+            min = currentMin;
+            if (min <= 0 || min > max / 2) min = max / 2;
+        }
+
+        public static bool SetMemoryCap(int pid, int ceilingMb, out string error)
+        {
+            error = null;
+            IntPtr h = Native.OpenProcess(
+                Native.PROCESS_SET_QUOTA | Native.PROCESS_QUERY_LIMITED_INFORMATION, false, pid);
+            if (h == IntPtr.Zero)
+            {
+                error = "Windows wouldn't let the app reach it (error " + Marshal.GetLastWin32Error() + ")";
+                return false;
+            }
+            try
+            {
+                IntPtr curMin, curMax;
+                uint flags;
+                if (!Native.GetProcessWorkingSetSizeEx(h, out curMin, out curMax, out flags))
+                {
+                    error = "Windows wouldn't say how much it may use (error " + Marshal.GetLastWin32Error() + ")";
+                    return false;
+                }
+
+                bool ok;
+                if (ceilingMb <= 0)
+                    ok = Native.SetProcessWorkingSetSizeEx(h, curMin, curMax,
+                        Native.QUOTA_LIMITS_HARDWS_MIN_DISABLE | Native.QUOTA_LIMITS_HARDWS_MAX_DISABLE);
+                else
+                {
+                    long min, max;
+                    CapLimits(ceilingMb, (long)curMin, out min, out max);
+                    ok = Native.SetProcessWorkingSetSizeEx(h, (IntPtr)min, (IntPtr)max,
+                        Native.QUOTA_LIMITS_HARDWS_MIN_DISABLE | Native.QUOTA_LIMITS_HARDWS_MAX_ENABLE);
+                }
+                if (!ok) error = "Windows refused (error " + Marshal.GetLastWin32Error() + ")";
+                return ok;
+            }
+            catch (Exception ex) { error = ex.Message; return false; }
+            finally { Native.CloseHandle(h); }
         }
 
         public void SetOverride(int pid, ClientProfile profile)
@@ -272,6 +358,8 @@ namespace RobloxKeeper
             foreach (int pid in applied.Keys) tracked.Add(pid);
             foreach (int pid in assigned.Keys) if (!tracked.Contains(pid)) tracked.Add(pid);
             foreach (int pid in overrides.Keys) if (!tracked.Contains(pid)) tracked.Add(pid);
+            foreach (int pid in caps.Keys) if (!tracked.Contains(pid)) tracked.Add(pid);
+            foreach (int pid in capRetry.Keys) if (!tracked.Contains(pid)) tracked.Add(pid);
 
             List<int> gone = new List<int>();
             foreach (int pid in tracked)
@@ -287,6 +375,8 @@ namespace RobloxKeeper
                 assigned.Remove(pid);
                 retries.Remove(pid);
                 blocks.Release(pid);
+                caps.Remove(pid);
+                capRetry.Remove(pid);
             }
         }
 

@@ -185,8 +185,22 @@ namespace RobloxKeeper
         [DllImport("kernel32.dll", SetLastError = true)]
         public static extern bool SetProcessWorkingSetSize(IntPtr h, IntPtr min, IntPtr max);
 
+        // A hard maximum makes Windows keep the working set at or under it by
+        // moving out the least-used pages as the process grows - a ceiling,
+        // rather than emptying the process all at once.
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern bool SetProcessWorkingSetSizeEx(IntPtr h, IntPtr min, IntPtr max, uint flags);
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern bool GetProcessWorkingSetSizeEx(IntPtr h, out IntPtr min, out IntPtr max, out uint flags);
+
+        public const uint QUOTA_LIMITS_HARDWS_MIN_DISABLE = 0x2;
+        public const uint QUOTA_LIMITS_HARDWS_MAX_ENABLE = 0x4;
+        public const uint QUOTA_LIMITS_HARDWS_MAX_DISABLE = 0x8;
+
         [DllImport("kernel32.dll", SetLastError = true)]
         public static extern bool SetProcessInformation(IntPtr h, int infoClass, ref PROCESS_POWER_THROTTLING_STATE info, int size);
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern bool GetProcessInformation(IntPtr h, int infoClass, ref PROCESS_POWER_THROTTLING_STATE info, int size);
 
         // EcoQoS. Setting EXECUTION_SPEED parks the process on efficiency cores
         // and caps its clock - what Task Manager calls "Efficiency mode".

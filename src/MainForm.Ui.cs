@@ -567,22 +567,24 @@ namespace RobloxKeeper
                 + "them all back.");
             card.Controls.Add(btnAfkMode);
 
-            // A ceiling trims on the spot rather than waiting for the timer, for
-            // the client that has quietly grown to three gigabytes.
+            // A real ceiling: Windows holds each background client at or under
+            // it, a little at a time, for the client that would otherwise
+            // quietly grow to three gigabytes.
             const int row5 = 190;
-            chkCeiling = Ui.DarkCheck("Free memory over", Ui.PAD, row5, 8.25f);
+            chkCeiling = Ui.DarkCheck("Keep memory under", Ui.PAD, row5, 8.25f);
             Ui.CenterIn(chkCeiling, row5, ROW_H);
             chkCeiling.CheckedChanged += delegate
             {
                 if (!initializing)
                     Log(chkCeiling.Checked
-                        ? "Memory ceiling on - clients over " + numCeiling.Value + " MB are trimmed."
-                        : "Memory ceiling off.");
+                        ? "Memory ceiling on - clients you aren't using are held under " + numCeiling.Value + " MB."
+                        : "Memory ceiling off - clients may use what they like again.");
                 SaveSettings();
             };
             Explain(chkCeiling,
-                "Frees a client's unused memory as soon as it grows past this, instead of waiting "
-                + "for the timer.");
+                "Holds every client you aren't using at or under this much memory. Windows moves out "
+                + "what the client has used least, a little at a time, instead of emptying it all at once. "
+                + "The client you're using is never held back.");
             card.Controls.Add(chkCeiling);
 
             numCeiling = Ui.DarkNumeric(150, row5, 62, 256, 16384, 2000);

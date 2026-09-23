@@ -343,12 +343,8 @@ namespace RobloxKeeper
             perf.ApplyPending(clients, foregroundPid);
             if (chkAutoTrim.Checked)
                 perf.AutoTrimTick(clients, numTrimEvery.Value, foregroundPid);
-            if (chkCeiling.Checked)
-            {
-                long over = perf.CeilingTick(clients, numCeiling.Value, foregroundPid);
-                if (over > 1048576)
-                    Log("Memory ceiling released " + ClientTracker.FormatBytes(over) + ".");
-            }
+            // Every tick, ticked or not: unticking it has to let clients go.
+            perf.CeilingTick(clients, chkCeiling.Checked ? numCeiling.Value : 0, foregroundPid);
 
             // Two or more clients share one cookie jar and start overwriting
             // each other's session, which is what Roblox eventually evicts as a
@@ -913,6 +909,7 @@ namespace RobloxKeeper
             SaveSettings();
             uiTimer.Stop();
             nudgeTimer.Stop();
+            perf.LiftCeiling();
             StopWatching();
             sessionLock.Release();
             tray.Visible = false;
