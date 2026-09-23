@@ -263,18 +263,19 @@ namespace RobloxKeeper
                 int index = i;          // captured per row, not per loop
                 Watcher w = watchers[i];
 
-                ThemedCheckBox on = Ui.DarkCheck("", 2, y, 9f);
+                list.Controls.Add(RowGrip.For(i, watchers.Count, y, ROW, 0, MoveAt, CopyAt));
+                ThemedCheckBox on = Ui.DarkCheck("", 18, y, 9f);
                 on.Checked = w.Enabled;
                 Ui.CenterIn(on, y, ROW);
                 on.CheckedChanged += delegate { SetEnabled(index, on.Checked); };
                 list.Controls.Add(on);
 
-                Label name = Ui.RowLabel(w.Name, 30, y + 3, 20, 470, 9.5f, w.Enabled ? Theme.Text : Theme.Muted);
+                Label name = Ui.RowLabel(w.Name, 46, y + 3, 20, 454, 9.5f, w.Enabled ? Theme.Text : Theme.Muted);
                 name.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
                 list.Controls.Add(name);
                 rowNames.Add(name);
 
-                Label line = Ui.RowLabel("", 30, y + 23, 20, 520, 8.25f, Theme.Muted);
+                Label line = Ui.RowLabel("", 46, y + 23, 20, 504, 8.25f, Theme.Muted);
                 list.Controls.Add(line);
                 rowLines.Add(line);
 
@@ -379,6 +380,34 @@ namespace RobloxKeeper
             // rebuilding would dispose the box while it is still handling it.
             if (index < rowNames.Count) rowNames[index].ForeColor = on ? Theme.Text : Theme.Muted;
             RefreshLive();
+        }
+
+        // Order is only how the list reads - every watcher is looked at on
+        // every pass. The watch thread is handed the new list all the same.
+        public void MoveAt(int from, int to)
+        {
+            if (!RowOrder.Move(kit.Store.Watchers, from, to)) return;
+            kit.Store.Save();
+            if (changed != null) changed();
+            Rebuild();
+        }
+
+        // A watcher is laborious to set up - a box drawn, a picture taken -
+        // and the next one is often nearly the same.
+        public void CopyAt(int index)
+        {
+            Watcher was = kit.Store.Watchers[index];
+            Watcher copy = WatcherForm.Copy(was);
+            copy.Name = RowOrder.CopyName(was.Name, delegate(string n)
+            {
+                foreach (Watcher w in kit.Store.Watchers)
+                    if (string.Equals(w.Name, n, StringComparison.OrdinalIgnoreCase)) return true;
+                return false;
+            });
+            kit.Store.Watchers.Insert(index + 1, copy);
+            Commit();
+            kit.Say("Watcher " + was.Name + " copied as " + copy.Name + ".");
+            Rebuild();
         }
 
         public void RemoveAt(int index)

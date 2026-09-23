@@ -110,10 +110,11 @@ namespace RobloxKeeper
             {
                 int index = i;
                 Macro m = kit.Store.Macros[i];
-                Label name = Ui.RowLabel(m.Name, 4, y + 3, 20, 380, 9.5f, Theme.Text);
+                list.Controls.Add(RowGrip.For(i, kit.Store.Macros.Count, y, ROW, 0, MoveAt, CopyAt));
+                Label name = Ui.RowLabel(m.Name, 20, y + 3, 20, 364, 9.5f, Theme.Text);
                 name.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
                 list.Controls.Add(name);
-                list.Controls.Add(Ui.RowLabel(MacroForm.Summary(m), 4, y + 23, 20, 380, 8.25f, Theme.Muted));
+                list.Controls.Add(Ui.RowLabel(MacroForm.Summary(m), 20, y + 23, 20, 364, 8.25f, Theme.Muted));
 
                 LinkLabel edit = Ui.RowLink("Edit", 400, y, ROW, 9f);
                 edit.Click += delegate { Edit(index); };
@@ -146,6 +147,24 @@ namespace RobloxKeeper
             // Watchers name the macro they play; a rename carries them along.
             if (!string.Equals(was, m.Name, StringComparison.Ordinal)) kit.Store.RenameMacroUses(was, m.Name);
             Commit("Macro " + m.Name + " saved.");
+        }
+
+        // Only where it shows: watchers and rules name the macro they play.
+        public void MoveAt(int from, int to)
+        {
+            if (!RowOrder.Move(kit.Store.Macros, from, to)) return;
+            kit.Store.Save();
+            Rebuild();
+        }
+
+        // A starting point for one that is nearly the same.
+        public void CopyAt(int index)
+        {
+            Macro was = kit.Store.Macros[index];
+            Macro copy = was.Copy();
+            copy.Name = RowOrder.CopyName(was.Name, delegate(string n) { return kit.Store.FindMacro(n) != null; });
+            kit.Store.Macros.Insert(index + 1, copy);
+            Commit("Macro " + was.Name + " copied as " + copy.Name + ".");
         }
 
         // Watchers that played it keep watching and telling you; they just
@@ -313,8 +332,9 @@ namespace RobloxKeeper
             for (int i = 0; i < steps.Count; i++)
             {
                 int index = i;
-                list.Controls.Add(Ui.RowLabel((i + 1) + ".", 2, y, ROW, 28, 8.25f, Theme.Muted));
-                list.Controls.Add(Ui.RowLabel(steps[i].Describe(), 30, y, ROW, 330, 9f, Theme.Text));
+                list.Controls.Add(RowGrip.For(i, steps.Count, y, ROW, 0, MoveStepTo, CopyStep));
+                list.Controls.Add(Ui.RowLabel((i + 1) + ".", 16, y, ROW, 24, 8.25f, Theme.Muted));
+                list.Controls.Add(Ui.RowLabel(steps[i].Describe(), 40, y, ROW, 320, 9f, Theme.Text));
 
                 LinkLabel edit = Ui.RowLink("Edit", 372, y, ROW, 8.25f);
                 edit.Click += delegate { AskEditStep(index); };
@@ -352,6 +372,19 @@ namespace RobloxKeeper
             MacroStep s = steps[index];
             steps.RemoveAt(index);
             steps.Insert(to, s);
+            RebuildSteps();
+        }
+
+        // Dragged, or moved from the grip's menu - anywhere in one go.
+        public void MoveStepTo(int from, int to)
+        {
+            if (RowOrder.Move(steps, from, to)) RebuildSteps();
+        }
+
+        public void CopyStep(int index)
+        {
+            if (index < 0 || index >= steps.Count) return;
+            steps.Insert(index + 1, steps[index].Copy());
             RebuildSteps();
         }
 

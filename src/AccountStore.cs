@@ -84,13 +84,21 @@ namespace RobloxKeeper
 
         // Re-adding a name refreshes it rather than duplicating, because the
         // common case is signing the same account in again after its cookie
-        // expired.
+        // expired. It keeps its place in the list you put it in.
         public void Add(RobloxAccount account)
         {
             if (account == null || string.IsNullOrEmpty(account.Name)) return;
             RobloxAccount existing = Find(account.Name);
-            if (existing != null) accounts.Remove(existing);
-            accounts.Add(account);
+            int at = existing == null ? -1 : accounts.IndexOf(existing);
+            if (at >= 0) accounts[at] = account;
+            else accounts.Add(account);
+        }
+
+        // The list is saved in the order it is in, so this is all there is to
+        // putting accounts in the order you want.
+        public bool Move(int from, int to)
+        {
+            return RowOrder.Move(accounts, from, to);
         }
 
         public void Remove(string name)

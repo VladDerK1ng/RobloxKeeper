@@ -127,13 +127,14 @@ namespace RobloxKeeper
             {
                 int index = i;
                 Rule r = rules[i];
-                ThemedCheckBox on = Ui.DarkCheck("", 2, y, 9f);
+                list.Controls.Add(RowGrip.For(i, rules.Count, y, ROW, 0, MoveAt, CopyAt));
+                ThemedCheckBox on = Ui.DarkCheck("", 18, y, 9f);
                 on.Checked = r.Enabled;
                 Ui.CenterIn(on, y, ROW);
                 on.CheckedChanged += delegate { SetEnabled(index, on.Checked); };
                 list.Controls.Add(on);
 
-                Label name = Ui.RowLabel(r.Name, 30, y + 3, 20, 500, 9.5f, r.Enabled ? Theme.Text : Theme.Muted);
+                Label name = Ui.RowLabel(r.Name, 46, y + 3, 20, 484, 9.5f, r.Enabled ? Theme.Text : Theme.Muted);
                 name.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
                 list.Controls.Add(name);
                 rowNames.Add(name);
@@ -142,7 +143,7 @@ namespace RobloxKeeper
                 if (problem == null && kit.Store.FindMacro(r.Macro) == null)
                     problem = "there is no macro called " + r.Macro + " any more - choose another.";
                 Label line = Ui.RowLabel(problem != null ? "Needs attention: " + problem : r.Describe(),
-                                         30, y + 23, 20, 520, 8.25f, problem != null ? Theme.Amber : Theme.Muted);
+                                         46, y + 23, 20, 504, 8.25f, problem != null ? Theme.Amber : Theme.Muted);
                 line.AutoEllipsis = true;
                 list.Controls.Add(line);
 
@@ -174,6 +175,29 @@ namespace RobloxKeeper
         {
             kit.Store.Rules[index] = r;
             Commit("Rule " + r.Name + " saved.");
+            Rebuild();
+        }
+
+        // Every rule is checked on every event, so order is only how they read.
+        public void MoveAt(int from, int to)
+        {
+            if (!RowOrder.Move(kit.Store.Rules, from, to)) return;
+            kit.Store.Save();
+            Rebuild();
+        }
+
+        public void CopyAt(int index)
+        {
+            Rule was = kit.Store.Rules[index];
+            Rule copy = was.Copy();
+            copy.Name = RowOrder.CopyName(was.Name, delegate(string n)
+            {
+                foreach (Rule r in kit.Store.Rules)
+                    if (string.Equals(r.Name, n, StringComparison.OrdinalIgnoreCase)) return true;
+                return false;
+            });
+            kit.Store.Rules.Insert(index + 1, copy);
+            Commit("Rule " + was.Name + " copied as " + copy.Name + ".");
             Rebuild();
         }
 
