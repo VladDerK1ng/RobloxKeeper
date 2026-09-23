@@ -512,7 +512,6 @@ namespace RobloxKeeper
             {
                 a = new RobloxAccount();
                 a.Name = name;
-                a.BrowserTrackerId = AccountStore.NewBrowserTrackerId();
             }
             a.Cookie = cookie;
             a.ProfilePath = actualDir;
@@ -639,7 +638,6 @@ namespace RobloxKeeper
                 LaunchSeat s = new LaunchSeat();
                 s.Account = a.Name;
                 s.Cookie = a.Cookie;
-                s.TrackerId = a.BrowserTrackerId;
                 s.PlaceId = typedPlace ?? RobloxAuth.PlaceIdFromUrl(a.GameUrl);
                 s.RunningPid = host.PidOf(a.Name);
                 s.Hunting = host.IsHunting(a.Name);

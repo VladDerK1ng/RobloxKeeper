@@ -152,7 +152,6 @@ namespace RobloxKeeper
             LaunchSeat s = new LaunchSeat();
             s.Account = acc.Name;
             s.Cookie = acc.Cookie;
-            s.TrackerId = acc.BrowserTrackerId;
             s.RunningPid = PidOfAccount(acc.Name);
             r.Seats.Add(s);
             Log(state.Request.Player + " moved server - moving " + acc.Name + " there too.");

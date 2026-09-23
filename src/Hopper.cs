@@ -19,7 +19,6 @@ namespace RobloxKeeper
     {
         public string AccountName;
         public string Cookie;              // never logged, never shown
-        public string TrackerId;
         public string PlaceId;
         public int CurrentPid;             // 0 when the account has no client open
         public Func<string, bool> Avoid;   // servers not to go to
@@ -74,7 +73,7 @@ namespace RobloxKeeper
             if (ticket == null) { result.Problem = why ?? "Roblox gave no launch ticket"; return result; }
 
             string url = RobloxAuth.BuildLaunchUrl(ticket, req.PlaceId,
-                RobloxAuth.LaunchTracker(world.DeviceTracker(), req.TrackerId), RobloxAuth.NowMs(), pick.Id);
+                world.DeviceTracker(), RobloxAuth.NowMs(), pick.Id);
             if (req.CurrentPid > 0) world.Close(req.CurrentPid);
 
             int pid = world.Start(url, out why);

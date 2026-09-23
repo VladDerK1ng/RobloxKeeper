@@ -50,9 +50,6 @@ namespace RobloxKeeper
         readonly GhostCleaner ghostCleaner = new GhostCleaner();
         readonly GhostWatch ghostWatch = new GhostWatch();
         readonly PerformanceManager perf = new PerformanceManager();
-        readonly SessionLock sessionLock = new SessionLock(
-            SessionLock.DefaultJarPath(),
-            System.IO.Path.GetDirectoryName(AppSettings.Path));
         Updater updater;
         AppSettings settings = new AppSettings();
 
@@ -67,8 +64,8 @@ namespace RobloxKeeper
                        chkThrottleBg, chkCeiling;
         ThemedNumeric numInterval, numTrimEvery, numCeiling;
         ThemedPicker cmbKeys, cmbPerfPriority, cmbPerfCores, cmbCustomKey;
-        Button btnNudge, btnZombie, btnCloseRbx, btnTrimAll, btnApplyAll, btnPauseLock, btnCaptureKey, btnAfkMode, btnFixHandler, btnAccounts;
-        Label lblCountdown, lblMultiStatus, lblClientsTitle, lblGhosts, lblUpdating, lblSessionLock, lblCustomKey, lblHandler, lblAccounts;
+        Button btnNudge, btnZombie, btnCloseRbx, btnTrimAll, btnApplyAll, btnCaptureKey, btnAfkMode, btnFixHandler, btnAccounts;
+        Label lblCountdown, lblMultiStatus, lblClientsTitle, lblGhosts, lblUpdating, lblCustomKey, lblHandler, lblAccounts;
         Dot statusDot;
         ScrollPanel clientsPanel;
         RichTextBox rtbLog;
@@ -136,7 +133,6 @@ namespace RobloxKeeper
             ghostCleaner.Log = Log;
             perf.Log = Log;
             perf.Checker = PerformanceManager.CheckLive;
-            sessionLock.Log = Log;
             ghostWatch.IsTray = IsTrayProcess;
             logWatch.Log = Log;
             logWatch.NameForLog = NameForLog;
@@ -151,6 +147,8 @@ namespace RobloxKeeper
             uiTimer.Start();
 
             Log("RobloxKeeper v" + AppInfo.APP_VERSION + " started.");
+            if (LeftoverFiles.RemoveCookieBackup(System.IO.Path.GetDirectoryName(AppSettings.Path)))
+                Log("Removed the old copy of Roblox's cookie file that disconnect protection kept.");
 
             initializing = true;
             settings = AppSettings.Load();
@@ -348,15 +346,9 @@ namespace RobloxKeeper
             // Every tick, ticked or not: unticking it has to let clients go.
             perf.CeilingTick(clients, chkCeiling.Checked ? numCeiling.Value : 0, foregroundPid);
 
-            // Two or more clients share one cookie jar and start overwriting
-            // each other's session, which is what Roblox eventually evicts as a
-            // duplicate device login. Holding the jar read-only stops that.
             // What Roblox itself says happened to each client.
             logWatch.Tick();
             WatchTick(clients);
-
-            sessionLock.Update(clients.Count);
-            UpdateSessionLockStatus();
 
             // Roblox rewrites this registration itself when it switches
             // versions, so a handler that was fine a minute ago can be dangling
@@ -913,7 +905,6 @@ namespace RobloxKeeper
             nudgeTimer.Stop();
             perf.LiftCeiling();
             StopWatching();
-            sessionLock.Release();
             tray.Visible = false;
             tray.Dispose();
             StopMulti();

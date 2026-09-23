@@ -97,7 +97,6 @@ namespace RobloxKeeper.Tests
             LaunchSeat s = new LaunchSeat();
             s.Account = name;
             s.Cookie = "c-" + name;
-            s.TrackerId = "123456789";
             s.PlaceId = place;
             s.RunningPid = runningPid;
             return s;
@@ -312,17 +311,19 @@ namespace RobloxKeeper.Tests
         {
             FakeWorld w = new FakeWorld();
             w.Device = "555000111";
-            Run(Req(JoinWhere.Any, Seat("a")), w);
-            Assert.Contains("browsertrackerid:555000111", w.LastUrl, "the device's own");
-            Assert.False(w.LastUrl.Contains("123456789"), "not the account's");
+            Run(Req(JoinWhere.Any, Seat("a"), Seat("b")), w);
+            Assert.Contains("browsertrackerid:555000111", w.LastUrl, "the device's own, for every account");
         }
 
-        public static void TestTheAccountsTrackerIsUsedOnlyWhenTheDevicesIsUnknown()
+        // Roblox has never run here, so there is no device tracker yet. The
+        // launch still carries one rather than none.
+        public static void TestWithoutADeviceTrackerALaunchStillCarriesOne()
         {
             FakeWorld w = new FakeWorld();
             w.Device = null;
             Run(Req(JoinWhere.Any, Seat("a")), w);
-            Assert.Contains("browsertrackerid:123456789", w.LastUrl, "the account's, as a fallback");
+            int at = w.LastUrl.IndexOf("+browsertrackerid:") + 18;
+            Assert.True(at > 18 && at < w.LastUrl.Length && char.IsDigit(w.LastUrl[at]), "a tracker, not an empty one");
         }
 
     }

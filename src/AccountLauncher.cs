@@ -14,7 +14,6 @@ namespace RobloxKeeper
     {
         public string Account;
         public string Cookie;           // never logged, never shown
-        public string TrackerId;
         public string PlaceId;          // the game box's, or the account's own saved game
         public int RunningPid;          // its client, if one is open
         public bool Hunting;
@@ -125,7 +124,7 @@ namespace RobloxKeeper
                 }
 
                 string url = RobloxAuth.BuildLaunchUrl(ticket, dest[i].Place,
-                    RobloxAuth.LaunchTracker(world.DeviceTracker(), seat.TrackerId), RobloxAuth.NowMs(), dest[i].Job);
+                    world.DeviceTracker(), RobloxAuth.NowMs(), dest[i].Job);
                 bool moving = seat.RunningPid > 0;
                 if (moving) world.Close(seat.RunningPid);
 

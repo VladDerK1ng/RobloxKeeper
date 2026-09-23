@@ -66,7 +66,6 @@ namespace RobloxKeeper.Tests
             HopRequest r = new HopRequest();
             r.AccountName = "VladDerKing";
             r.Cookie = "COOKIE";
-            r.TrackerId = "12345";
             r.PlaceId = "107778070777162";
             r.CurrentPid = 100;
             r.Avoid = avoid ?? delegate(string id) { return false; };
@@ -172,7 +171,7 @@ namespace RobloxKeeper.Tests
             w.Pages.Add(Page(null, "c1c5a3b9-4938-4cd8-9418-ca1a217858ae"));
             Hopper.Hop(Request(null), w, new Random(1));
             Assert.Contains("browsertrackerid:555000111", w.StartedWith, "the device's own");
-            Assert.False(w.StartedWith.Contains("12345%26"), "not the account's inside the launcher link");
+            Assert.Contains("browserTrackerId%3D555000111", w.StartedWith, "inside the launcher link too");
         }
 
     }

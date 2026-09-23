@@ -38,19 +38,6 @@ namespace RobloxKeeper.Tests
             Assert.Equal(null, RobloxAuth.TrackerFromAppStorage("{\"BrowserTrackerId\":\"\"}"), "blank value");
         }
 
-        // The device's tracker wins whenever it is known.
-        public static void TestTheDeviceTrackerIsPreferredOverTheAccounts()
-        {
-            Assert.Equal("111", RobloxAuth.LaunchTracker("111", "999"), "device's own, as the website sends");
-        }
-
-        public static void TestTheAccountsTrackerIsOnlyAFallback()
-        {
-            Assert.Equal("999", RobloxAuth.LaunchTracker(null, "999"), "device unknown");
-            Assert.Equal("999", RobloxAuth.LaunchTracker("", "999"), "device blank");
-            Assert.Equal(null, RobloxAuth.LaunchTracker(null, null), "neither - the link builder fills one in");
-        }
-
         // ---------- a specific server, the way the website asks ----------
 
         static string Launcher(string url)

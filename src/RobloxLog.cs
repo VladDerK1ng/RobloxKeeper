@@ -120,7 +120,7 @@ namespace RobloxKeeper
             {
                 case 273:
                     return "Roblox saw this account signed in from another device and dropped it. "
-                         + "Not your internet - this is what disconnect protection is for.";
+                         + "Not your internet.";
                 case 277:
                     return "Lost connection to the game server.";
                 case 278:

@@ -635,30 +635,10 @@ namespace RobloxKeeper
             lblUpdating = Ui.MutedLabel(MultiStatus.HINT_NORMAL, Ui.PAD, 86, 8.25f);
             card.Controls.Add(lblUpdating);
 
-            // The session lock lives here rather than under Performance because
-            // it exists for the same reason multi-instance does: it is what
-            // keeps two clients from evicting each other's Roblox session.
-            const int lockRow = 116;
-            lblSessionLock = Ui.MutedLabel("", Ui.PAD, lockRow + 6, 8.25f);
-            lblSessionLock.MaximumSize = new Size(BTN_X - Ui.PAD - 8, 0);
-            card.Controls.Add(lblSessionLock);
-
-            btnPauseLock = Ui.AccentButton("Pause 60s", BTN_X, lockRow, BTN_W, ROW_H);
-            btnPauseLock.Font = new Font("Segoe UI", 8.25f, FontStyle.Bold);
-            btnPauseLock.Click += delegate { OnPauseSessionLock(); };
-            Explain(lblSessionLock,
-                "Two Roblox accounts on one PC share a single login file, so they overwrite each "
-                + "other's session and Roblox knocks one offline - the \"lost connection\" kick.\r\n\r\n"
-                + "This stops that. It switches on by itself once two clients are open, and off again "
-                + "below two, because while it is on you can't sign in to a new account.");
-            Explain(btnPauseLock,
-                "Lets go for 60 seconds so you can sign in to Roblox, then switches back on by itself.");
-            card.Controls.Add(btnPauseLock);
-
             // Only ever visible when the registration is actually dangling.
             // Amber, because this one silently closes every open client every
             // time Play is pressed, and it will keep doing so until it is fixed.
-            const int fixRow = 150;
+            const int fixRow = 116;
             lblHandler = Ui.RowLabel("", Ui.PAD, fixRow, ROW_H, BTN_X - Ui.PAD - 8, 8.25f, Theme.Amber);
             lblHandler.Visible = false;
             card.Controls.Add(lblHandler);
@@ -953,28 +933,6 @@ namespace RobloxKeeper
             perf.ApplyToAllRunning(lastClients);
             Log("Applied " + perf.Defaults + " to " + lastClients.Count +
                 " running client(s). Per-client Tune settings were left alone.");
-        }
-
-        void OnPauseSessionLock()
-        {
-            sessionLock.Pause(TimeSpan.FromSeconds(60));
-            UpdateSessionLockStatus();
-        }
-
-        // Says what the lock is doing and, when it is off, why - "needs two
-        // clients" is a normal state, not a fault, and should not read like one.
-        void UpdateSessionLockStatus()
-        {
-            string text;
-            if (sessionLock.Held)
-                text = "Disconnect protection on";
-            else if (lastClients.Count < 2)
-                text = "Disconnect protection: on at 2 clients";
-            else
-                text = "Paused 60s - sign in to Roblox now";
-
-            if (lblSessionLock.Text != text) lblSessionLock.Text = text;
-            btnPauseLock.Enabled = sessionLock.Held;
         }
 
         // One switch instead of tuning each client by hand: everything except

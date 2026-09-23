@@ -69,11 +69,12 @@ namespace RobloxKeeper
         // The browser tracker this device already uses - the one a website
         // launch sends - out of Roblox's own appStorage.json.
         //
-        // Every launch sends this rather than an account's own. Sending an
-        // account's own tracker made Roblox 0.740 clients freeze for five
-        // seconds at a time, all session long, and Roblox then adopts it as the
-        // device's, so each launch also changed the device's identity for every
-        // later one. Website launches, which send the device's, never froze.
+        // Every launch sends this. Sending each account its own tracker - once
+        // meant to keep accounts from being taken for one another - made
+        // Roblox 0.740 clients freeze for five seconds at a time, all session
+        // long, and Roblox then adopts a tracker it is sent as the device's, so
+        // each launch changed the device's identity for every later one.
+        // Website launches, which send the device's, never froze.
         public static string TrackerFromAppStorage(string json)
         {
             if (string.IsNullOrEmpty(json)) return null;
@@ -106,13 +107,6 @@ namespace RobloxKeeper
             catch { return null; }
         }
 
-        // The device's tracker when it is known; the account's own only when
-        // it is not, so a launch never goes out with none.
-        public static string LaunchTracker(string deviceTracker, string accountTracker)
-        {
-            return string.IsNullOrEmpty(deviceTracker) ? accountTracker : deviceTracker;
-        }
-
         // A launch link from roblox.com in the in-app browser carries that
         // browser profile's own tracker, in the client's parameter and again
         // inside the launcher link. Both are swapped for the device's, so this
@@ -137,8 +131,8 @@ namespace RobloxKeeper
             if (string.IsNullOrEmpty(ticket)) return null;
             if (string.IsNullOrEmpty(placeId)) return null;
 
-            // An empty tracker id is the shared-device-identity problem that
-            // gets accounts evicted as duplicate logins, so never send one.
+            // Only when the device has none yet - Roblox has never run here -
+            // is one made up, and the client then keeps it as the device's.
             if (string.IsNullOrEmpty(browserTrackerId))
                 browserTrackerId = AccountStore.NewBrowserTrackerId();
 

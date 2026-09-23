@@ -143,7 +143,6 @@ namespace RobloxKeeper
             HopRequest r = new HopRequest();
             r.AccountName = acc.Name;
             r.Cookie = acc.Cookie;
-            r.TrackerId = acc.BrowserTrackerId;
             r.PlaceId = huntPlace;
             r.CurrentPid = huntPids.ContainsKey(h.Account) ? huntPids[h.Account] : 0;
             r.Avoid = delegate(string id) { return avoid.ContainsKey(id); };

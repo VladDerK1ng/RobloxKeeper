@@ -15,7 +15,9 @@ namespace RobloxKeeper
     {
         public string Name;              // what to call it in the UI
         public string Cookie;            // .ROBLOSECURITY - never log, never display
-        public string BrowserTrackerId;  // this account's own device identity
+        // No longer sent anywhere: every launch uses the device's own tracker,
+        // as the website does. Kept so account files written before still load.
+        public string BrowserTrackerId;
         public string GameUrl;           // the place it normally AFKs in
         public string Note;              // whatever the user wants to remember about it
 
@@ -107,9 +109,8 @@ namespace RobloxKeeper
             if (a != null) accounts.Remove(a);
         }
 
-        // Roblox's own browser tracker id is a run of digits. Each account gets
-        // its own, so two accounts never present the same device identity -
-        // the same problem the session lock exists to contain.
+        // A browser tracker id is a run of digits. Only made up when the device
+        // has none of its own yet - see RobloxAuth.DeviceTracker.
         public static string NewBrowserTrackerId()
         {
             byte[] b = new byte[6];
