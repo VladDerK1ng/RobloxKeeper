@@ -27,6 +27,7 @@ namespace RobloxKeeper
         const string LOGIN_URL = "https://www.roblox.com/login";
         const string HOME_URL = "https://www.roblox.com/home";
         const string GAMES_URL = "https://www.roblox.com/discover";
+        const string FRIENDS_URL = "https://www.roblox.com/users/friends";
 
         readonly string profileDir;
         readonly bool loginMode;
@@ -133,6 +134,9 @@ namespace RobloxKeeper
             AddNav("Forward", 82, delegate { if (web.CanGoForward) web.GoForward(); });
             AddNav("Home", 162, delegate { Go(HOME_URL); });
             AddNav("Games", 232, delegate { Go(GAMES_URL); });
+            // Where following someone starts: a friend's page has Roblox's
+            // own Join, which launches as this account.
+            AddNav("Friends", 302, delegate { Go(FRIENDS_URL); });
 
             // No caption here. The window title already says which account this
             // is, and the old line asserted it was not the user's main account
@@ -159,12 +163,29 @@ namespace RobloxKeeper
             {
                 Directory.CreateDirectory(profileDir);
 
+                // The app's own background until the first page paints,
+                // instead of a white flash.
+                web.DefaultBackgroundColor = Theme.Bg;
+
                 CoreWebView2Environment env =
                     await CoreWebView2Environment.CreateAsync(null, profileDir);
                 await web.EnsureCoreWebView2Async(env);
 
+                await MakeDark();
+
                 web.CoreWebView2.NavigationCompleted += delegate { CheckForSession(); };
                 web.CoreWebView2.NavigationStarting += OnNavigationStarting;
+                // A page can start a client from a frame, or ask Windows for
+                // the protocol outright. Either would reach Windows' own
+                // handler, which knows nothing of this account.
+                web.CoreWebView2.FrameNavigationStarting += OnNavigationStarting;
+                web.CoreWebView2.LaunchingExternalUriScheme +=
+                    delegate(object s, CoreWebView2LaunchingExternalUriSchemeEventArgs e)
+                    {
+                        if (!RobloxAuth.IsLaunchUrl(e.Uri)) return;
+                        e.Cancel = true;
+                        Launch(e.Uri);
+                    };
 
                 // Roblox opens some things in a popup; keep them in this window
                 // so they stay inside this account's profile.
@@ -222,8 +243,15 @@ namespace RobloxKeeper
         void OnNavigationStarting(object sender, CoreWebView2NavigationStartingEventArgs e)
         {
             if (!RobloxAuth.IsLaunchUrl(e.Uri)) return;
-
             e.Cancel = true;
+            Launch(e.Uri);
+        }
+
+        readonly LaunchOnce launchOnce = new LaunchOnce();
+
+        void Launch(string uri)
+        {
+            if (!launchOnce.Take(uri, DateTime.Now)) return;
             if (loginMode)
             {
                 status.ForeColor = Theme.Amber;
@@ -233,7 +261,25 @@ namespace RobloxKeeper
 
             status.ForeColor = Theme.Text;
             status.Text = "Launching " + accountName + " into that game...";
-            if (LaunchRequested != null) LaunchRequested(e.Uri);
+            if (LaunchRequested != null) LaunchRequested(uri);
+        }
+
+        // Roblox's own dark theme, in this account's browser only.
+        async Task MakeDark()
+        {
+            try { web.CoreWebView2.Profile.PreferredColorScheme = CoreWebView2PreferredColorScheme.Dark; }
+            catch { }   // an older runtime; the page script below still works
+            try
+            {
+                CoreWebView2Cookie c = web.CoreWebView2.CookieManager.CreateCookie(
+                    DarkRoblox.CookieName, DarkRoblox.CookieValue, DarkRoblox.CookieDomain, "/");
+                c.IsSecure = true;
+                c.Expires = DateTime.UtcNow.AddYears(1);
+                web.CoreWebView2.CookieManager.AddOrUpdateCookie(c);
+            }
+            catch { }
+            try { await web.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(DarkRoblox.Script); }
+            catch { }
         }
 
         // Roblox rotates sessions, so the cookie seen here may be newer than
