@@ -100,6 +100,9 @@ namespace RobloxKeeper
                     return "Ctrl, Alt or Shift was still held down, and every key would have arrived as a shortcut";
 
                 IntPtr previous = Native.GetForegroundWindow();
+                // A client on another virtual desktop takes you there; you
+                // are brought back to this one afterwards.
+                Guid home = VirtualDesktops.Current();
                 // The whole play in real pixels, so the window's position,
                 // the clicks and putting the pointer back all agree.
                 IntPtr dpiWas = RealPixels();
@@ -107,7 +110,11 @@ namespace RobloxKeeper
                 {
                     return PlayInFront(m, hwnd, previous);
                 }
-                finally { Restore(dpiWas); }
+                finally
+                {
+                    Restore(dpiWas);
+                    VirtualDesktops.ReturnTo(home);
+                }
             }
             finally { FocusGate.Exit(); }
         }

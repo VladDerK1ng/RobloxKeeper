@@ -185,6 +185,9 @@ namespace RobloxKeeper
                 if (!gate) return;
 
                 IntPtr previous = Native.GetForegroundWindow();
+                // Bringing a client on another virtual desktop in front takes
+                // you to that desktop. Remembered, so you are brought back.
+                Guid home = VirtualDesktops.Current();
 
                 foreach (IntPtr hwnd in plan.Targets)
                 {
@@ -205,8 +208,14 @@ namespace RobloxKeeper
                     count++;
                 }
 
-                if (count > 0 && previous != IntPtr.Zero && previous != self)
+                // This app's own window too, when it is showing - it was left
+                // out, which left you on a client's desktop after pressing
+                // Nudge now.
+                if (count > 0 && previous != IntPtr.Zero && (previous != self || Native.IsWindowVisible(self)))
                     InputSender.FocusWindow(previous);
+                // Focus alone doesn't bring you back from the wallpaper or the
+                // taskbar - they're on every desktop.
+                if (count > 0) VirtualDesktops.ReturnTo(home);
             }
             finally
             {
