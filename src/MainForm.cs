@@ -135,6 +135,7 @@ namespace RobloxKeeper
 
             ghostCleaner.Log = Log;
             perf.Log = Log;
+            perf.Checker = PerformanceManager.CheckLive;
             sessionLock.Log = Log;
             ghostWatch.IsTray = IsTrayProcess;
             logWatch.Log = Log;

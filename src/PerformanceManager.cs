@@ -377,6 +377,8 @@ namespace RobloxKeeper
                 blocks.Release(pid);
                 caps.Remove(pid);
                 capRetry.Remove(pid);
+                checkedAt.Remove(pid);
+                drifts.Remove(pid);
             }
         }
 
@@ -385,6 +387,18 @@ namespace RobloxKeeper
         // without needing to watch for launches separately.
         public void ApplyPending(List<ClientInfo> clients) { ApplyPending(clients, 0); }
 
+        // Reading a client's settings back, to see whether they are still what
+        // was set. Null when they are, otherwise what changed. Left unset - as
+        // the tests leave it - nothing is ever re-checked.
+        public delegate string CheckFunc(int pid, ClientProfile want, int coreBlock);
+        public CheckFunc Checker;
+
+        // How long a client's settings are trusted before being read again.
+        public const int RECHECK_SECONDS = 30;
+
+        readonly Dictionary<int, DateTime> checkedAt = new Dictionary<int, DateTime>();
+        readonly Dictionary<int, int> drifts = new Dictionary<int, int>();
+
         public void ApplyPending(List<ClientInfo> clients, int foregroundPid)
         {
             for (int i = 0; i < clients.Count; i++)
@@ -392,7 +406,12 @@ namespace RobloxKeeper
                 int pid = clients[i].Pid;
                 ClientProfile want = EffectiveFor(pid, foregroundPid);
                 ClientProfile have;
-                if (applied.TryGetValue(pid, out have) && want.SameAs(have)) continue;
+                bool drifted = false;
+                if (applied.TryGetValue(pid, out have) && want.SameAs(have))
+                {
+                    if (!Drifted(pid, want)) continue;
+                    drifted = true;         // already said, in its own words
+                }
 
                 // A refused tune waits out its backoff rather than being retried
                 // every tick - or, as before, never retried at all.
@@ -404,8 +423,9 @@ namespace RobloxKeeper
                 {
                     bool first = !applied.ContainsKey(pid);
                     applied[pid] = want.Clone();
+                    checkedAt[pid] = Clock();
                     bool recovered = retries.Remove(pid);
-                    if (recovered || !first || !want.SameAs(new ClientProfile()))
+                    if (!drifted && (recovered || !first || !want.SameAs(new ClientProfile())))
                         Log("Client PID " + pid + " set to " + want + ".");
                 }
                 else
@@ -424,6 +444,39 @@ namespace RobloxKeeper
                             " (attempt " + attempts + ", trying again in " + wait + "s).");
                 }
             }
+        }
+
+        // Applied a while ago and changed since? Something else - the game,
+        // another tool, Task Manager - can set a client's priority or cores
+        // after this app has, and nothing would notice for as long as it ran.
+        // Read back every half minute; what has changed is set again, and said
+        // the first time and every tenth after, so something that keeps
+        // changing it can't fill the activity list.
+        bool Drifted(int pid, ClientProfile want)
+        {
+            if (Checker == null) return false;
+            DateTime at;
+            if (checkedAt.TryGetValue(pid, out at) && (Clock() - at).TotalSeconds < RECHECK_SECONDS) return false;
+            checkedAt[pid] = Clock();
+
+            string drift = null;
+            try { drift = Checker(pid, want, blocks.BlockFor(pid)); } catch { }
+            if (drift == null) return false;
+
+            int n;
+            drifts.TryGetValue(pid, out n);
+            drifts[pid] = ++n;
+            if (n == 1 || n % 10 == 0)
+                Log("Client PID " + pid + " had changed (" + drift + ") - setting " + want + " again.");
+            return true;
+        }
+
+        // The live read-back.
+        public static string CheckLive(int pid, ClientProfile want, int coreBlock)
+        {
+            using (Process p = Process.GetProcessById(pid))
+                return ReadBackProblem(ToPriorityClass(want.Priority), (long)AffinityMask(want.Cores, coreBlock), want.Eco,
+                    p.PriorityClass, (long)p.ProcessorAffinity, EfficiencyMode(pid));
         }
 
         // The explicit "I mean all of them" action. Changing the default is
@@ -475,8 +528,8 @@ namespace RobloxKeeper
             {
                 using (Process check = Process.GetProcessById(pid))
                 {
-                    string drift = ReadBackProblem(wantPriority, wantMask,
-                        check.PriorityClass, (long)check.ProcessorAffinity);
+                    string drift = ReadBackProblem(wantPriority, wantMask, profile.Eco,
+                        check.PriorityClass, (long)check.ProcessorAffinity, EfficiencyMode(pid));
                     if (drift != null) problems.Add(drift);
                 }
             }
@@ -491,13 +544,42 @@ namespace RobloxKeeper
         internal static string ReadBackProblem(ProcessPriorityClass wantPriority, long wantMask,
                                                ProcessPriorityClass actualPriority, long actualMask)
         {
+            return ReadBackProblem(wantPriority, wantMask, false, actualPriority, actualMask, null);
+        }
+
+        // With Low power too. Null for actualEco means Windows couldn't say,
+        // which isn't a problem in itself.
+        internal static string ReadBackProblem(ProcessPriorityClass wantPriority, long wantMask, bool wantEco,
+                                               ProcessPriorityClass actualPriority, long actualMask, bool? actualEco)
+        {
             List<string> drift = new List<string>();
             if (actualPriority != wantPriority)
                 drift.Add("priority did not stick (Windows left it at " + actualPriority + ")");
             if (actualMask != wantMask)
                 drift.Add("core affinity did not stick (Windows left it at 0x" +
                           actualMask.ToString("X") + ")");
+            if (actualEco.HasValue && actualEco.Value != wantEco)
+                drift.Add("low power did not stick (it is " + (actualEco.Value ? "on" : "off") + ")");
             return drift.Count == 0 ? null : string.Join(", ", drift.ToArray());
+        }
+
+        // Whether a client is in efficiency mode now. Null when Windows won't
+        // say - an old build, or a process that can't be opened.
+        public static bool? EfficiencyMode(int pid)
+        {
+            IntPtr h = Native.OpenProcess(Native.PROCESS_QUERY_LIMITED_INFORMATION, false, pid);
+            if (h == IntPtr.Zero) return null;
+            try
+            {
+                Native.PROCESS_POWER_THROTTLING_STATE s = new Native.PROCESS_POWER_THROTTLING_STATE();
+                s.Version = Native.PROCESS_POWER_THROTTLING_CURRENT_VERSION;
+                if (!Native.GetProcessInformation(h, Native.ProcessPowerThrottling, ref s,
+                        Marshal.SizeOf(typeof(Native.PROCESS_POWER_THROTTLING_STATE)))) return null;
+                uint speed = Native.PROCESS_POWER_THROTTLING_EXECUTION_SPEED;
+                return (s.ControlMask & speed) != 0 && (s.StateMask & speed) != 0;
+            }
+            catch { return null; }
+            finally { Native.CloseHandle(h); }
         }
 
         // Every efficiency-mode failure used to be reported as an old version of
