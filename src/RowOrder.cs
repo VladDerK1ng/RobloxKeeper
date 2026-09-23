@@ -104,9 +104,20 @@ namespace RobloxKeeper
             g.Copied = copied;
             g.Location = new Point(0, rowTop);
             g.Size = new Size(16, rowHeight);
-            new ToolTip().SetToolTip(g, "Drag to move it - or right-click to move it up, down, "
+            g.tip = new ToolTip();
+            g.tip.SetToolTip(g, "Drag to move it - or right-click to move it up, down, "
                 + "to the top or bottom" + (copied != null ? ", or make a copy." : "."));
             return g;
+        }
+
+        // Its own tooltip goes with it: lists rebuild on every change, and
+        // each tooltip left behind is a window left behind.
+        ToolTip tip;
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing && tip != null) { tip.Dispose(); tip = null; }
+            base.Dispose(disposing);
         }
 
         protected override void OnPaint(PaintEventArgs e)

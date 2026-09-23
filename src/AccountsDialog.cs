@@ -186,7 +186,7 @@ namespace RobloxKeeper
             playingTimer.Interval = 2000;
             playingTimer.Tick += delegate { RefreshPlaying(); UpdateFollowing(); };
             Shown += delegate { playingTimer.Start(); };
-            FormClosed += delegate { playingTimer.Stop(); playingTimer.Dispose(); };
+            FormClosed += delegate { playingTimer.Stop(); playingTimer.Dispose(); tips.Dispose(); };
 
             FillServerRow();
             Rebuild();

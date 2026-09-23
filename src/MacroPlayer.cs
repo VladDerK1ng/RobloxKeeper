@@ -87,6 +87,8 @@ namespace RobloxKeeper
             return keys;
         }
 
+        const string STOPPED = "stopped - another window came to the front";
+
         // Null when it played to the end; otherwise why not, in plain words.
         // Runs on a worker thread - it sleeps for as long as the macro lasts.
         public static string Play(Macro m, IntPtr hwnd)
@@ -106,14 +108,18 @@ namespace RobloxKeeper
                 // The whole play in real pixels, so the window's position,
                 // the clicks and putting the pointer back all agree.
                 IntPtr dpiWas = RealPixels();
+                string problem = null;
                 try
                 {
-                    return PlayInFront(m, hwnd, previous);
+                    problem = PlayInFront(m, hwnd, previous);
+                    return problem;
                 }
                 finally
                 {
                     Restore(dpiWas);
-                    VirtualDesktops.ReturnTo(home);
+                    // Not when you took over part-way - switching desktops
+                    // yourself is one way to - or it would pull you back.
+                    if (problem != STOPPED) VirtualDesktops.ReturnTo(home);
                 }
             }
             finally { FocusGate.Exit(); }
@@ -145,7 +151,7 @@ namespace RobloxKeeper
                 {
                     if (plan[done].Kind != InputActionKind.Sleep && Native.GetForegroundWindow() != hwnd)
                     {
-                        problem = "stopped - another window came to the front";
+                        problem = STOPPED;
                         break;
                     }
                     Send(plan[done]);
