@@ -28,6 +28,10 @@ namespace RobloxKeeper
         // this records where the session really is instead of pointing at an
         // empty folder and showing a login page.
         public string ProfilePath;
+        // The Roblox user id, which is what a client's log names. Learned when
+        // the account signs in, or the first time one of its clients joins.
+        public string UserId;
+
         public int NudgeMethod = -1;     // -1 = follow the global setting
         public int Priority = -1;        // -1 = follow the Performance defaults
         public int Cores;
@@ -176,7 +180,8 @@ namespace RobloxKeeper
             sb.Append(a.Cores).Append(FIELD);
             sb.Append(a.Eco ? "1" : "0").Append(FIELD);
             sb.Append(Escape(a.Note)).Append(FIELD);
-            sb.Append(Escape(a.ProfilePath));
+            sb.Append(Escape(a.ProfilePath)).Append(FIELD);
+            sb.Append(Escape(a.UserId));
             return sb.ToString();
         }
 
@@ -199,6 +204,7 @@ namespace RobloxKeeper
             // shorter and simply have no note.
             if (f.Length > 8) a.Note = Unescape(f[8]);
             if (f.Length > 9) a.ProfilePath = Unescape(f[9]);
+            if (f.Length > 10) a.UserId = Unescape(f[10]);
             return a;
         }
 

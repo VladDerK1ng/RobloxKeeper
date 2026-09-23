@@ -27,6 +27,34 @@ namespace RobloxKeeper.Tests
             Assert.Equal("107778070777162", e.PlaceId, "the place");
         }
 
+        // Roblox says which account joined on the line after the join. A real
+        // line from this machine's logs, with the account's ids changed.
+        // It is what names a client that Roblox handed to another process.
+        public static void TestReadsWhichAccountJoined()
+        {
+            string line = "2026-09-23T06:56:52.814Z,1.814440,9388,6 [FLog::GameJoinLoadTime] Report game_join_loadtime: "
+                        + "placeid:107778070777162, join_time:0.91732291600038018409, universeid:1000000004, "
+                        + "referral_page:RequestGame, sid:00000000-0000-0000-0000-000000000005, "
+                        + "clienttime:1790146612.625, userid:1000000001, ";
+
+            RobloxLogEvent e = RobloxLog.Parse(line);
+
+            Assert.Equal(RobloxLogEvent.Kind.Identified, e.Type, "who it is");
+            Assert.Equal("1000000001", e.UserId, "by Roblox user id");
+        }
+
+        // Also real, ids changed. At start-up the client names whoever the shared cookie
+        // belongs to - measured, a different user from the one that joined in
+        // the same log - so it must not be taken for the account.
+        public static void TestTheStartUpCookieLineDoesNotSayWhoJoined()
+        {
+            string line = "2026-09-23T06:56:51.391Z,0.391439,92d8,6 [FLog::LogWin32BTId] LogWin32BTId, App, "
+                        + "cookie Native => Engine set RBXEventTrackerV2 as CreateDate=09/23/2026 01:56:47"
+                        + "&browserid=100000006&rbxuid=1000000002&rbxid=12345";
+
+            Assert.Equal(RobloxLogEvent.Kind.None, RobloxLog.Parse(line).Type, "not an event");
+        }
+
         public static void TestAnOrdinaryLineIsNotAnEvent()
         {
             Assert.Equal(RobloxLogEvent.Kind.None,

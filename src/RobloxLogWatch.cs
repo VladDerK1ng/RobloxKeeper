@@ -31,6 +31,15 @@ namespace RobloxKeeper
         // is known too, without that history being replayed into the log.
         public Action<string, RobloxLogEvent> Joined;
 
+        // Which account a client is, when Roblox says so in a later read than
+        // the join it belongs to. Optional.
+        public Action<string, RobloxLogEvent> Identified;
+
+        // How far past a join to look for the line naming the account. It is
+        // the very next line in every log measured; a little slack costs
+        // nothing.
+        const int WHO_LOOKAHEAD = 5;
+
         readonly Dictionary<string, long> offsets = new Dictionary<string, long>();
         readonly string dir;
 
@@ -85,12 +94,14 @@ namespace RobloxKeeper
                            FileAccess.Read, FileShare.ReadWrite))
                 {
                     fs.Seek(from, SeekOrigin.Begin);
+                    List<string> lines = new List<string>();
                     using (StreamReader r = new StreamReader(fs))
                     {
                         string line;
-                        while ((line = r.ReadLine()) != null) Report(f.Name, line);
+                        while ((line = r.ReadLine()) != null) lines.Add(line);
                         offsets[f.FullName] = fs.Position;
                     }
+                    ReportAll(f.Name, lines);
                 }
             }
             catch
@@ -118,9 +129,12 @@ namespace RobloxKeeper
                     string line;
                     while ((line = r.ReadLine()) != null)
                     {
-                        if (line.IndexOf("Joining game", StringComparison.OrdinalIgnoreCase) < 0) continue;
+                        bool join = line.IndexOf("Joining game", StringComparison.OrdinalIgnoreCase) >= 0;
+                        bool who = !join && found && line.IndexOf("game_join_loadtime", StringComparison.OrdinalIgnoreCase) >= 0;
+                        if (!join && !who) continue;
                         RobloxLogEvent e = RobloxLog.Parse(line);
                         if (e.Type == RobloxLogEvent.Kind.Joined) { last = e; found = true; }
+                        else if (e.Type == RobloxLogEvent.Kind.Identified) last.UserId = e.UserId;
                     }
                 }
             }
@@ -131,10 +145,45 @@ namespace RobloxKeeper
             Joined(f.Name, last);
         }
 
-        void Report(string fileName, string line)
+        // A batch of new lines. A join takes who joined from the lines just
+        // after it, when they are already here; the line naming the account
+        // is then not told a second time.
+        void ReportAll(string fileName, List<string> lines)
         {
-            RobloxLogEvent e = RobloxLog.Parse(line);
+            List<RobloxLogEvent> events = new List<RobloxLogEvent>();
+            foreach (string line in lines) events.Add(RobloxLog.Parse(line));
+
+            for (int i = 0; i < events.Count; i++)
+            {
+                RobloxLogEvent e = events[i];
+                if (e.Type == RobloxLogEvent.Kind.Joined)
+                {
+                    for (int k = i + 1; k < events.Count && k <= i + WHO_LOOKAHEAD; k++)
+                    {
+                        if (events[k].Type == RobloxLogEvent.Kind.Joined) break;
+                        if (events[k].Type != RobloxLogEvent.Kind.Identified) continue;
+                        e.UserId = events[k].UserId;
+                        RobloxLogEvent told = new RobloxLogEvent();
+                        events[k] = told;                  // Kind.None: already said
+                        break;
+                    }
+                }
+                Report(fileName, e);
+            }
+        }
+
+        void Report(string fileName, RobloxLogEvent e)
+        {
             if (e.Type == RobloxLogEvent.Kind.None) return;
+
+            // Told to the app before the activity list, so the line can use
+            // the name the app has just given the client.
+            if (e.Type == RobloxLogEvent.Kind.Joined && Joined != null) Joined(fileName, e);
+            if (e.Type == RobloxLogEvent.Kind.Identified)
+            {
+                if (Identified != null) Identified(fileName, e);
+                return;
+            }
 
             string who = null;
             if (NameForLog != null) { try { who = NameForLog(fileName); } catch { } }
@@ -144,7 +193,6 @@ namespace RobloxKeeper
             {
                 case RobloxLogEvent.Kind.Joined:
                     Log(prefix + "joined place " + e.PlaceId + ".");
-                    if (Joined != null) Joined(fileName, e);
                     break;
 
                 case RobloxLogEvent.Kind.Hung:

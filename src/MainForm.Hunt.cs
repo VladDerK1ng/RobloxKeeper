@@ -184,6 +184,16 @@ namespace RobloxKeeper
             NextInLine(h.Account);
         }
 
+        // A hunting account's game turned up in another process - Roblox can
+        // hand a launch to one of its tray copies, and the process the hop
+        // started then exits. Its log says whose it is; the hunt follows it
+        // there instead of taking it for a client someone closed.
+        void HuntAdopt(int pid, string account)
+        {
+            if (!hunts.ContainsKey(account)) return;
+            huntPids[account] = pid;
+        }
+
         // From the log watch: some client joined a server.
         void HuntJoined(int pid, RobloxLogEvent e)
         {

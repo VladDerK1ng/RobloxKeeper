@@ -6,10 +6,15 @@ namespace RobloxKeeper
 {
     struct RobloxLogEvent
     {
-        public enum Kind { None, Joined, Disconnected, Hung }
+        public enum Kind { None, Joined, Disconnected, Hung, Identified }
 
         public Kind Type;
         public string PlaceId;
+
+        // Which Roblox account it is, by user id. Written on the line after
+        // each join - so a join carries it when both were read together, and
+        // Identified carries it on its own when they weren't.
+        public string UserId;
 
         // The server, not just the game. Roblox writes it on the same line,
         // and it is what turns "a secret egg appeared" into a link you can
@@ -47,6 +52,12 @@ namespace RobloxKeeper
         static readonly Regex JoinRx =
             new Regex(@"! Joining game '([^']*)' place (\d+)", RegexOptions.IgnoreCase);
 
+        // The join report names the account that joined. Not the start-up
+        // line's rbxuid: measured, that is whoever the shared cookie belongs
+        // to, and in the same log it named someone else.
+        static readonly Regex WhoRx =
+            new Regex(@"game_join_loadtime:.*\buserid:(\d+)", RegexOptions.IgnoreCase);
+
         // Three spellings, because the client reports a disconnect differently
         // depending on whether the server sent it, the client sent it, or the
         // client decided on its own (which is how the idle kick arrives).
@@ -83,6 +94,13 @@ namespace RobloxKeeper
                 e.JobId = m.Groups[1].Value;
                 e.PlaceId = m.Groups[2].Value;
                 return e;
+            }
+
+            m = WhoRx.Match(line);
+            if (m.Success)
+            {
+                e.Type = RobloxLogEvent.Kind.Identified;
+                e.UserId = m.Groups[1].Value;
             }
 
             return e;

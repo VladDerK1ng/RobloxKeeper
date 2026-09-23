@@ -88,13 +88,30 @@ namespace RobloxKeeper
             return m.Success ? m.Groups[1].Value : null;
         }
 
+        // The user id in the same answer - what a client's log names.
+        public static string UserIdFromJson(string json)
+        {
+            if (string.IsNullOrEmpty(json)) return null;
+            Match m = Regex.Match(json, @"""id""\s*:\s*(\d+)");
+            return m.Success ? m.Groups[1].Value : null;
+        }
+
         // Asks Roblox which account a saved session belongs to, so the account
         // names itself. Returns null if the session has expired.
         public static string GetUsername(string cookie)
         {
+            string userId;
+            return WhoIs(cookie, out userId);
+        }
+
+        // The name, and the user id beside it.
+        public static string WhoIs(string cookie, out string userId)
+        {
+            userId = null;
             if (string.IsNullOrEmpty(cookie)) return null;
             try
             {
+                ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
                 HttpWebRequest req = (HttpWebRequest)WebRequest.Create(
                     "https://users.roblox.com/v1/users/authenticated");
                 req.Method = "GET";
@@ -106,9 +123,34 @@ namespace RobloxKeeper
 
                 using (HttpWebResponse res = (HttpWebResponse)req.GetResponse())
                 using (StreamReader r = new StreamReader(res.GetResponseStream()))
-                    return UsernameFromJson(r.ReadToEnd());
+                {
+                    string json = r.ReadToEnd();
+                    userId = UserIdFromJson(json);
+                    return UsernameFromJson(json);
+                }
             }
             catch { return null; }   // expired or offline; the caller names it manually
+        }
+
+        // Anyone's name from their user id, from Roblox's public profile. No
+        // sign-in is sent. Null when offline or there is no such user.
+        public static string NameOfUser(string userId)
+        {
+            if (string.IsNullOrEmpty(userId)) return null;
+            try
+            {
+                ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
+                HttpWebRequest req = (HttpWebRequest)WebRequest.Create(
+                    "https://users.roblox.com/v1/users/" + Uri.EscapeDataString(userId));
+                req.Method = "GET";
+                req.Accept = "application/json";
+                req.UserAgent = "RobloxKeeper";
+                req.Timeout = 12000;
+                using (HttpWebResponse res = (HttpWebResponse)req.GetResponse())
+                using (StreamReader r = new StreamReader(res.GetResponseStream()))
+                    return UsernameFromJson(r.ReadToEnd());
+            }
+            catch { return null; }
         }
 
         // Is this navigation the browser trying to start a Roblox client?

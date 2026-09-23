@@ -168,6 +168,7 @@ namespace RobloxKeeper
         readonly HitCounter watchHits = new HitCounter();
         // Where each client is, from its log. Keyed by PID and pruned with it.
         readonly Dictionary<int, RobloxLogEvent> clientWhere = new Dictionary<int, RobloxLogEvent>();
+        readonly ClientNamer namer = new ClientNamer();
         // What the watch thread reads. Replaced whole, never changed in place.
         volatile WatchWork watchWork = new WatchWork();
         bool noWebhookSaid;
@@ -206,6 +207,7 @@ namespace RobloxKeeper
             watchKit.Hunts = this;
 
             logWatch.Joined = OnClientJoined;
+            logWatch.Identified = OnClientIdentified;
             PublishWatchWork();
         }
 
@@ -234,12 +236,41 @@ namespace RobloxKeeper
         {
             int pid = Watching.PidForLog(logFileName, lastClients);
             if (pid <= 0) return;
+            // Named first, so a hunt already knows this is its account's client.
+            NameClient(pid, e.UserId);
             clientWhere[pid] = e;
             PublishWatchWork();
             HuntJoined(pid, e);
             // Not for a join from before the app started: a join rule would
             // otherwise play on every client already in a game, at once.
             if (!e.Earlier) RulesJoined(pid);
+        }
+
+        // Roblox said who a client is, a read after its join.
+        void OnClientIdentified(string logFileName, RobloxLogEvent e)
+        {
+            NameClient(Watching.PidForLog(logFileName, lastClients), e.UserId);
+        }
+
+        // Names a client after the account its log says it is.
+        //
+        // The process the app started is not always the one that plays: Roblox
+        // can hand a launch to one of its own tray copies and exit, and the
+        // game then runs in a process nobody named. The log is right however
+        // the client was started, so it wins over a name given at launch.
+        void NameClient(int pid, string userId)
+        {
+            if (pid <= 0 || string.IsNullOrEmpty(userId)) return;
+            EnsureAccounts();
+            RobloxAccount recorded;
+            string name = namer.NameFor(userId, accounts,
+                delegate { OnUi(delegate { NameClient(pid, userId); }); }, out recorded);
+            if (recorded != null) accounts.Save();
+            if (name == null || name == clientLabels.NameFor(pid)) return;
+
+            clientLabels.Assign(pid, name);
+            HuntAdopt(pid, name);
+            PublishWatchWork();
         }
 
         // Once a second, from the main loop.

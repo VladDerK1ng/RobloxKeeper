@@ -40,6 +40,7 @@ namespace RobloxKeeper
 
         public string Cookie { get; private set; }
         public string DetectedName { get; private set; }
+        public string DetectedUserId { get; private set; }
 
         // Raised when Play is pressed on a page. The URL already carries a
         // launch ticket for whichever account this browser is signed in as.
@@ -260,7 +261,14 @@ namespace RobloxKeeper
                 {
                     status.Text = "Signed in - checking which account...";
                     string cookie = found;
-                    DetectedName = await Task.Run(delegate { return RobloxAuth.GetUsername(cookie); });
+                    string[] who = await Task.Run(delegate
+                    {
+                        string id;
+                        string name = RobloxAuth.WhoIs(cookie, out id);
+                        return new string[] { name, id };
+                    });
+                    DetectedName = who[0];
+                    DetectedUserId = who[1];
                 }
 
                 status.ForeColor = Theme.Text;

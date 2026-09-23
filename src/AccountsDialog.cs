@@ -239,12 +239,13 @@ namespace RobloxKeeper
         {
             string tempDir = ProfileDir("new-" + DateTime.Now.Ticks);
 
-            string cookie, detected;
+            string cookie, detected, userId;
             using (AccountBrowserForm login = new AccountBrowserForm(tempDir, null, true))
             {
                 if (login.ShowDialog(this) != DialogResult.OK) { TryDelete(tempDir); return; }
                 cookie = login.Cookie;
                 detected = login.DetectedName;
+                userId = login.DetectedUserId;
             }
             if (string.IsNullOrEmpty(cookie)) { TryDelete(tempDir); return; }
 
@@ -276,6 +277,7 @@ namespace RobloxKeeper
             }
             a.Cookie = cookie;
             a.ProfilePath = actualDir;
+            if (!string.IsNullOrEmpty(userId)) a.UserId = userId;
             store.Add(a);
             store.Save();
 
