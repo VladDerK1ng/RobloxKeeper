@@ -762,7 +762,7 @@ namespace RobloxKeeper
         void BuildTray()
         {
             tray = new NotifyIcon();
-            try { tray.Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); }
+            try { tray.Icon = Ui.AppIcon ?? SystemIcons.Application; }
             catch { tray.Icon = SystemIcons.Application; }
             tray.Text = "RobloxKeeper";
             tray.Visible = true;

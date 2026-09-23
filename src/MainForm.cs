@@ -129,7 +129,7 @@ namespace RobloxKeeper
             BackColor = Theme.Bg;
             ForeColor = Theme.Text;
             Font = new Font("Segoe UI", 9.75f);
-            try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }
+            Ui.GiveAppIcon(this);
 
             BuildUi();
 

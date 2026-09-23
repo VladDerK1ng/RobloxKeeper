@@ -52,6 +52,29 @@ namespace RobloxKeeper
         public const int TITLE_Y = 14;
         public const int SUBTITLE_Y = 32;
 
+        static Icon appIcon;
+
+        // The exe's own icon, taken out once and given to every window, so
+        // none shows WinForms' default in the taskbar or in Alt+Tab. Null
+        // only if Windows can't read it, and then a window keeps its default.
+        public static Icon AppIcon
+        {
+            get
+            {
+                if (appIcon == null)
+                {
+                    try { appIcon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); }
+                    catch { }
+                }
+                return appIcon;
+            }
+        }
+
+        public static void GiveAppIcon(Form f)
+        {
+            if (AppIcon != null) f.Icon = AppIcon;
+        }
+
         public static Label SectionTitle(string text)
         {
             Label l = new Label();

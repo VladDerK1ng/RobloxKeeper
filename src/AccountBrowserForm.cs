@@ -63,7 +63,7 @@ namespace RobloxKeeper
             BackColor = Theme.Bg;
             ForeColor = Theme.Text;
             Font = new Font("Segoe UI", 9f);
-            try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }
+            Ui.GiveAppIcon(this);
 
             BuildBottomBar();
             if (!loginMode) BuildNavBar();

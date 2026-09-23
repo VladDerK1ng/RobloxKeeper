@@ -265,6 +265,7 @@ namespace RobloxKeeper
             f.MaximizeBox = false;
             f.MinimizeBox = false;
             f.ShowInTaskbar = false;
+            Ui.GiveAppIcon(f);
             f.StartPosition = FormStartPosition.CenterParent;
             f.ClientSize = new Size(w, h);
             f.BackColor = Theme.Bg;

@@ -38,6 +38,8 @@ namespace RobloxKeeper
             this.onLaunched = onLaunched;
 
             Text = "Accounts";
+            // It has a taskbar button, and showed WinForms' default icon on it.
+            Ui.GiveAppIcon(this);
             FormBorderStyle = FormBorderStyle.None;
             StartPosition = FormStartPosition.CenterParent;
             ClientSize = new Size(W, 500);
@@ -120,7 +122,9 @@ namespace RobloxKeeper
             close.Click += delegate { Close(); };
             card.Controls.Add(close);
 
-            TidyOrphanProfiles();
+            // When shown, not when made: it deletes folders, and a window made
+            // without being shown - by a test - has no business doing that.
+            Shown += delegate { TidyOrphanProfiles(); };
             Rebuild();
         }
 
@@ -476,39 +480,48 @@ namespace RobloxKeeper
         // empty" and "left alone" stay distinguishable.
         string Prompt(string question, string initial)
         {
-            using (Form f = new Form())
-            {
-                f.FormBorderStyle = FormBorderStyle.None;
-                f.StartPosition = FormStartPosition.CenterParent;
-                f.ClientSize = new Size(420, 140);
-                f.BackColor = Theme.Card;
-
-                Label q = Ui.MutedLabel(question, 16, 18, 8.25f);
-                q.MaximumSize = new Size(388, 0);
-                f.Controls.Add(q);
-
-                TextBox t = new TextBox();
-                t.Location = new Point(16, 68);
-                t.Size = new Size(388, 22);
-                t.BorderStyle = BorderStyle.FixedSingle;
-                t.BackColor = Theme.Inset;
-                t.ForeColor = Theme.Text;
-                t.Text = initial ?? "";
-                f.Controls.Add(t);
-
-                Button ok = Ui.AccentButton("OK", 224, 102, 90, 26);
-                ok.Font = new Font("Segoe UI", 8.25f, FontStyle.Bold);
-                ok.Click += delegate { f.DialogResult = DialogResult.OK; f.Close(); };
-                f.Controls.Add(ok);
-                f.AcceptButton = ok;
-
-                Button cancelBtn = Ui.AccentButton("Cancel", 314, 102, 90, 26);
-                cancelBtn.Font = new Font("Segoe UI", 8.25f, FontStyle.Bold);
-                cancelBtn.Click += delegate { f.DialogResult = DialogResult.Cancel; f.Close(); };
-                f.Controls.Add(cancelBtn);
-
+            TextBox t;
+            using (Form f = MakePrompt(question, initial, out t))
                 return f.ShowDialog(this) == DialogResult.OK ? t.Text.Trim() : null;
-            }
+        }
+
+        // Like every other small window: no taskbar button of its own - it
+        // had one, with WinForms' default icon on it.
+        public static Form MakePrompt(string question, string initial, out TextBox t)
+        {
+            Form f = new Form();
+            f.FormBorderStyle = FormBorderStyle.None;
+            f.ShowInTaskbar = false;
+            Ui.GiveAppIcon(f);
+            f.StartPosition = FormStartPosition.CenterParent;
+            f.ClientSize = new Size(420, 140);
+            f.BackColor = Theme.Card;
+
+            Label q = Ui.MutedLabel(question, 16, 18, 8.25f);
+            q.MaximumSize = new Size(388, 0);
+            f.Controls.Add(q);
+
+            TextBox box = new TextBox();
+            box.Location = new Point(16, 68);
+            box.Size = new Size(388, 22);
+            box.BorderStyle = BorderStyle.FixedSingle;
+            box.BackColor = Theme.Inset;
+            box.ForeColor = Theme.Text;
+            box.Text = initial ?? "";
+            f.Controls.Add(box);
+            t = box;
+
+            Button ok = Ui.AccentButton("OK", 224, 102, 90, 26);
+            ok.Font = new Font("Segoe UI", 8.25f, FontStyle.Bold);
+            ok.Click += delegate { f.DialogResult = DialogResult.OK; f.Close(); };
+            f.Controls.Add(ok);
+            f.AcceptButton = ok;
+
+            Button cancelBtn = Ui.PlainButton("Cancel", 314, 102, 90, 26);
+            cancelBtn.Click += delegate { f.DialogResult = DialogResult.Cancel; f.Close(); };
+            f.Controls.Add(cancelBtn);
+            f.CancelButton = cancelBtn;
+            return f;
         }
     }
 }
