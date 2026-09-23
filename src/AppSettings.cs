@@ -4,6 +4,46 @@ using System.IO;
 
 namespace RobloxKeeper
 {
+    // What the Accounts window was last left at: where to send them, and who
+    // was ticked. Names aren't secret - they are what the list shows.
+    class AccountsPrefs
+    {
+        public JoinWhere Where = JoinWhere.Any;
+        public bool Together;
+        public string Player = "";
+        public bool KeepFollowing;
+        public readonly List<string> Ticked = new List<string>();
+
+        public void Write(List<string> lines)
+        {
+            lines.Add("acc_where=" + (int)Where);
+            lines.Add("acc_together=" + (Together ? "1" : "0"));
+            lines.Add("acc_player=" + (Player ?? ""));
+            lines.Add("acc_follow=" + (KeepFollowing ? "1" : "0"));
+            List<string> names = new List<string>();
+            foreach (string n in Ticked) if (n.IndexOf('|') < 0) names.Add(n);
+            lines.Add("acc_ticked=" + string.Join("|", names.ToArray()));
+        }
+
+        // False when the key is somebody else's.
+        public bool Read(string key, string val)
+        {
+            int tmp;
+            if (key == "acc_where")
+                Where = int.TryParse(val, out tmp) && tmp >= 0 && tmp <= (int)JoinWhere.Player ? (JoinWhere)tmp : JoinWhere.Any;
+            else if (key == "acc_together") Together = val == "1";
+            else if (key == "acc_player") Player = val;
+            else if (key == "acc_follow") KeepFollowing = val == "1";
+            else if (key == "acc_ticked")
+            {
+                Ticked.Clear();
+                foreach (string n in val.Split('|')) if (n.Length > 0) Ticked.Add(n);
+            }
+            else return false;
+            return true;
+        }
+    }
+
     // Plain key=value text in %APPDATA%\RobloxKeeper\settings.txt. Unknown keys
     // are ignored and missing keys keep their default, so a settings file written
     // by an older or newer build always loads.
@@ -34,6 +74,8 @@ namespace RobloxKeeper
 
         public bool AutoTrim;
         public int AutoTrimMinutes = 10;
+
+        public AccountsPrefs Accounts = new AccountsPrefs();
 
         public static string Path
         {
@@ -90,6 +132,7 @@ namespace RobloxKeeper
                     else if (key == "memceilingmb") { if (int.TryParse(val, out tmp)) s.MemoryCeilingMb = tmp; }
                     else if (key == "autotrim") s.AutoTrim = val == "1";
                     else if (key == "autotrimmin") { if (int.TryParse(val, out tmp)) s.AutoTrimMinutes = tmp; }
+                    else s.Accounts.Read(key, val);
                 }
             }
             catch { }
@@ -139,6 +182,7 @@ namespace RobloxKeeper
                 lines.Add("memceilingmb=" + MemoryCeilingMb);
                 lines.Add("autotrim=" + (AutoTrim ? "1" : "0"));
                 lines.Add("autotrimmin=" + AutoTrimMinutes);
+                Accounts.Write(lines);
                 File.WriteAllLines(Path, lines.ToArray());
             }
             catch { }

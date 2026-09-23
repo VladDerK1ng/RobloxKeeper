@@ -428,7 +428,7 @@ namespace RobloxKeeper
             }
 
             EnsureAccounts();
-            using (AccountsDialog d = new AccountsDialog(accounts, Log, clientLabels.Assign))
+            using (AccountsDialog d = new AccountsDialog(accounts, this))
                 d.ShowDialog(this);
             UpdateAccountsLabel();
         }
@@ -776,7 +776,14 @@ namespace RobloxKeeper
             // app usually sits in the tray while it does - so it can be
             // stopped from here. Only offered while one is running.
             ToolStripItem stopHunt = menu.Items.Add("Stop hunting", null, delegate { StopHunts(true); });
-            menu.Opening += delegate { stopHunt.Visible = HuntsActive() > 0; };
+            // The same for following a player, which also moves clients.
+            ToolStripItem stopFollow = menu.Items.Add("Stop following", null, delegate { StopFollowing(true); });
+            menu.Opening += delegate
+            {
+                stopHunt.Visible = HuntsActive() > 0;
+                stopFollow.Visible = follow != null;
+                if (follow != null) stopFollow.Text = "Stop following " + follow.Request.Player;
+            };
             menu.Items.Add("Exit", null, delegate { Close(); });
             tray.ContextMenuStrip = menu;
             tray.DoubleClick += delegate { RestoreFromTray(); };

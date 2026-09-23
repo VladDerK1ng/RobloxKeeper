@@ -339,6 +339,7 @@ namespace RobloxKeeper
             }
             clientLabels.Prune(alivePids);
             HuntTick(alivePids);
+            FollowTick();
 
             perf.Prune(clients);
             perf.ApplyPending(clients, foregroundPid);

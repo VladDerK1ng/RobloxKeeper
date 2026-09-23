@@ -39,6 +39,21 @@ namespace RobloxKeeper
             return m.Success ? m.Groups[1].Value : null;
         }
 
+        // A link to one particular server - what the app's own Discord posts
+        // hold: games/start?placeId=...&gameInstanceId=... A plain game link
+        // names no server and is not one.
+        public static bool ServerFromUrl(string url, out string placeId, out string jobId)
+        {
+            placeId = jobId = null;
+            if (string.IsNullOrEmpty(url)) return false;
+            Match p = Regex.Match(url, @"[?&]placeId=(\d+)", RegexOptions.IgnoreCase);
+            Match j = Regex.Match(url, @"[?&]gameInstanceId=([0-9a-fA-F-]{36})", RegexOptions.IgnoreCase);
+            if (!p.Success || !j.Success) return false;
+            placeId = p.Groups[1].Value;
+            jobId = j.Groups[1].Value;
+            return true;
+        }
+
         // The URL RobloxPlayerBeta is started with.
         //
         // placelauncherurl is a URL nested inside this one, so it has to be
