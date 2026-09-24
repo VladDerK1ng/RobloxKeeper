@@ -335,11 +335,10 @@ namespace RobloxKeeper
             if (e.X >= Width - SPIN_W) Step(e.Y < Height / 2 ? 1 : -1);
         }
 
-        protected override void OnMouseWheel(MouseEventArgs e)
-        {
-            base.OnMouseWheel(e);
-            Step(e.Delta > 0 ? 1 : -1);
-        }
+        // No mouse-wheel stepping. Windows hands the wheel to whatever is under
+        // the pointer, focused or not, so scrolling the window past this box
+        // used to change the setting it holds and save it. Left unhandled, the
+        // wheel goes on to the window behind it, which scrolls as expected.
 
         protected override void OnMouseMove(MouseEventArgs e)
         {
@@ -534,13 +533,10 @@ namespace RobloxKeeper
             Glow(opened, 1);
         }
 
-        protected override void OnMouseWheel(MouseEventArgs e)
-        {
-            base.OnMouseWheel(e);
-            if (Items.Count == 0) return;
-            int next = selected + (e.Delta > 0 ? -1 : 1);
-            if (next >= 0 && next < Items.Count) SelectedIndex = next;
-        }
+        // No mouse-wheel stepping, for the same reason as ThemedNumeric: a
+        // scroll passing over a closed dropdown is not a choice, and it used to
+        // change and save one - the Performance default among them. Choosing
+        // means opening the list.
 
         protected override void OnPaint(PaintEventArgs e)
         {
