@@ -73,8 +73,8 @@ namespace RobloxKeeper.Tests
         public static void TestTemporaryFoldersNobodyOwnsAreOrphans()
         {
             List<string> folders = new List<string>(new string[]
-                { "new_111_aaaaaaaa", "new_222_bbbbbbbb", "mrdark_9e1e2a28" });
-            List<string> inUse = new List<string>(new string[] { "mrdark_9e1e2a28" });
+                { "new_111_aaaaaaaa", "new_222_bbbbbbbb", "main_9e1e2a28" });
+            List<string> inUse = new List<string>(new string[] { "main_9e1e2a28" });
 
             IList<string> orphans = AccountStore.OrphanProfiles(folders, inUse);
 
