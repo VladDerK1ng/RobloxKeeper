@@ -42,6 +42,7 @@ namespace RobloxKeeper
     {
         void OnAfkToggled(object sender, EventArgs e)
         {
+            if (!started) return;          // drawn only: no timer to start
             if (!chkAfk.Checked) nudgeTimer.Stop();
             if (!initializing)
                 Log(chkAfk.Checked

@@ -113,9 +113,24 @@ namespace RobloxKeeper
         DateTime lastClientOpened = DateTime.MinValue;
         bool clientTrackingReady;
 
-        public MainForm()
+        // False for a window made only to be drawn; see MainForm(bool).
+        readonly bool started;
+
+        internal bool Started { get { return started; } }
+        internal bool TrayShowing { get { return tray != null && tray.Visible; } }
+        internal bool HoldsMutex { get { return keeper.Running; } }
+
+        public MainForm() : this(true) { }
+
+        // With start false the window is built and nothing else: nothing is
+        // read, written, watched or launched, no tray icon appears, and no
+        // timer runs. It exists so the window can be drawn as it looks - the
+        // picture at the top of the README - on a machine where the real app
+        // is running.
+        internal MainForm(bool start)
         {
-            startHidden = Program.StartMinimized;
+            started = start;
+            startHidden = start && Program.StartMinimized;
             Text = "RobloxKeeper";
             // Borderless: the system title bar is bright chrome that no dark
             // theme can reach, so the window draws its own in BuildTitleBar.
@@ -129,6 +144,14 @@ namespace RobloxKeeper
             Ui.GiveAppIcon(this);
 
             BuildUi();
+
+            if (!start)
+            {
+                tray.Visible = false;
+                // Nothing done to a window that is only drawn is ever saved.
+                initializing = true;
+                return;
+            }
 
             ghostCleaner.Log = Log;
             perf.Log = Log;
@@ -225,7 +248,7 @@ namespace RobloxKeeper
         protected override void OnHandleCreated(EventArgs e)
         {
             base.OnHandleCreated(e);
-            if (!autostartChecked)
+            if (!autostartChecked && started)
             {
                 autostartChecked = true;
                 CheckAutostart();
@@ -604,6 +627,7 @@ namespace RobloxKeeper
 
         void OnMultiToggled(object sender, EventArgs e)
         {
+            if (!started) return;          // drawn only: never queue on the mutex
             if (chkMulti.Checked)
             {
                 StartMulti();
@@ -898,6 +922,12 @@ namespace RobloxKeeper
 
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
+            if (!started)
+            {
+                tray.Dispose();
+                base.OnFormClosing(e);
+                return;
+            }
             SaveSettings();
             uiTimer.Stop();
             nudgeTimer.Stop();
