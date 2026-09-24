@@ -25,13 +25,13 @@ namespace RobloxKeeper.Tests
             {
                 Perf.Log = delegate(string s) { Logged.Add(s); };
                 Perf.Clock = delegate { return Now; };
-                Perf.Applier = delegate(int pid, ClientProfile p, int block, out string error)
+                Perf.Applier = delegate(int pid, ClientProfile p, out string error)
                 {
                     Applied.Add(pid + "=" + p);
                     error = null;
                     return true;
                 };
-                Perf.Checker = delegate(int pid, ClientProfile want, int block) { Checks++; return Drift; };
+                Perf.Checker = delegate(int pid, ClientProfile want) { Checks++; return Drift; };
             }
         }
 

@@ -71,24 +71,5 @@ namespace RobloxKeeper.Tests
             Assert.Contains("priority", problem, "priority drift reported");
             Assert.Contains("core", problem, "affinity drift reported");
         }
-
-        // ---------- the mask itself ----------
-
-        public static void TestAskingForEveryCoreGivesEveryCore()
-        {
-            long all = (long)PerformanceManager.AffinityMask(0, 0);
-            long expected = Environment.ProcessorCount >= 64
-                ? -1L : (1L << Environment.ProcessorCount) - 1;
-
-            Assert.Equal(expected, all, "zero cores means no pinning at all");
-        }
-
-        public static void TestSuccessiveBlocksDoNotOverlap()
-        {
-            long first = (long)PerformanceManager.AffinityMask(4, 0);
-            long second = (long)PerformanceManager.AffinityMask(4, 1);
-
-            Assert.Equal(0L, first & second, "blocks 0 and 1 share no core");
-        }
     }
 }

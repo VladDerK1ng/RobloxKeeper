@@ -11,14 +11,14 @@ namespace RobloxKeeper
     class ClientTuneDialog : Form
     {
         const int W = 372;
-        const int H = 314;
+        const int H = 280;
         const int TITLEBAR_H = 40;
 
         readonly int pid;
         readonly int clientIndex;
         readonly PerformanceManager perf;
 
-        ThemedPicker cmbPriority, cmbCores;
+        ThemedPicker cmbPriority;
         ThemedCheckBox chkEco;
         Label lblRam;
         Button btnTrim;
@@ -88,26 +88,21 @@ namespace RobloxKeeper
             // --- Settings card ---
             Card card = new Card();
             card.Location = new Point(12, 46);
-            card.Size = new Size(348, 212);
+            card.Size = new Size(348, 178);
             Controls.Add(card);
 
             lblRam = Ui.MutedLabel("", Ui.PAD, 14, 8.25f);
             lblRam.MaximumSize = new Size(308, 0);
             card.Controls.Add(lblRam);
 
-            const int row1 = 44, row2 = 78, rowEco = 112, ROW_H = 26;
+            // No cores row: every client gets every core (see ClientProfile).
+            const int row1 = 44, rowEco = 78, ROW_H = 26;
 
             card.Controls.Add(Ui.RowLabel("CPU priority", Ui.PAD, row1, ROW_H, 120, 9.75f, Theme.Muted));
             cmbPriority = Ui.DarkCombo(150, row1, 178);
             Ui.FillPriorityCombo(cmbPriority);
             cmbPriority.SelectedIndex = Result.Priority;
             card.Controls.Add(cmbPriority);
-
-            card.Controls.Add(Ui.RowLabel("Cores", Ui.PAD, row2, ROW_H, 120, 9.75f, Theme.Muted));
-            cmbCores = Ui.DarkCombo(150, row2, 178);
-            Ui.FillCoreCombo(cmbCores);
-            Ui.SelectCoreCount(cmbCores, Result.Cores);
-            card.Controls.Add(cmbCores);
 
             chkEco = Ui.DarkCheck("Efficiency mode (EcoQoS)", Ui.PAD, rowEco, 9f);
             chkEco.ForeColor = Theme.Text;
@@ -116,17 +111,17 @@ namespace RobloxKeeper
             card.Controls.Add(chkEco);
 
             // Indented to sit under the checkbox's text rather than its box.
-            Label hint = Ui.MutedLabel("Parks the client on efficiency cores and caps its clock.", 45, 140, 8.25f);
+            Label hint = Ui.MutedLabel("Parks the client on efficiency cores and caps its clock.", 45, 106, 8.25f);
             hint.MaximumSize = new Size(283, 0);
             card.Controls.Add(hint);
 
-            btnTrim = Ui.AccentButton("Trim memory now", 188, 166, 140, 30);
+            btnTrim = Ui.AccentButton("Trim memory now", 188, 132, 140, 30);
             btnTrim.Font = new Font("Segoe UI", 8.25f, FontStyle.Bold);
             btnTrim.Click += delegate { TrimNow(); };
             card.Controls.Add(btnTrim);
 
             // --- Footer ---
-            const int footer = 270;
+            const int footer = 236;
             Button ok = Ui.AccentButton("Apply", 244, footer, 116, 32);
             ok.Click += delegate { Commit(false); };
             Controls.Add(ok);
@@ -194,7 +189,6 @@ namespace RobloxKeeper
             if (!useDefault)
             {
                 Result.Priority = cmbPriority.SelectedIndex;
-                Result.Cores = Ui.SelectedCoreCount(cmbCores);
                 Result.Eco = chkEco.Checked;
             }
             DialogResult = DialogResult.OK;

@@ -63,7 +63,7 @@ namespace RobloxKeeper
         ThemedCheckBox chkAutostart, chkAutoGhost, chkAutoTrim, chkPerfEco, chkIdleOnly,
                        chkThrottleBg, chkCeiling;
         ThemedNumeric numInterval, numTrimEvery, numCeiling;
-        ThemedPicker cmbKeys, cmbPerfPriority, cmbPerfCores, cmbCustomKey;
+        ThemedPicker cmbKeys, cmbPerfPriority, cmbCustomKey;
         Button btnNudge, btnZombie, btnCloseRbx, btnTrimAll, btnApplyAll, btnCaptureKey, btnAfkMode, btnFixHandler, btnAccounts;
         Label lblCountdown, lblMultiStatus, lblClientsTitle, lblGhosts, lblUpdating, lblCustomKey, lblHandler, lblAccounts;
         Dot statusDot;
@@ -157,7 +157,6 @@ namespace RobloxKeeper
                 cmbKeys.SelectedIndex = settings.KeysIndex;
             chkAutoGhost.Checked = settings.AutoGhost;
             cmbPerfPriority.SelectedIndex = settings.PerfPriority;
-            Ui.SelectCoreCount(cmbPerfCores, settings.PerfCores);
             chkPerfEco.Checked = settings.PerfEco;
             chkAutoTrim.Checked = settings.AutoTrim;
             chkThrottleBg.Checked = settings.ThrottleBackground;
@@ -803,7 +802,6 @@ namespace RobloxKeeper
             settings.Multi = chkMulti.Checked;
             settings.AutoGhost = chkAutoGhost.Checked;
             settings.PerfPriority = cmbPerfPriority.SelectedIndex;
-            settings.PerfCores = Ui.SelectedCoreCount(cmbPerfCores);
             settings.PerfEco = chkPerfEco.Checked;
             settings.AutoTrim = chkAutoTrim.Checked;
             settings.AutoTrimMinutes = numTrimEvery.Value;

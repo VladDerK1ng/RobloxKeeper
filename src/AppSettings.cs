@@ -56,8 +56,11 @@ namespace RobloxKeeper
         public bool AutoGhost = true;
 
         // Default resource profile handed to every client that launches.
+        // Older versions also saved a core count here ("perfcores"). Locking
+        // clients to cores was what froze them, so that key is read past and
+        // never written again - a file that still has "1 core" in it no
+        // longer does anything.
         public int PerfPriority = PerformanceManager.PRIORITY_NORMAL;
-        public int PerfCores;            // 0 = all cores
         public bool PerfEco;
 
         // Wait for a lull before nudging, so a nudge never lands mid-match.
@@ -91,7 +94,6 @@ namespace RobloxKeeper
         {
             ClientProfile p = new ClientProfile();
             p.Priority = PerfPriority;
-            p.Cores = PerfCores;
             p.Eco = PerfEco;
             return p;
         }
@@ -99,43 +101,47 @@ namespace RobloxKeeper
         public void FromProfile(ClientProfile p)
         {
             PerfPriority = p.Priority;
-            PerfCores = p.Cores;
             PerfEco = p.Eco;
         }
 
         public static AppSettings Load()
         {
-            AppSettings s = new AppSettings();
             try
             {
-                if (!File.Exists(Path)) return s;
-                foreach (string line in File.ReadAllLines(Path))
-                {
-                    int eq = line.IndexOf('=');
-                    if (eq < 1) continue;
-                    string key = line.Substring(0, eq).Trim();
-                    string val = line.Substring(eq + 1).Trim();
-                    int tmp;
-                    if (key == "afk") s.Afk = val == "1";
-                    else if (key == "interval") { if (int.TryParse(val, out tmp)) s.IntervalMinutes = tmp; }
-                    else if (key == "keys") { if (int.TryParse(val, out tmp)) s.KeysIndex = tmp; }
-                    else if (key == "multi") s.Multi = val == "1";
-                    else if (key == "autoghost") s.AutoGhost = val == "1";
-                    else if (key == "perfpriority") { if (int.TryParse(val, out tmp)) s.PerfPriority = tmp; }
-                    else if (key == "perfcores") { if (int.TryParse(val, out tmp)) s.PerfCores = tmp; }
-                    else if (key == "perfeco") s.PerfEco = val == "1";
-                    else if (key == "idleonly") s.IdleOnly = val == "1";
-                    else if (key == "customkeyname") s.CustomKeyName = val;
-                    else if (key == "customkeyvk") { if (int.TryParse(val, out tmp)) s.CustomKeyVk = (byte)tmp; }
-                    else if (key == "throttlebg") s.ThrottleBackground = val == "1";
-                    else if (key == "memceiling") s.MemoryCeiling = val == "1";
-                    else if (key == "memceilingmb") { if (int.TryParse(val, out tmp)) s.MemoryCeilingMb = tmp; }
-                    else if (key == "autotrim") s.AutoTrim = val == "1";
-                    else if (key == "autotrimmin") { if (int.TryParse(val, out tmp)) s.AutoTrimMinutes = tmp; }
-                    else s.Accounts.Read(key, val);
-                }
+                if (File.Exists(Path)) return Parse(File.ReadAllLines(Path));
             }
             catch { }
+            return Parse(new string[0]);
+        }
+
+        public static AppSettings Parse(IEnumerable<string> lines)
+        {
+            AppSettings s = new AppSettings();
+            foreach (string line in lines)
+            {
+                int eq = line.IndexOf('=');
+                if (eq < 1) continue;
+                string key = line.Substring(0, eq).Trim();
+                string val = line.Substring(eq + 1).Trim();
+                int tmp;
+                if (key == "afk") s.Afk = val == "1";
+                else if (key == "interval") { if (int.TryParse(val, out tmp)) s.IntervalMinutes = tmp; }
+                else if (key == "keys") { if (int.TryParse(val, out tmp)) s.KeysIndex = tmp; }
+                else if (key == "multi") s.Multi = val == "1";
+                else if (key == "autoghost") s.AutoGhost = val == "1";
+                else if (key == "perfpriority") { if (int.TryParse(val, out tmp)) s.PerfPriority = tmp; }
+                else if (key == "perfcores") { }   // ignored on purpose - see the note above PerfPriority
+                else if (key == "perfeco") s.PerfEco = val == "1";
+                else if (key == "idleonly") s.IdleOnly = val == "1";
+                else if (key == "customkeyname") s.CustomKeyName = val;
+                else if (key == "customkeyvk") { if (int.TryParse(val, out tmp)) s.CustomKeyVk = (byte)tmp; }
+                else if (key == "throttlebg") s.ThrottleBackground = val == "1";
+                else if (key == "memceiling") s.MemoryCeiling = val == "1";
+                else if (key == "memceilingmb") { if (int.TryParse(val, out tmp)) s.MemoryCeilingMb = tmp; }
+                else if (key == "autotrim") s.AutoTrim = val == "1";
+                else if (key == "autotrimmin") { if (int.TryParse(val, out tmp)) s.AutoTrimMinutes = tmp; }
+                else s.Accounts.Read(key, val);
+            }
             Clamp(s);
             return s;
         }
@@ -148,8 +154,6 @@ namespace RobloxKeeper
             if (s.IntervalMinutes > 19) s.IntervalMinutes = 19;
             if (s.PerfPriority < 0 || s.PerfPriority > PerformanceManager.PRIORITY_HIGH)
                 s.PerfPriority = PerformanceManager.PRIORITY_NORMAL;
-            if (s.PerfCores < 0) s.PerfCores = 0;
-            if (s.PerfCores >= Environment.ProcessorCount) s.PerfCores = 0;
             // A hand-edited or stale settings file must never arm an unsafe
             // key or a method index that no longer exists.
             if (s.CustomKeyVk != 0 && !NudgeKeys.IsSafe(s.CustomKeyVk)) s.CustomKeyVk = 0;
@@ -165,27 +169,31 @@ namespace RobloxKeeper
             try
             {
                 Directory.CreateDirectory(System.IO.Path.GetDirectoryName(Path));
-                List<string> lines = new List<string>();
-                lines.Add("afk=" + (Afk ? "1" : "0"));
-                lines.Add("interval=" + IntervalMinutes);
-                lines.Add("keys=" + KeysIndex);
-                lines.Add("multi=" + (Multi ? "1" : "0"));
-                lines.Add("autoghost=" + (AutoGhost ? "1" : "0"));
-                lines.Add("perfpriority=" + PerfPriority);
-                lines.Add("perfcores=" + PerfCores);
-                lines.Add("perfeco=" + (PerfEco ? "1" : "0"));
-                lines.Add("idleonly=" + (IdleOnly ? "1" : "0"));
-                lines.Add("customkeyname=" + (CustomKeyName ?? ""));
-                lines.Add("customkeyvk=" + CustomKeyVk);
-                lines.Add("throttlebg=" + (ThrottleBackground ? "1" : "0"));
-                lines.Add("memceiling=" + (MemoryCeiling ? "1" : "0"));
-                lines.Add("memceilingmb=" + MemoryCeilingMb);
-                lines.Add("autotrim=" + (AutoTrim ? "1" : "0"));
-                lines.Add("autotrimmin=" + AutoTrimMinutes);
-                Accounts.Write(lines);
-                File.WriteAllLines(Path, lines.ToArray());
+                File.WriteAllLines(Path, ToLines());
             }
             catch { }
+        }
+
+        public string[] ToLines()
+        {
+            List<string> lines = new List<string>();
+            lines.Add("afk=" + (Afk ? "1" : "0"));
+            lines.Add("interval=" + IntervalMinutes);
+            lines.Add("keys=" + KeysIndex);
+            lines.Add("multi=" + (Multi ? "1" : "0"));
+            lines.Add("autoghost=" + (AutoGhost ? "1" : "0"));
+            lines.Add("perfpriority=" + PerfPriority);
+            lines.Add("perfeco=" + (PerfEco ? "1" : "0"));
+            lines.Add("idleonly=" + (IdleOnly ? "1" : "0"));
+            lines.Add("customkeyname=" + (CustomKeyName ?? ""));
+            lines.Add("customkeyvk=" + CustomKeyVk);
+            lines.Add("throttlebg=" + (ThrottleBackground ? "1" : "0"));
+            lines.Add("memceiling=" + (MemoryCeiling ? "1" : "0"));
+            lines.Add("memceilingmb=" + MemoryCeilingMb);
+            lines.Add("autotrim=" + (AutoTrim ? "1" : "0"));
+            lines.Add("autotrimmin=" + AutoTrimMinutes);
+            Accounts.Write(lines);
+            return lines.ToArray();
         }
     }
 }

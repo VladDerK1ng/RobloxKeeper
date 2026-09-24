@@ -12,10 +12,10 @@ namespace RobloxKeeper.Tests
     // and handing their idle memory back.
     static class PerformanceModesTests
     {
-        static ClientProfile P(int priority, int cores, bool eco)
+        static ClientProfile P(int priority, bool eco)
         {
             ClientProfile p = new ClientProfile();
-            p.Priority = priority; p.Cores = cores; p.Eco = eco;
+            p.Priority = priority; p.Eco = eco;
             return p;
         }
 
@@ -23,7 +23,7 @@ namespace RobloxKeeper.Tests
 
         public static void TestThrottlingDropsPriorityAndTurnsEcoOn()
         {
-            ClientProfile t = PerformanceManager.Throttled(P(PerformanceManager.PRIORITY_NORMAL, 0, false));
+            ClientProfile t = PerformanceManager.Throttled(P(PerformanceManager.PRIORITY_NORMAL, false));
 
             Assert.Equal(PerformanceManager.PRIORITY_BELOW, t.Priority, "one step down");
             Assert.True(t.Eco, "efficiency mode on");
@@ -31,19 +31,13 @@ namespace RobloxKeeper.Tests
 
         public static void TestThrottlingNeverGoesBelowTheLowestPriority()
         {
-            ClientProfile t = PerformanceManager.Throttled(P(PerformanceManager.PRIORITY_LOW, 0, true));
+            ClientProfile t = PerformanceManager.Throttled(P(PerformanceManager.PRIORITY_LOW, true));
             Assert.Equal(PerformanceManager.PRIORITY_LOW, t.Priority, "already at the floor");
-        }
-
-        public static void TestThrottlingKeepsTheCorePinningTheUserChose()
-        {
-            ClientProfile t = PerformanceManager.Throttled(P(PerformanceManager.PRIORITY_HIGH, 4, false));
-            Assert.Equal(4, t.Cores, "core choice is the user's, not ours to change");
         }
 
         public static void TestThrottlingDoesNotMutateTheOriginal()
         {
-            ClientProfile original = P(PerformanceManager.PRIORITY_NORMAL, 0, false);
+            ClientProfile original = P(PerformanceManager.PRIORITY_NORMAL, false);
             PerformanceManager.Throttled(original);
 
             Assert.Equal(PerformanceManager.PRIORITY_NORMAL, original.Priority,
@@ -57,7 +51,7 @@ namespace RobloxKeeper.Tests
             perf.Log = delegate { };
             perf.ThrottleBackground = true;
 
-            ClientProfile normal = P(PerformanceManager.PRIORITY_NORMAL, 0, false);
+            ClientProfile normal = P(PerformanceManager.PRIORITY_NORMAL, false);
             perf.Defaults = normal;
 
             Assert.False(perf.EffectiveFor(100, 100).Eco, "foreground client left alone");
@@ -69,7 +63,7 @@ namespace RobloxKeeper.Tests
             PerformanceManager perf = new PerformanceManager();
             perf.Log = delegate { };
             perf.ThrottleBackground = false;
-            perf.Defaults = P(PerformanceManager.PRIORITY_NORMAL, 0, false);
+            perf.Defaults = P(PerformanceManager.PRIORITY_NORMAL, false);
 
             Assert.False(perf.EffectiveFor(200, 100).Eco, "background client untouched");
         }
@@ -123,7 +117,7 @@ namespace RobloxKeeper.Tests
         {
             PerformanceManager perf = new PerformanceManager();
             perf.Log = delegate { };
-            perf.Defaults = P(PerformanceManager.PRIORITY_NORMAL, 0, false);
+            perf.Defaults = P(PerformanceManager.PRIORITY_NORMAL, false);
 
             List<ClientInfo> clients = new List<ClientInfo>();
             ClientInfo a = new ClientInfo(); a.Pid = 100; clients.Add(a);

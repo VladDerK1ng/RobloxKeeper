@@ -6,67 +6,46 @@ using System.Runtime.InteropServices;
 namespace RobloxKeeper
 {
     // What the user asked Windows to give one Roblox client.
+    //
+    // There is deliberately no core count. Pinning a client to cores was what
+    // made Roblox freeze: about ninety threads squeezed onto one core queue
+    // behind each other until Windows' starvation boost lets one through, five
+    // seconds at a time, while the other cores sit idle - and the hidden copy
+    // Roblox starts when a game closes inherits the same lock. Windows' own
+    // scheduler already spreads clients across every core better than a fixed
+    // mask can, so every client gets every core.
     class ClientProfile
     {
         public int Priority = PerformanceManager.PRIORITY_NORMAL;
-        public int Cores;        // 0 = every core
         public bool Eco;         // EcoQoS / "Efficiency mode"
 
         public ClientProfile Clone()
         {
             ClientProfile c = new ClientProfile();
             c.Priority = Priority;
-            c.Cores = Cores;
             c.Eco = Eco;
             return c;
         }
 
         public bool SameAs(ClientProfile o)
         {
-            return o != null && o.Priority == Priority && o.Cores == Cores && o.Eco == Eco;
+            return o != null && o.Priority == Priority && o.Eco == Eco;
         }
 
         public override string ToString()
         {
             string s = PerformanceManager.PriorityName(Priority);
-            if (Cores > 0) s += ", " + Cores + " core" + (Cores == 1 ? "" : "s");
             if (Eco) s += ", eco";
             return s;
         }
-    }
-
-    // Hands each client a block of cores and lets it keep that block.
-    //
-    // The obvious version - number the clients and give client N the Nth block -
-    // is wrong, because the numbering comes from a list sorted by start time.
-    // Close the oldest client and every later client's number shifts by one,
-    // while the masks already applied to them do not. Two clients then believe
-    // they own blocks that overlap, which is precisely what pinning was meant to
-    // prevent. A block belongs to a PID until that PID goes away.
-    class CoreBlocks
-    {
-        readonly Dictionary<int, int> blocks = new Dictionary<int, int>();
-
-        public int BlockFor(int pid)
-        {
-            int block;
-            if (blocks.TryGetValue(pid, out block)) return block;
-
-            block = 0;
-            while (blocks.ContainsValue(block)) block++;
-            blocks[pid] = block;
-            return block;
-        }
-
-        public void Release(int pid) { blocks.Remove(pid); }
     }
 
     // Per-client CPU and memory allocation.
     //
     // Roblox gives every instance the same slice of the machine, which is wrong
     // when one client is the one being played and three are parked in an AFK
-    // game. Priority, core affinity and EcoQoS let the foreground client win, and
-    // a working-set trim hands the parked clients' idle memory back to Windows.
+    // game. Priority and EcoQoS let the foreground client win, and a
+    // working-set trim hands the parked clients' idle memory back to Windows.
     class PerformanceManager
     {
         public const int PRIORITY_LOW = 0;
@@ -83,7 +62,7 @@ namespace RobloxKeeper
         // Applying a profile to a process. Swapped out by the tests so the retry
         // ladder and the "new clients only" rule can be driven without a real
         // Roblox client to tune.
-        public delegate bool ApplyFunc(int pid, ClientProfile profile, int coreBlock, out string error);
+        public delegate bool ApplyFunc(int pid, ClientProfile profile, out string error);
 
         public Action<string> Log;
         public ApplyFunc Applier;
@@ -117,7 +96,6 @@ namespace RobloxKeeper
         readonly Dictionary<int, ClientProfile> applied = new Dictionary<int, ClientProfile>();
 
         readonly Dictionary<int, Retry> retries = new Dictionary<int, Retry>();
-        readonly CoreBlocks blocks = new CoreBlocks();
 
         DateTime lastAutoTrim = DateTime.Now;
 
@@ -182,7 +160,7 @@ namespace RobloxKeeper
             ClientProfile t = p.Clone();
             if (t.Priority > PRIORITY_LOW) t.Priority--;
             t.Eco = true;
-            return t;                 // core pinning is the user's choice, left alone
+            return t;
         }
 
         // A client sitting on more memory than the user is willing to give it.
@@ -204,14 +182,12 @@ namespace RobloxKeeper
                 {
                     p = new ClientProfile();
                     p.Priority = PRIORITY_NORMAL;
-                    p.Cores = 0;
                     p.Eco = false;
                 }
                 else
                 {
                     p = new ClientProfile();
                     p.Priority = PRIORITY_BELOW;
-                    p.Cores = 0;
                     p.Eco = true;
                 }
                 SetOverride(ci.Pid, p);
@@ -374,7 +350,6 @@ namespace RobloxKeeper
                 overrides.Remove(pid);
                 assigned.Remove(pid);
                 retries.Remove(pid);
-                blocks.Release(pid);
                 caps.Remove(pid);
                 capRetry.Remove(pid);
                 checkedAt.Remove(pid);
@@ -390,7 +365,7 @@ namespace RobloxKeeper
         // Reading a client's settings back, to see whether they are still what
         // was set. Null when they are, otherwise what changed. Left unset - as
         // the tests leave it - nothing is ever re-checked.
-        public delegate string CheckFunc(int pid, ClientProfile want, int coreBlock);
+        public delegate string CheckFunc(int pid, ClientProfile want);
         public CheckFunc Checker;
 
         // How long a client's settings are trusted before being read again.
@@ -419,7 +394,7 @@ namespace RobloxKeeper
                 if (retries.TryGetValue(pid, out retry) && Clock() < retry.NextAt) continue;
 
                 string error;
-                if (Applier(pid, want, blocks.BlockFor(pid), out error))
+                if (Applier(pid, want, out error))
                 {
                     bool first = !applied.ContainsKey(pid);
                     applied[pid] = want.Clone();
@@ -449,6 +424,8 @@ namespace RobloxKeeper
         // Applied a while ago and changed since? Something else - the game,
         // another tool, Task Manager - can set a client's priority or cores
         // after this app has, and nothing would notice for as long as it ran.
+        // It is also what takes a client an older version locked to one core
+        // and puts it back on every core.
         // Read back every half minute; what has changed is set again, and said
         // the first time and every tenth after, so something that keeps
         // changing it can't fill the activity list.
@@ -460,7 +437,7 @@ namespace RobloxKeeper
             checkedAt[pid] = Clock();
 
             string drift = null;
-            try { drift = Checker(pid, want, blocks.BlockFor(pid)); } catch { }
+            try { drift = Checker(pid, want); } catch { }
             if (drift == null) return false;
 
             int n;
@@ -472,10 +449,10 @@ namespace RobloxKeeper
         }
 
         // The live read-back.
-        public static string CheckLive(int pid, ClientProfile want, int coreBlock)
+        public static string CheckLive(int pid, ClientProfile want)
         {
             using (Process p = Process.GetProcessById(pid))
-                return ReadBackProblem(ToPriorityClass(want.Priority), (long)AffinityMask(want.Cores, coreBlock), want.Eco,
+                return ReadBackProblem(ToPriorityClass(want.Priority), (long)AllCoresMask(), want.Eco,
                     p.PriorityClass, (long)p.ProcessorAffinity, EfficiencyMode(pid));
         }
 
@@ -493,12 +470,12 @@ namespace RobloxKeeper
             ApplyPending(clients);
         }
 
-        public bool Apply(int pid, ClientProfile profile, int coreBlock, out string error)
+        public bool Apply(int pid, ClientProfile profile, out string error)
         {
             error = null;
             List<string> problems = new List<string>();
             ProcessPriorityClass wantPriority = ToPriorityClass(profile.Priority);
-            long wantMask = (long)AffinityMask(profile.Cores, coreBlock);
+            long wantMask = (long)AllCoresMask();
 
             try
             {
@@ -608,21 +585,12 @@ namespace RobloxKeeper
             }
         }
 
-        // Successive clients get different, non-overlapping blocks of cores, so
-        // asking for "4 cores" twice on a 16-thread CPU produces two clients that
-        // genuinely do not fight, rather than two pinned to the same four.
-        public static IntPtr AffinityMask(int coreCount, int clientIndex)
+        // Every logical processor: what a process has when nothing has pinned
+        // it, and what every client is given.
+        public static IntPtr AllCoresMask()
         {
             int total = Environment.ProcessorCount;
-            if (total > 64) total = 64;          // an affinity mask is one word wide
-            long all = total >= 64 ? -1L : (1L << total) - 1;
-            if (coreCount <= 0 || coreCount >= total) return (IntPtr)all;
-
-            long mask = 0;
-            int start = (clientIndex * coreCount) % total;
-            for (int i = 0; i < coreCount; i++)
-                mask |= 1L << ((start + i) % total);
-            return (IntPtr)mask;
+            return (IntPtr)(total >= 64 ? -1L : (1L << total) - 1);   // an affinity mask is one word wide
         }
 
         public static bool SetEfficiencyMode(int pid, bool on)

@@ -22,11 +22,10 @@ namespace RobloxKeeper.Tests
             return list;
         }
 
-        static ClientProfile Profile(int priority, int cores, bool eco)
+        static ClientProfile Profile(int priority, bool eco)
         {
             ClientProfile p = new ClientProfile();
             p.Priority = priority;
-            p.Cores = cores;
             p.Eco = eco;
             return p;
         }
@@ -38,7 +37,7 @@ namespace RobloxKeeper.Tests
             public int FailTimes;
             public string Error = "Access is denied";
 
-            public bool Apply(int pid, ClientProfile profile, int block, out string error)
+            public bool Apply(int pid, ClientProfile profile, out string error)
             {
                 if (FailTimes > 0)
                 {
@@ -68,7 +67,7 @@ namespace RobloxKeeper.Tests
             DateTime[] now = { new DateTime(2026, 9, 20, 12, 0, 0) };
             FakeWindows windows = new FakeWindows();
             PerformanceManager perf = Manager(windows, now);
-            perf.Defaults = Profile(PerformanceManager.PRIORITY_BELOW, 4, true);
+            perf.Defaults = Profile(PerformanceManager.PRIORITY_BELOW, true);
 
             perf.ApplyPending(Clients(100));
 
@@ -87,7 +86,7 @@ namespace RobloxKeeper.Tests
             perf.ApplyPending(running);
             windows.Applied.Clear();
 
-            perf.Defaults = Profile(PerformanceManager.PRIORITY_LOW, 2, true);
+            perf.Defaults = Profile(PerformanceManager.PRIORITY_LOW, true);
             perf.ApplyPending(running);
 
             Assert.Equal(0, windows.Applied.Count, "running client must not be retuned by a default change");
@@ -100,7 +99,7 @@ namespace RobloxKeeper.Tests
             PerformanceManager perf = Manager(windows, now);
 
             perf.ApplyPending(Clients(100));
-            perf.Defaults = Profile(PerformanceManager.PRIORITY_HIGH, 0, false);
+            perf.Defaults = Profile(PerformanceManager.PRIORITY_HIGH, false);
             windows.Applied.Clear();
 
             perf.ApplyPending(Clients(100, 200));
@@ -117,7 +116,7 @@ namespace RobloxKeeper.Tests
             List<ClientInfo> running = Clients(100, 200);
 
             perf.ApplyPending(running);
-            perf.Defaults = Profile(PerformanceManager.PRIORITY_LOW, 1, true);
+            perf.Defaults = Profile(PerformanceManager.PRIORITY_LOW, true);
             windows.Applied.Clear();
 
             perf.ApplyToAllRunning(running);
@@ -135,7 +134,7 @@ namespace RobloxKeeper.Tests
             perf.ApplyPending(running);
             windows.Applied.Clear();
 
-            perf.SetOverride(100, Profile(PerformanceManager.PRIORITY_HIGH, 0, false));
+            perf.SetOverride(100, Profile(PerformanceManager.PRIORITY_HIGH, false));
             perf.ApplyPending(running);
 
             Assert.Equal(1, windows.Applied.Count, "Tune takes effect on the next tick");

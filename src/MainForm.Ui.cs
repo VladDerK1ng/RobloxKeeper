@@ -470,14 +470,9 @@ namespace RobloxKeeper
             cmbPerfPriority.SelectedIndexChanged += OnPerfDefaultsChanged;
             card.Controls.Add(cmbPerfPriority);
 
-            cmbPerfCores = Ui.DarkCombo(218, row1, 94);
-            Ui.FillCoreCombo(cmbPerfCores);
-            cmbPerfCores.SelectedIndexChanged += OnPerfDefaultsChanged;
-            card.Controls.Add(cmbPerfCores);
-
-            // A wider gap here than between the two dropdowns, so Eco reads as a
-            // separate switch rather than a third field in the same group.
-            chkPerfEco = Ui.DarkCheck("Low power", 336, row1, 9f);
+            // No core count beside it: every client gets every core. Locking a
+            // client to cores is what froze it - see ClientProfile.
+            chkPerfEco = Ui.DarkCheck("Low power", 228, row1, 9f);
             Ui.CenterIn(chkPerfEco, row1, ROW_H);
             chkPerfEco.CheckedChanged += OnPerfDefaultsChanged;
             Explain(chkPerfEco,
@@ -896,7 +891,6 @@ namespace RobloxKeeper
             ClientProfile p = new ClientProfile();
             p.Priority = cmbPerfPriority.SelectedIndex < 0
                 ? PerformanceManager.PRIORITY_NORMAL : cmbPerfPriority.SelectedIndex;
-            p.Cores = Ui.SelectedCoreCount(cmbPerfCores);
             p.Eco = chkPerfEco.Checked;
             perf.Defaults = p;
             if (!initializing) Log("Clients without their own settings will run at " + p + ".");
