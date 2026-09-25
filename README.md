@@ -58,6 +58,13 @@ Roblox isn't supported.
 - Can start with Windows, ahead of other startup apps, so it's ready before any Roblox window
   opens.
 
+## New in 1.3.2
+
+- **No more antivirus false alarms from updating.** The updater used to install new versions with a
+  hidden batch script, which some antivirus programs took for a trojan. It now checks the download
+  against the checksum published with the release and swaps it in without any script.
+- The exe now says what it is in *Properties > Details*: name, version, author and licence.
+
 ## New in 1.3.1
 
 - **Join private servers from a link.** Paste the link a private server's owner shared into the
@@ -241,6 +248,8 @@ src/
   RobloxInstall.cs       version folders, protocol registration, shortcuts, launchers
   AppSettings.cs         settings.txt load/save
   Updater.cs             self-update against the GitHub releases API
+  SelfSwap.cs            putting a new version in place by renaming - no script
+  AssemblyInfo.cs        the exe's name, version and author in Properties > Details
   Native.cs              every P/Invoke, in one place
   InputSender.cs         SendInput scan codes and focus handling
   AccountStore.cs        the DPAPI-encrypted account list
@@ -347,6 +356,18 @@ RobloxKeeper is designed to stay entirely **outside** the Roblox process:
 This is the same externally-held-mutex technique used by established multi-instance managers, and it does not interact with the anti-cheat's protected surface. That said, automation and multi-instancing are against the [Roblox Terms of Use](https://en.help.roblox.com/hc/en-us/articles/115004647846) - use at your own risk.
 
 ## FAQ
+
+**My antivirus says it's a trojan and keeps deleting it.**
+That's a false positive, but an understandable one. Up to 1.3.1 the updater installed new versions
+with a small hidden batch script in your temp folder that waited for the app to close, swapped the
+files and deleted itself - and that is exactly what a lot of malware does too. Since 1.3.2 there's no
+script at all: the update is checked against the checksum published with the release and swapped in
+by renaming. So get **1.3.2 or newer straight from the
+[releases page](https://github.com/VladDerK1ng/RobloxKeeper/releases/latest)** rather than through the
+old version's update button, which would still use the old way one last time. If Windows Security
+already took it, you can put it back under *Protection history* once you've checked the download (see
+[Verifying a download](#verifying-a-download)). Every release is built by GitHub from the code you can
+read here.
 
 **A watcher never fires, but I can see the word on screen.**
 Open the watcher and press **Test against this client now** - it says exactly what it read. Windows' text recogniser sees brightness, not colour, so on its own it misses coloured words on a dark background - a dark red egg name in chat is barely brighter than the chat panel - and it can't read letters inside an outline the same brightness as they are: a Secret egg's dark grey name, or small chat text once the chat panel goes see-through over the scenery. RobloxKeeper reads every picture three ways - the last keeps only the plain grey fill of each letter and drops its outline - and keeps the best reading of each line: on live frames that reads *A Secret Gargoyle Egg spawned in* off the spawn banner and *Say hi to everyone playing now!* off see-through chat. Chat reads best with a **box** drawn around it; across the whole window it is read at the same small size along with everything else. If something still isn't read, watch for a word that is, such as *spawned* - the picture sent with the alert shows the rest - or use a **picture** watcher, which compares pixels and doesn't care what colour the text is. Chat can only be read while the chat is open on that client.

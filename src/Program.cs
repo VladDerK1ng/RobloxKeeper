@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Threading;
 using System.Windows.Forms;
 
@@ -27,6 +28,15 @@ namespace RobloxKeeper
             for (int i = 1; i < args.Length; i++)
                 if (args[i] == "--minimized") StartMinimized = true;
 
+            // Started by an update: the copy it replaced is still closing.
+            // Waited for, or this one would find it running and step aside.
+            int after = WaitForPid(args);
+            if (after > 0)
+            {
+                try { using (Process old = Process.GetProcessById(after)) old.WaitForExit(30000); }
+                catch { }   // already gone
+            }
+
             // Single instance: a second launch surfaces the running window and quits.
             // This runs before any Roblox mutex work, so the live instance is untouched.
             bool createdNew;
@@ -41,6 +51,9 @@ namespace RobloxKeeper
                 return;
             }
 
+            // The copy an update or a build moved aside, once it has stopped.
+            SelfSwap.CleanUp(Application.ExecutablePath);
+
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
             Application.Run(new MainForm());
@@ -50,6 +63,17 @@ namespace RobloxKeeper
         // A second copy opened by hand brings the running one forward. One
         // started minimized - at sign-in, say, by a leftover Run-list entry as
         // well as the task - just leaves, instead of popping the window open.
+        // "--after <pid>": the process id of the copy an update replaced.
+        public static int WaitForPid(string[] args)
+        {
+            for (int i = 1; i + 1 < args.Length; i++)
+            {
+                int pid;
+                if (args[i] == "--after" && int.TryParse(args[i + 1], out pid) && pid > 0) return pid;
+            }
+            return 0;
+        }
+
         public static bool ShouldShowExisting(string[] args)
         {
             for (int i = 1; i < args.Length; i++)
