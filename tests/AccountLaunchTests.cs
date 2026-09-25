@@ -50,7 +50,9 @@ namespace RobloxKeeper.Tests
             {
                 error = null;
                 LastUrl = launchUrl;
-                string job = launchUrl.Contains("gameId%3D") ? launchUrl.Substring(launchUrl.IndexOf("gameId%3D") + 9, 8) : "any";
+                string job = launchUrl.Contains("gameId%3D") ? launchUrl.Substring(launchUrl.IndexOf("gameId%3D") + 9, 8)
+                           : launchUrl.Contains("linkCode%3D") ? "private:" + launchUrl.Substring(launchUrl.IndexOf("linkCode%3D") + 11).Split('%')[0]
+                           : "any";
                 string place = launchUrl.Contains("placeId%3D") ? launchUrl.Substring(launchUrl.IndexOf("placeId%3D") + 10).Split('%')[0] : "?";
                 Did.Add("start " + place + " " + job);
                 return NextPid++;
@@ -72,6 +74,25 @@ namespace RobloxKeeper.Tests
             }
 
             public void Wait(int ms) { Did.Add("wait " + ms); }
+
+            // Share codes this fake Roblox knows: code -> place and link code.
+            public readonly Dictionary<string, string[]> Shares = new Dictionary<string, string[]>();
+            public string ShareStatus = "Valid";
+
+            public bool ResolveShare(string code, string cookie, out string placeId, out string linkCode, out string error)
+            {
+                Did.Add("resolve " + code);
+                placeId = linkCode = error = null;
+                string[] s;
+                if (ShareStatus != "Valid" || !Shares.TryGetValue(code, out s))
+                {
+                    error = PrivateServers.Explain(ShareStatus == "Valid" ? "Invalid" : ShareStatus);
+                    return false;
+                }
+                placeId = s[0];
+                linkCode = s[1];
+                return true;
+            }
 
             public string Steps(string prefix)
             {
@@ -252,6 +273,58 @@ namespace RobloxKeeper.Tests
             r.ServerId = job;
             Run(r, w);
             Assert.Equal("start " + PLACE + " eeeeeeee", w.Steps("start"), "that server");
+        }
+
+        // ---------- a private server ----------
+
+        static LaunchSeat Private(string name, string link)
+        {
+            LaunchSeat s = Seat(name, null, 0);
+            s.Private = PrivateLink.Parse(link);
+            return s;
+        }
+
+        const string SHARE = "https://www.roblox.com/share?code=abc123&type=Server";
+
+        // A share link is resolved once, however many accounts go.
+        public static void TestAPrivateServerLinkSendsEveryoneIntoIt()
+        {
+            FakeWorld w = new FakeWorld();
+            w.Shares["abc123"] = new[] { PLACE, "4815" };
+            Run(Req(JoinWhere.Any, Private("a", SHARE), Private("b", SHARE)), w);
+            Assert.Equal("resolve abc123", w.Steps("resolve"), "resolved once");
+            Assert.Equal("start " + PLACE + " private:4815 | start " + PLACE + " private:4815", w.Steps("start"), "both into it");
+        }
+
+        // The old form needs nothing resolved, and the emptiest or busiest
+        // choice doesn't apply: a private server is one server.
+        public static void TestTheOldFormGoesStraightIn()
+        {
+            FakeWorld w = new FakeWorld();
+            Run(Req(JoinWhere.Emptiest, Private("a", "https://www.roblox.com/games/" + PLACE + "/x?privateServerLinkCode=4815")), w);
+            Assert.Equal("", w.Steps("resolve") + w.Steps("list"), "nothing to resolve, no server list");
+            Assert.Equal("start " + PLACE + " private:4815", w.Steps("start"), "into it");
+        }
+
+        public static void TestAPrivateLinkThatNoLongerWorksSaysSo()
+        {
+            FakeWorld w = new FakeWorld();
+            w.ShareStatus = "Expired";
+            List<LaunchResult> got = Run(Req(JoinWhere.Any, Private("a", SHARE)), w);
+            Assert.Contains("expired", got[0].Problem, "why");
+            Assert.Equal("", w.Steps("start"), "nobody started");
+        }
+
+        // Sent into a private server, an account already playing is moved.
+        public static void TestAPlayingAccountIsMovedIntoThePrivateServer()
+        {
+            FakeWorld w = new FakeWorld();
+            w.Shares["abc123"] = new[] { PLACE, "4815" };
+            LaunchSeat s = Private("a", SHARE);
+            s.RunningPid = 42;
+            Run(Req(JoinWhere.Any, s), w);
+            Assert.Equal("close 42", w.Steps("close"), "its old client closed");
+            Assert.Equal("start " + PLACE + " private:4815", w.Steps("start"), "and started in the private server");
         }
 
         // ---------- already playing ----------

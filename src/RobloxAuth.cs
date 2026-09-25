@@ -140,7 +140,30 @@ namespace RobloxKeeper
                 ? string.Format(PLACE_LAUNCHER, browserTrackerId, placeId)
                 : string.Format(PLACE_LAUNCHER_JOB, browserTrackerId, placeId, Uri.EscapeDataString(jobId),
                                 Guid.NewGuid().ToString());
+            return Wrap(ticket, launcher, browserTrackerId, launchTimeMs);
+        }
 
+        // A private server, joined with its link code exactly the way
+        // roblox.com's joinPrivateGame asks: its own launcher, the device's
+        // tracker, no access code - the link code is what lets you in - and a
+        // fresh join attempt from the Play button, which is where a link
+        // opened on roblox.com is joined from.
+        const string PLACE_LAUNCHER_PRIVATE =
+            "https://www.roblox.com/Game/PlaceLauncher.ashx?request=RequestPrivateGame&browserTrackerId={0}&placeId={1}&accessCode=&linkCode={2}&joinAttemptId={3}&joinAttemptOrigin=PlayButton";
+
+        public static string BuildPrivateLaunchUrl(string ticket, string placeId, string linkCode,
+                                                   string browserTrackerId, long launchTimeMs)
+        {
+            if (string.IsNullOrEmpty(ticket) || string.IsNullOrEmpty(placeId) || string.IsNullOrEmpty(linkCode)) return null;
+            if (string.IsNullOrEmpty(browserTrackerId))
+                browserTrackerId = AccountStore.NewBrowserTrackerId();
+            string launcher = string.Format(PLACE_LAUNCHER_PRIVATE, browserTrackerId, placeId,
+                                            Uri.EscapeDataString(linkCode), Guid.NewGuid().ToString());
+            return Wrap(ticket, launcher, browserTrackerId, launchTimeMs);
+        }
+
+        static string Wrap(string ticket, string launcher, string browserTrackerId, long launchTimeMs)
+        {
             StringBuilder sb = new StringBuilder();
             sb.Append("roblox-player:1");
             sb.Append("+launchmode:play");

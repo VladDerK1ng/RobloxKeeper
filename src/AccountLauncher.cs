@@ -15,6 +15,7 @@ namespace RobloxKeeper
         public string Account;
         public string Cookie;           // never logged, never shown
         public string PlaceId;          // the game box's, or the account's own saved game
+        public PrivateLink Private;     // a private server link instead: the game box's, or the account's own
         public int RunningPid;          // its client, if one is open
         public bool Hunting;
         public bool Restart;            // Play pressed on it again, and the restart agreed to
@@ -46,6 +47,9 @@ namespace RobloxKeeper
         string UserIdOf(string name, out string error);
         PlayerWhere Where(string userId, string cookie, out string error);
         void Wait(int ms);
+        // A private server's share link, resolved signed in as this cookie's
+        // account, to the game and the link code that joins it.
+        bool ResolveShare(string code, string cookie, out string placeId, out string linkCode, out string error);
     }
 
     // Launches accounts where they were asked to go.
@@ -62,7 +66,7 @@ namespace RobloxKeeper
 
         class Dest
         {
-            public string Place, Job, Problem;
+            public string Place, Job, LinkCode, Problem;
         }
 
         public static List<LaunchResult> Run(LaunchRequest r, ILaunchWorld world, Random rng, Action<string> progress)
@@ -98,7 +102,7 @@ namespace RobloxKeeper
                 // Launching it again would sign its open client out - Roblox's
                 // 273 - so one already playing is only moved when it is being
                 // sent somewhere in particular, or Play was pressed on it again.
-                if (seats[i].RunningPid > 0 && dest[i].Job == null && !seats[i].Restart)
+                if (seats[i].RunningPid > 0 && dest[i].Job == null && dest[i].LinkCode == null && !seats[i].Restart)
                 {
                     res.Said = seats[i].Account + " is already playing - left where it is.";
                     continue;
@@ -123,8 +127,9 @@ namespace RobloxKeeper
                     continue;
                 }
 
-                string url = RobloxAuth.BuildLaunchUrl(ticket, dest[i].Place,
-                    world.DeviceTracker(), RobloxAuth.NowMs(), dest[i].Job);
+                string url = dest[i].LinkCode != null
+                    ? RobloxAuth.BuildPrivateLaunchUrl(ticket, dest[i].Place, dest[i].LinkCode, world.DeviceTracker(), RobloxAuth.NowMs())
+                    : RobloxAuth.BuildLaunchUrl(ticket, dest[i].Place, world.DeviceTracker(), RobloxAuth.NowMs(), dest[i].Job);
                 bool moving = seat.RunningPid > 0;
                 if (moving) world.Close(seat.RunningPid);
 
@@ -191,15 +196,54 @@ namespace RobloxKeeper
             }
         }
 
+        // Accounts with a private server link go into that server - emptiest,
+        // busiest and all-in-one don't apply to a server that is only one.
+        // A share link is resolved once, however many accounts it is for,
+        // signed in as the first of them that Roblox will answer for.
+        static void ToPrivate(List<LaunchSeat> seats, Dest[] dest, ILaunchWorld world)
+        {
+            Dictionary<string, string[]> resolved = new Dictionary<string, string[]>();
+            Dictionary<string, string> failed = new Dictionary<string, string>();
+            for (int i = 0; i < seats.Count; i++)
+            {
+                PrivateLink link = seats[i].Private;
+                if (dest[i].Problem != null || link == null) continue;
+                if (link.ShareCode == null)
+                {
+                    dest[i].Place = link.PlaceId;
+                    dest[i].LinkCode = link.LinkCode;
+                    continue;
+                }
+
+                string[] got;
+                if (!resolved.TryGetValue(link.ShareCode, out got) && !failed.ContainsKey(link.ShareCode))
+                {
+                    string place, code, error;
+                    if (world.ResolveShare(link.ShareCode, seats[i].Cookie, out place, out code, out error))
+                        resolved[link.ShareCode] = got = new[] { place, code };
+                    else failed[link.ShareCode] = error;
+                }
+                string why;
+                if (got == null && failed.TryGetValue(link.ShareCode, out why))
+                {
+                    dest[i].Problem = why;
+                    continue;
+                }
+                dest[i].Place = got[0];
+                dest[i].LinkCode = got[1];
+            }
+        }
+
         static void ToGame(LaunchRequest r, List<LaunchSeat> seats, Dest[] dest, ILaunchWorld world, Random rng)
         {
             // Grouped by game: each account goes to its own saved game when
             // the game box is blank.
             Dictionary<string, List<int>> byPlace = new Dictionary<string, List<int>>();
             List<string> order = new List<string>();
+            ToPrivate(seats, dest, world);
             for (int i = 0; i < seats.Count; i++)
             {
-                if (dest[i].Problem != null) continue;
+                if (dest[i].Problem != null || dest[i].LinkCode != null) continue;
                 string place = seats[i].PlaceId;
                 if (string.IsNullOrEmpty(place))
                 {
@@ -306,5 +350,10 @@ namespace RobloxKeeper
         }
 
         public void Wait(int ms) { System.Threading.Thread.Sleep(ms); }
+
+        public bool ResolveShare(string code, string cookie, out string placeId, out string linkCode, out string error)
+        {
+            return PrivateServers.Resolve(code, cookie, out placeId, out linkCode, out error);
+        }
     }
 }

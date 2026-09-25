@@ -84,6 +84,19 @@ namespace RobloxKeeper.Tests
             finally { try { File.Delete(path); } catch { } }
         }
 
+        // An account's own game can be a private server link, and its row says so.
+        public static void TestAnAccountsOwnPrivateServerShows()
+        {
+            AccountStore s = Store(TempPath(), "main", "alt1");
+            s.Find("alt1").GameUrl = "https://www.roblox.com/share?code=abc123&type=Server";
+            s.Find("main").GameUrl = "https://www.roblox.com/games/920587237/Adopt-Me";
+            using (AccountsDialog d = new AccountsDialog(s, new Host()))
+            {
+                Assert.Equal("has a saved game", d.RowLine(0), "a game");
+                Assert.Equal("has a private server", d.RowLine(1), "a private server");
+            }
+        }
+
         public static void TestAccountsWithAClientOpenSaySo()
         {
             Host h = new Host();

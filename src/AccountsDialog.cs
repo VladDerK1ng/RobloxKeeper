@@ -140,7 +140,7 @@ namespace RobloxKeeper
             // One line, the width of the box above it: MutedLabel wraps at 388
             // by default, which ran it into the Server row.
             Label hint = Ui.MutedLabel(
-                "Optional. Blank uses each account's own saved game. A server link from a Discord post sends them all there.",
+                "Optional. Blank uses each account's own game. A private server link, or a server link from Discord, sends them all there.",
                 Ui.PAD, gameRow + 30, 8.25f);
             hint.MaximumSize = new Size(W - 24 - Ui.PAD * 2, 0);
             card.Controls.Add(hint);
@@ -385,7 +385,8 @@ namespace RobloxKeeper
         {
             string second = !string.IsNullOrEmpty(a.Note)
                 ? a.Note
-                : (string.IsNullOrEmpty(a.GameUrl) ? "no game set" : "has a saved game");
+                : (string.IsNullOrEmpty(a.GameUrl) ? "no game set"
+                   : PrivateLink.Parse(a.GameUrl) != null ? "has a private server" : "has a saved game");
             rowPlaying[i] = playing;
             rowLines[i].Text = playing ? "playing · " + second : second;
             rowLines[i].ForeColor = playing ? Theme.Green : Theme.Muted;
@@ -529,11 +530,11 @@ namespace RobloxKeeper
             if (note == null) return;          // cancelled
             a.Note = note;
 
-            string game = Prompt("Game link for " + a.Name + ", or blank for none:", a.GameUrl);
+            string game = Prompt("Game link or private server link for " + a.Name + ", or blank for none:", a.GameUrl);
             if (game != null)
             {
-                if (game.Length > 0 && RobloxAuth.PlaceIdFromUrl(game) == null)
-                    MessageBox.Show(this, "That doesn't look like a Roblox game link or place id - leaving the old one.",
+                if (game.Length > 0 && RobloxAuth.PlaceIdFromUrl(game) == null && PrivateLink.Parse(game) == null)
+                    MessageBox.Show(this, "That doesn't look like a Roblox game link, private server link or place id - leaving the old one.",
                         "Not a game link", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 else
                     a.GameUrl = game;
@@ -617,7 +618,15 @@ namespace RobloxKeeper
 
             string link = gameBox.Text.Trim();
             string typedPlace = null, serverPlace, serverId;
-            if (RobloxAuth.ServerFromUrl(link, out serverPlace, out serverId))
+            // A private server link decides where they go by itself - one
+            // server, the one the link opens - whatever the Server row says.
+            PrivateLink typedPrivate = PrivateLink.Parse(link);
+            if (typedPrivate != null)
+            {
+                r.Where = JoinWhere.Any;
+                r.Together = false;
+            }
+            else if (RobloxAuth.ServerFromUrl(link, out serverPlace, out serverId))
             {
                 r.ServerPlaceId = serverPlace;
                 r.ServerId = serverId;
@@ -627,7 +636,7 @@ namespace RobloxKeeper
                 typedPlace = RobloxAuth.PlaceIdFromUrl(link);
                 if (typedPlace == null && r.Where != JoinWhere.Player)
                 {
-                    MessageBox.Show(this, "That doesn't look like a Roblox game link, a server link or a place id.",
+                    MessageBox.Show(this, "That doesn't look like a Roblox game link, a private server link, a server link or a place id.",
                         "Not a game link", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     return;
                 }
@@ -638,7 +647,10 @@ namespace RobloxKeeper
                 LaunchSeat s = new LaunchSeat();
                 s.Account = a.Name;
                 s.Cookie = a.Cookie;
-                s.PlaceId = typedPlace ?? RobloxAuth.PlaceIdFromUrl(a.GameUrl);
+                // The game box wins; blank, each account's own saved game -
+                // which can be a private server link too.
+                s.Private = typedPrivate ?? (link.Length == 0 ? PrivateLink.Parse(a.GameUrl) : null);
+                s.PlaceId = typedPlace ?? (s.Private == null ? RobloxAuth.PlaceIdFromUrl(a.GameUrl) : null);
                 s.RunningPid = host.PidOf(a.Name);
                 s.Hunting = host.IsHunting(a.Name);
                 r.Seats.Add(s);
@@ -646,7 +658,7 @@ namespace RobloxKeeper
 
             // Play on one that is already playing, with nowhere in particular
             // to go: starting it again would sign its client out, so ask.
-            if (alone && r.Seats[0].RunningPid > 0 && r.ServerId == null
+            if (alone && r.Seats[0].RunningPid > 0 && r.ServerId == null && r.Seats[0].Private == null
                 && r.Where == JoinWhere.Any && !r.Together)
             {
                 if (MessageBox.Show(this, accounts[0].Name + " is already playing.\r\n\r\nClose that client and start it again?",

@@ -73,7 +73,7 @@ namespace RobloxKeeper
         // A POST as the website makes it. Signed in, Roblox wants a CSRF token
         // it only hands out by refusing the first try - the same dance a
         // launch ticket needs. The cookie never appears in an error.
-        static string Post(string url, string cookie, string body, out string error)
+        internal static string Post(string url, string cookie, string body, out string error)
         {
             error = null;
             ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
