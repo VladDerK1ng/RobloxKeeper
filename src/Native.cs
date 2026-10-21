@@ -222,5 +222,29 @@ namespace RobloxKeeper
         public const int ProcessPowerThrottling = 4;
         public const uint PROCESS_POWER_THROTTLING_CURRENT_VERSION = 1;
         public const uint PROCESS_POWER_THROTTLING_EXECUTION_SPEED = 0x1;
+
+        // ---------- Which process has a file open ----------
+
+        // Opened for its attributes only, which no other program's sharing
+        // rules can refuse, and asked which processes have it open - the
+        // question the Restart Manager asks for installers, without the five
+        // times slower part where it looks up each process's name.
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        public static extern Microsoft.Win32.SafeHandles.SafeFileHandle CreateFile(string name, uint access,
+            uint share, IntPtr security, uint disposition, uint flags, IntPtr template);
+        [DllImport("ntdll.dll")]
+        public static extern int NtQueryInformationFile(Microsoft.Win32.SafeHandles.SafeFileHandle file,
+            out IO_STATUS_BLOCK io, IntPtr info, int length, int infoClass);
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct IO_STATUS_BLOCK { public IntPtr Status; public IntPtr Information; }
+
+        public const uint FILE_READ_ATTRIBUTES = 0x80;
+        public const uint FILE_SHARE_READ_WRITE_DELETE = 0x7;
+        public const uint OPEN_EXISTING = 3;
+        public const int ERROR_FILE_NOT_FOUND = 2;
+        public const int ERROR_PATH_NOT_FOUND = 3;
+        public const int FileProcessIdsUsingFileInformation = 47;
+        public const int STATUS_INFO_LENGTH_MISMATCH = unchecked((int)0xC0000004);
     }
 }

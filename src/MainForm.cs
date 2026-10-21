@@ -91,6 +91,8 @@ namespace RobloxKeeper
         readonly List<int> shownPids = new List<int>();
         readonly Dictionary<int, Label> ramLabels = new Dictionary<int, Label>();
         List<ClientInfo> lastClients = new List<ClientInfo>();
+        // Every Roblox client process, window or not, as of the last tick.
+        List<int> lastAlive = new List<int>();
 
         bool initializing;
         bool rowsBuilt;
@@ -110,6 +112,8 @@ namespace RobloxKeeper
         // Follows Roblox's own client logs so a disconnect can be explained
         // rather than guessed at.
         readonly RobloxLogWatch logWatch = new RobloxLogWatch();
+        // Which client writes each of those logs.
+        readonly LogOwners logOwners = new LogOwners();
         DateTime lastClientOpened = DateTime.MinValue;
         bool clientTrackingReady;
 
@@ -357,7 +361,9 @@ namespace RobloxKeeper
                 try { if (ClientTracker.IsClient(p)) alivePids.Add(p.Id); }
                 catch { }
             }
+            lastAlive = alivePids;
             clientLabels.Prune(alivePids);
+            logOwners.Prune(alivePids);
             HuntTick(alivePids);
             FollowTick();
 
@@ -370,7 +376,7 @@ namespace RobloxKeeper
 
             // What Roblox itself says happened to each client.
             logWatch.Tick();
-            WatchTick(clients);
+            WatchTick(alivePids);
 
             // Roblox rewrites this registration itself when it switches
             // versions, so a handler that was fine a minute ago can be dangling
@@ -483,22 +489,20 @@ namespace RobloxKeeper
             return tray;
         }
 
-        // Which client a log file belongs to, so an event can name it.
-        //
-        // The log's name carries the UTC time it opened, a moment after its
-        // process started, so the two are matched on that. A client the app
-        // did not launch has no account name and is simply not named.
+        // Which client a log file belongs to, so an event can name it. One
+        // whose account isn't known yet is named by its PID.
         string NameForLog(string logFileName)
         {
-            foreach (ClientInfo ci in lastClients)
-            {
-                if (ci.Start == DateTime.MinValue) continue;
-                if (!RobloxLog.LooksLikeSameSession(logFileName, ci.Start.ToUniversalTime())) continue;
+            int pid = PidForLog(logFileName);
+            if (pid <= 0) return null;
+            string account = clientLabels.NameFor(pid);
+            return string.IsNullOrEmpty(account) ? "Client " + pid : account;
+        }
 
-                string account = clientLabels.NameFor(ci.Pid);
-                return string.IsNullOrEmpty(account) ? "Client " + ci.Pid : account;
-            }
-            return null;
+        // The client that writes this log, or 0 when none can be told.
+        int PidForLog(string logFileName)
+        {
+            return logOwners.PidFor(logFileName, lastAlive, lastClients);
         }
 
         static string GhostLabel(GhostWatch g)

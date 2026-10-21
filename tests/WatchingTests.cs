@@ -90,20 +90,6 @@ namespace RobloxKeeper.Tests
             Assert.Contains("no watcher", Watching.StateText(false, false, WatchState.Watchable), "nothing assigned");
         }
 
-        // A log file is matched to its client by when it opened, the same way
-        // the activity list already names a client in a log line.
-        public static void TestAJoinInALogIsMatchedToTheClientThatWroteIt()
-        {
-            List<ClientInfo> clients = new List<ClientInfo>();
-            clients.Add(Info(10, new DateTime(2026, 9, 21, 10, 40, 0, DateTimeKind.Utc)));
-            clients.Add(Info(20, new DateTime(2026, 9, 21, 11, 49, 30, DateTimeKind.Utc)));
-
-            Assert.Equal(20, Watching.PidForLog("0.643.0_20260921T114933Z_Player_2A3F1_last.log", clients),
-                "opened three seconds after client 20 started");
-            Assert.Equal(0, Watching.PidForLog("0.643.0_20260921T090000Z_Player_2A3F1_last.log", clients),
-                "a log from before either client");
-        }
-
         static ClientInfo Info(int pid, DateTime startedUtc)
         {
             ClientInfo c = new ClientInfo();

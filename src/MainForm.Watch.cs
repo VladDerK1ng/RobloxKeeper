@@ -72,18 +72,6 @@ namespace RobloxKeeper
             }
         }
 
-        // Which client wrote a log, matched on when the log opened - the same
-        // rule the activity list uses to name a client in a log line.
-        public static int PidForLog(string logFileName, IList<ClientInfo> clients)
-        {
-            foreach (ClientInfo ci in clients)
-            {
-                if (ci.Start == DateTime.MinValue) continue;
-                if (RobloxLog.LooksLikeSameSession(logFileName, ci.Start.ToUniversalTime())) return ci.Pid;
-            }
-            return 0;
-        }
-
         // The clients as the watch thread sees them. "Client 2" is the second
         // row of the client list, as on the main window; the account and the
         // server it is in travel with it.
@@ -234,7 +222,7 @@ namespace RobloxKeeper
         // A client joined a game, or was already in one when the app started.
         void OnClientJoined(string logFileName, RobloxLogEvent e)
         {
-            int pid = Watching.PidForLog(logFileName, lastClients);
+            int pid = PidForLog(logFileName);
             if (pid <= 0) return;
             // Named first, so a hunt already knows this is its account's client.
             NameClient(pid, e.UserId);
@@ -249,7 +237,7 @@ namespace RobloxKeeper
         // Roblox said who a client is, a read after its join.
         void OnClientIdentified(string logFileName, RobloxLogEvent e)
         {
-            NameClient(Watching.PidForLog(logFileName, lastClients), e.UserId);
+            NameClient(PidForLog(logFileName), e.UserId);
         }
 
         // Names a client after the account its log says it is.
@@ -273,17 +261,15 @@ namespace RobloxKeeper
             PublishWatchWork();
         }
 
-        // Once a second, from the main loop.
-        void WatchTick(List<ClientInfo> clients)
+        // Once a second, from the main loop, with every Roblox process alive
+        // now - window or not, as the labels are pruned: a client can join
+        // before its window shows.
+        void WatchTick(List<int> alivePids)
         {
             if (watchStore == null) return;
             List<int> gone = new List<int>();
             foreach (int pid in clientWhere.Keys)
-            {
-                bool alive = false;
-                foreach (ClientInfo c in clients) if (c.Pid == pid) { alive = true; break; }
-                if (!alive) gone.Add(pid);
-            }
+                if (!alivePids.Contains(pid)) gone.Add(pid);
             foreach (int pid in gone) clientWhere.Remove(pid);
             PublishWatchWork();
             RulesTick();

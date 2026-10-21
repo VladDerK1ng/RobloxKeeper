@@ -58,6 +58,16 @@ Roblox isn't supported.
 - Can start with Windows, ahead of other startup apps, so it's ready before any Roblox window
   opens.
 
+## New in 1.3.3
+
+- **Every client shows its own account, even when you launch a whole group at once.** Launching
+  several accounts together could leave some clients called *Client 2*, *Client 3* while another
+  took the wrong account's name. From there an account could look like it wasn't playing, so
+  launching it again signed its own client out, and moving or hunting with one could close a
+  different account's client. RobloxKeeper used to work out which Roblox log belongs to which
+  client from the time in the log's name, and clients launched a few seconds apart all looked
+  alike. It now asks Windows which client has each log open, which is exact.
+
 ## New in 1.3.2
 
 - **No more antivirus false alarms from updating.** The updater used to install new versions with a
@@ -261,6 +271,7 @@ src/
   Follow.cs              keeping accounts in the server a player is in
   MainForm.Accounts.cs   the account manager and following, wired into the main window
   ClientLabels.cs        which client is which account - from Roblox's own log
+  OpenFiles.cs           which client has a log open - how a log is matched to its client
   AccountBrowserForm.cs  Roblox in a per-account browser profile: signing in, browsing, Join
   DarkRoblox.cs          Roblox's own dark theme in that browser
   RowOrder.cs            the grip that drags list rows into order and copies them

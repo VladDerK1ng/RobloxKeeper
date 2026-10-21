@@ -48,6 +48,74 @@ namespace RobloxKeeper
         }
     }
 
+    // Which client writes which log.
+    //
+    // Windows is asked which client has the log open: a client holds its own
+    // log from the moment it starts until it exits - measured on a live one.
+    // The time in the log's name is not enough. A log opens three to four
+    // seconds after its client starts, and clients launched together start
+    // three seconds apart, so by the clock every log of a batch fitted the
+    // first client: it took each account's name in turn, and the others were
+    // left as "Client 2", "Client 3".
+    //
+    // An answer is kept while its client runs - a log's writer never changes,
+    // and asking costs Windows a look through every handle on the PC. Only
+    // when Windows can't say is the clock used, and then only when a single
+    // client fits; two that fit are not guessed between.
+    class LogOwners
+    {
+        // Every process with the log open; null when Windows couldn't say.
+        public Func<string, IList<int>> Writers = RobloxLog.WritersOf;
+
+        readonly Dictionary<string, int> owners = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+        // `alive` is every Roblox client process, window or not; `clients` the
+        // ones with a window, which carry when they started. 0 when no client
+        // can be told.
+        public int PidFor(string logFileName, IList<int> alive, IList<ClientInfo> clients)
+        {
+            if (string.IsNullOrEmpty(logFileName)) return 0;
+            int pid;
+            if (owners.TryGetValue(logFileName, out pid)) return alive.Contains(pid) ? pid : 0;
+
+            IList<int> holders = null;
+            try { holders = Writers(logFileName); } catch { }
+            if (holders != null)
+            {
+                // None: it is closed, so its client has exited - or it is not
+                // a client's log, like the crash handler's beside each one.
+                pid = 0;
+                foreach (int h in holders)
+                {
+                    if (!alive.Contains(h) || h == pid) continue;
+                    if (pid != 0) return 0;
+                    pid = h;
+                }
+                if (pid != 0) owners[logFileName] = pid;
+                return pid;
+            }
+
+            int found = 0;
+            foreach (ClientInfo ci in clients)
+            {
+                if (ci.Start == DateTime.MinValue) continue;
+                if (!RobloxLog.LooksLikeSameSession(logFileName, ci.Start.ToUniversalTime())) continue;
+                if (found != 0) return 0;
+                found = ci.Pid;
+            }
+            return found;
+        }
+
+        // PIDs are recycled, so an answer goes when its client does.
+        public void Prune(IList<int> alivePids)
+        {
+            List<string> gone = new List<string>();
+            foreach (KeyValuePair<string, int> o in owners)
+                if (!alivePids.Contains(o.Value)) gone.Add(o.Key);
+            foreach (string log in gone) owners.Remove(log);
+        }
+    }
+
     // Turns the user id a client's log names into what to call the client.
     //
     // A saved account is known by its user id at once. One saved before ids

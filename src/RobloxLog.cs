@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Text.RegularExpressions;
 
@@ -138,11 +139,22 @@ namespace RobloxKeeper
             }
         }
 
+        // Every process with this log open. A client holds its own log from the
+        // moment it starts until it exits - measured on a live one - so this
+        // is the client that writes it. Null when Windows couldn't say.
+        public static IList<int> WritersOf(string fileName)
+        {
+            return OpenFiles.Holders(System.IO.Path.Combine(LogsDir, fileName));
+        }
+
         // Does this log file belong to a client that started at this time?
         //
         // The name carries a UTC timestamp of when the log opened, which is a
         // moment after the process started, so a few seconds of slack is
-        // correct rather than sloppy.
+        // correct rather than sloppy. Not enough on its own to tell clients
+        // apart, though: measured, a log opens three to four seconds after its
+        // client starts, and clients launched together start three seconds
+        // apart - see LogOwners.
         public static bool LooksLikeSameSession(string fileName, DateTime startedUtc)
         {
             DateTime opened;
