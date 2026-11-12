@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Windows.Forms;
@@ -29,6 +30,36 @@ namespace RobloxKeeper.Tests
             }
             foreach (Control k in kids) found.AddRange(CoveredIn(k));
             return found;
+        }
+
+        // A 1366x768 laptop, or a 1024x768 one: the window is shorter than it
+        // was laid out for. Every page still reaches its last card - it
+        // scrolls - and the line at its foot stays below it.
+        public static void TestOnAShortScreenEveryPageScrollsToItsEnd()
+        {
+            MainForm.ScreenHeightForTests = 728;
+            try
+            {
+                using (MainForm f = new MainForm(false))
+                {
+                    foreach (string key in new string[] { MainForm.PAGE_HOME, MainForm.PAGE_GAMES, MainForm.PAGE_FRIENDS,
+                                                          MainForm.PAGE_AUTO, MainForm.PAGE_LOOKS, MainForm.PAGE_SHOTS })
+                    {
+                        f.ShowPage(key);
+                        ShellPage page = f.PageNow;
+                        foreach (Control c in page.Controls)
+                        {
+                            if (c.Top == page.FootTop) continue;        // the foot line itself
+                            Assert.True(c.Bottom <= page.FootTop, key + ": " + c.GetType().Name + " \"" + c.Text + "\" ends above the foot line");
+                        }
+                        Assert.True(page.FootTop + ShellPage.FOOT_H <= Math.Max(page.Height, page.AutoScrollMinSize.Height),
+                                    key + ": the foot line can be scrolled to");
+                        List<string> covered = CoveredIn(page);
+                        Assert.Equal(0, covered.Count, key + ": " + string.Join("; ", covered.ToArray()));
+                    }
+                }
+            }
+            finally { MainForm.ScreenHeightForTests = 0; }
         }
 
         public static void TestNoPageHidesItsButtons()

@@ -88,6 +88,24 @@ namespace RobloxKeeper
 
         public string LastHeard { get { return said.Text; } }
 
+        // Where the line at the foot of the page is, below everything else.
+        public int FootTop { get { return said.Top - AutoScrollPosition.Y; } }
+
+        // On a screen too short for the whole window - a 768-high laptop - a
+        // page is shorter than it was laid out for, and its last card ran
+        // into the line at its foot or off the bottom. Then the page scrolls,
+        // and the line goes below its last card. Called once it is built.
+        public void FitContent()
+        {
+            int bottom = 0;
+            foreach (Control c in Controls)
+                if (!ReferenceEquals(c, said)) bottom = Math.Max(bottom, c.Bottom);
+            if (bottom <= Height - FOOT_H) return;
+            said.Top = bottom + 4;
+            AutoScroll = true;
+            AutoScrollMinSize = new Size(0, said.Bottom + 4);
+        }
+
         public bool IsShowing { get { return entered; } }
 
         // Coming into view, and leaving it. Timers start and stop here.

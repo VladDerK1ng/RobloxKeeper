@@ -5,7 +5,7 @@
     // published binary and the tag can never disagree.
     static class AppInfo
     {
-        public const string APP_VERSION = "2.0.0";
+        public const string APP_VERSION = "2.0.1";
 
         public const string REPO = "VladDerK1ng/RobloxKeeper";
         public const string RELEASE_API = "https://api.github.com/repos/" + REPO + "/releases/latest";

@@ -22,6 +22,25 @@ namespace RobloxKeeper.Tests
                 Assert.NotEqual(null, ScriptStore.NameProblem(bad), "refused: [" + bad + "]");
         }
 
+        // A script made here is trusted; a .lua someone dropped in the folder,
+        // with no settings beside it, is not - it must not skip the warning.
+        public static void TestMadeHereIsTrustedButADroppedInFileIsNot()
+        {
+            string dir = ScriptRig.TempDir();
+            try
+            {
+                ScriptStore s = new ScriptStore(dir);
+                Assert.Equal(null, s.Create("Mine", "press('e')"), "made");
+                Assert.True(s.Settings("Mine").Trusted, "made here: trusted");
+                File.WriteAllText(Path.Combine(dir, "Dropped.lua"), "press('e')");
+                ScriptStore fresh = new ScriptStore(dir);
+                Assert.True(fresh.Exists("Dropped"), "the dropped file is listed");
+                Assert.False(fresh.Settings("Dropped").Trusted, "but not trusted");
+                Assert.True(fresh.Settings("Mine").Trusted, "while the one made here still is");
+            }
+            finally { try { Directory.Delete(dir, true); } catch { } }
+        }
+
         public static void TestCreateListRenameAndRemoveTakeTheirFilesAlong()
         {
             string dir = ScriptRig.TempDir();
@@ -54,7 +73,8 @@ namespace RobloxKeeper.Tests
                 Assert.Equal("A script,farm", string.Join(",", s.Names().ToArray()), "and shows as such");
 
                 Assert.True(s.Remove("farm"), "removed");
-                Assert.Equal(1, Directory.GetFiles(dir).Length, "its settings and memory went too");
+                Assert.Equal(0, Directory.GetFiles(dir, "farm*").Length, "its settings and memory went too");
+                Assert.Equal(2, Directory.GetFiles(dir).Length, "and only A script's code and settings are left");
             }
             finally { Directory.Delete(dir, true); }
         }

@@ -395,12 +395,18 @@ namespace RobloxKeeper.Tests
         // The window as it always was is one of the pages, moved whole.
         public static void TestTheOldWindowIsAPageOfTheNewOne()
         {
-            using (MainForm f = new MainForm(false))
+            // On a screen tall enough for all of it; a short one adds a scroll bar.
+            MainForm.ScreenHeightForTests = 2000;
+            try
             {
-                Assert.Equal(MainForm.BASE_WIDTH + Rail.WIDTH, f.ClientSize.Width, "wider by the rail and nothing else");
-                Assert.Equal(MainForm.PAGE_KEEPER, f.CurrentPage, "a window only being drawn opens on the old page");
-                Assert.Equal(7, f.ShellRail.Items.Count, "seven pages");
+                using (MainForm f = new MainForm(false))
+                {
+                    Assert.Equal(MainForm.BASE_WIDTH + Rail.WIDTH, f.ClientSize.Width, "wider by the rail and nothing else");
+                    Assert.Equal(MainForm.PAGE_KEEPER, f.CurrentPage, "a window only being drawn opens on the old page");
+                    Assert.Equal(7, f.ShellRail.Items.Count, "seven pages");
+                }
             }
+            finally { MainForm.ScreenHeightForTests = 0; }
         }
 
         // A page costs nothing until someone opens it.

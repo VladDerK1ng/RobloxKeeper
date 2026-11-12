@@ -125,6 +125,7 @@ namespace RobloxKeeper
             {
                 page = MakePage(key);
                 if (page == null) return;
+                page.FitContent();
                 page.Location = new Point(Rail.WIDTH, TITLEBAR_H);
                 page.Visible = false;
                 Controls.Add(page);

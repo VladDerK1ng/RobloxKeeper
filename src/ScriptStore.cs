@@ -22,8 +22,8 @@ namespace RobloxKeeper
 
         // False for a script imported from someone else's .rkscript until
         // you have pressed "I trust this script": until then it doesn't
-        // start. A script made here - and one saved before this was kept -
-        // is trusted.
+        // start. A script made here is trusted; one read from a file that
+        // doesn't say so - or with no file at all - is not (see FromJson).
         public bool Trusted = true;
 
         public bool OnScreen { get { return string.Equals(PlaysOn, SCREEN, StringComparison.OrdinalIgnoreCase); } }
@@ -51,10 +51,15 @@ namespace RobloxKeeper
         }
 
         // Anything missing or unreadable is the default, never a fault: the
-        // file may have been edited by hand.
+        // file may have been edited by hand. Except trust: a script whose file
+        // is missing, unreadable or doesn't say so is not trusted - a .lua
+        // dropped in the folder, or one whose settings were lost in a failed
+        // rename, must not skip the warning. Scripts made here get a file
+        // saying they are trusted when they are made (Create).
         public static ScriptSettings FromJson(string text)
         {
             ScriptSettings s = new ScriptSettings();
+            s.Trusted = false;
             object o = Json.Parse(text);
             if (o == null) return s;
             string on = Json.Str(o, "playsOn");
@@ -62,10 +67,9 @@ namespace RobloxKeeper
             long key = Json.Num(o, "key");
             if (key > 0 && key < 255) s.Key = (byte)key;
             s.SummaryToDiscord = Json.Flag(o, "discord");
-            // Only a plain false takes trust away: a file from before it was
-            // kept has none, and those scripts were made here.
+            // Only a plain true gives trust.
             object trusted = Json.Get(o, "trusted");
-            s.Trusted = !(trusted is bool) || (bool)trusted;
+            s.Trusted = trusted is bool && (bool)trusted;
             return s;
         }
     }
@@ -220,6 +224,11 @@ namespace RobloxKeeper
         {
             string why = NameProblem(name, null);
             if (why != null) return why;
+            // Made here, so trusted - written before the code, so the script is
+            // never on disk without it. An import has already written its own
+            // untrusted settings, and those are kept.
+            if (!File.Exists(SettingsPath(name)) && !SaveSettings(name, new ScriptSettings()))
+                return "Couldn't save the script in " + folder + ".";
             if (!Save(name, code)) return "Couldn't save the script in " + folder + ".";
             return null;
         }
@@ -238,9 +247,25 @@ namespace RobloxKeeper
                 {
                     // Only the case changing is the same file to Windows: moved
                     // through a name of its own first.
-                    MoveFile(PathOf(was), PathOf(to));
-                    if (File.Exists(SettingsPath(was))) MoveFile(SettingsPath(was), SettingsPath(to));
-                    if (File.Exists(MemoryPath(was))) MoveFile(MemoryPath(was), MemoryPath(to));
+                    //
+                    // Settings first and the code last: the code is what makes it
+                    // a script, so a move that fails part-way can never leave the
+                    // code under the new name without its settings - and with no
+                    // settings it would lose its trust, or keep an untrusted one's
+                    // away. If the code can't move, the others are put back.
+                    bool movedSettings = false, movedMemory = false;
+                    try
+                    {
+                        if (File.Exists(SettingsPath(was))) { MoveFile(SettingsPath(was), SettingsPath(to)); movedSettings = true; }
+                        if (File.Exists(MemoryPath(was))) { MoveFile(MemoryPath(was), MemoryPath(to)); movedMemory = true; }
+                        MoveFile(PathOf(was), PathOf(to));
+                    }
+                    catch
+                    {
+                        try { if (movedMemory) MoveFile(MemoryPath(to), MemoryPath(was)); } catch { }
+                        try { if (movedSettings) MoveFile(SettingsPath(to), SettingsPath(was)); } catch { }
+                        throw;
+                    }
                 }
                 catch { settings = null; return "Couldn't rename the script - is it open somewhere else?"; }
                 settings = null;

@@ -283,10 +283,15 @@ namespace RobloxKeeper.Tests
             Assert.True(d.Sent.Count > 0, "and it played there");
         }
 
-        public static void TestTrustIsKeptAndOnlyAPlainFalseTakesItAway()
+        // Trust fails closed: only a file that plainly says so gives it. A .lua
+        // dropped in the folder with no settings, or settings lost in a failed
+        // rename, must not skip the warning.
+        public static void TestTrustIsKeptAndOnlyAPlainTrueGivesIt()
         {
-            Assert.True(ScriptSettings.FromJson("{\"playsOn\":\"front\",\"key\":0}").Trusted, "a file from before trust was kept: made here");
-            Assert.True(ScriptSettings.FromJson("not json").Trusted, "nothing readable: the defaults");
+            Assert.True(ScriptSettings.FromJson("{\"trusted\":true}").Trusted, "true gives it");
+            Assert.False(ScriptSettings.FromJson("{\"playsOn\":\"front\",\"key\":0}").Trusted, "a file that doesn't say: not trusted");
+            Assert.False(ScriptSettings.FromJson("not json").Trusted, "nothing readable: not trusted");
+            Assert.False(ScriptSettings.FromJson(null).Trusted, "no file at all: not trusted");
             Assert.False(ScriptSettings.FromJson("{\"trusted\":false}").Trusted, "false is kept");
             ScriptSettings s = new ScriptSettings();
             s.Trusted = false;

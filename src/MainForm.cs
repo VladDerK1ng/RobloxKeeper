@@ -234,6 +234,10 @@ namespace RobloxKeeper
         internal const int FULL_HEIGHT = COLUMN_BOTTOM + 16;
         internal const int BASE_WIDTH = CARD_X2 + CARD_W + CARD_X;
 
+        // Tests set this to stand in for the screen's height, so both a tall
+        // screen and a short one are tried on any machine. 0 is the real one.
+        internal static int ScreenHeightForTests = 0;
+
         void SetHeightToFitScreen()
         {
             int available = FULL_HEIGHT;
@@ -241,7 +245,7 @@ namespace RobloxKeeper
             {
                 // Borderless, so the whole window is client area - only a small
                 // margin is needed so it doesn't sit flush against the taskbar.
-                available = Screen.PrimaryScreen.WorkingArea.Height - 8;
+                available = (ScreenHeightForTests > 0 ? ScreenHeightForTests : Screen.PrimaryScreen.WorkingArea.Height) - 8;
             }
             catch { }
 

@@ -1025,6 +1025,11 @@ namespace RobloxKeeper.Tests
 
         public static void TestTheAutomationPageHasAScriptsTileThatFits()
         {
+            // On a screen tall enough for the whole window; the short one is
+            // OverlapTests.TestOnAShortScreenEveryPageScrollsToItsEnd.
+            MainForm.ScreenHeightForTests = 2000;
+            try
+            {
             using (MainForm f = new MainForm(false))
             {
                 f.ShowPage(MainForm.PAGE_AUTO);
@@ -1044,6 +1049,8 @@ namespace RobloxKeeper.Tests
                         Assert.True(!cards[i].Bounds.IntersectsWith(cards[j].Bounds), "no two cards overlap");
                 }
             }
+            }
+            finally { MainForm.ScreenHeightForTests = 0; }
         }
     }
 }
