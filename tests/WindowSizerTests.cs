@@ -25,7 +25,7 @@ namespace RobloxKeeper.Tests
             Assert.Equal(new IntPtr(2), plan[0].Key, "the second");
             Assert.Equal(new Size(1280, 720), plan[0].Value, "to the first one's size");
             Assert.Equal(new Size(1280, 720), plan[1].Value, "and the third");
-            Assert.Contains("2 clients", said, "says how many");
+            Assert.Contains("2 Roblox windows", said, "says how many");
             Assert.Contains("1280 x 720", said, "and what size");
         }
 
@@ -71,7 +71,7 @@ namespace RobloxKeeper.Tests
         {
             string said;
             Assert.Equal(0, WindowSizer.Plan(new SizedWindow[] { W(1, 0, 0, 1280, 720) }, out said).Count, "nothing");
-            Assert.Contains("one client", said, "says why");
+            Assert.Contains("one Roblox window", said, "says why");
         }
 
         // Measured live: two Roblox processes running in the tray, neither
@@ -80,7 +80,7 @@ namespace RobloxKeeper.Tests
         {
             string said;
             WindowSizer.Plan(new SizedWindow[0], out said);
-            Assert.Contains("No client window", said, "none open");
+            Assert.Contains("No Roblox window", said, "none open");
         }
     }
 }

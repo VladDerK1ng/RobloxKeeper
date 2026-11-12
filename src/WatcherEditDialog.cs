@@ -23,6 +23,8 @@ namespace RobloxKeeper
         public Action<string> Log;
         public bool CanReadText = true;
         public IHuntControl Hunts;                  // null where there is no main window, as in tests
+        public IMacroHost Macros;                   // the same
+        public IScriptHost Scripts;                 // the same: Lua scripts
 
         public WatchedClient[] RunningClients()
         {
@@ -75,8 +77,8 @@ namespace RobloxKeeper
         public static string CostNote(bool wholeWindow)
         {
             return wholeWindow
-                ? "Reading the whole window takes about nine times as long as reading a box, "
-                  + "so a client watched this way is checked about once a second instead of four times."
+                ? "Watching the whole window is slower: it's checked about once a second instead of four times. "
+                  + "Draw a box around the part you care about to check it more often."
                 : "";
         }
 
@@ -84,12 +86,14 @@ namespace RobloxKeeper
         public static string Problem(Watcher w)
         {
             if (string.IsNullOrEmpty(w.Name) || w.Name.Trim().Length == 0)
-                return "Give it a name - it's what the message you get is called.";
+                return "Give it a name. It's shown in the messages you get.";
             if (w.Kind == WatchKind.TextAppears &&
                 (w.Rule == null || WordsFrom(WordsText(w.Rule.Words)).Length == 0))
                 return "Add at least one word to look for.";
             if (w.Kind == WatchKind.ImageFound && string.IsNullOrEmpty(w.TemplateFile))
                 return "Cut out the picture to look for first.";
+            if (w.ThenClicks && w.Kind != WatchKind.ImageFound)
+                return "Only a picture watcher can click what it finds. Choose a macro, or nothing.";
             if (!w.SendDiscord && !w.ShowTray && !w.PlaySound && !w.WriteLog)
                 return "Tick at least one way to be told when it finds something.";
             if (!string.IsNullOrEmpty(w.WebhookUrl) && !WebhookPost.LooksLikeDiscordWebhook(w.WebhookUrl))
@@ -109,14 +113,14 @@ namespace RobloxKeeper
                 case WatchKind.ImageFound:
                     string need = Percent(w.Tolerance);
                     return k.Seen
-                        ? "Found it - " + Percent(k.Score) + " alike, and it needs " + need + "."
-                        : "Not found. The closest match was " + Percent(k.Score) + " alike, and it needs " + need + ".";
+                        ? "Found it: " + Percent(k.Score) + " match (it needs " + need + ")."
+                        : "Not found. The closest match was " + Percent(k.Score) + " (it needs " + need + ").";
 
                 case WatchKind.ChatLine:
                     if (string.IsNullOrEmpty(k.Text) || k.Text.Trim().Length == 0)
-                        return "It didn't read any chat there. Is the chat open on that client?";
+                        return "It saw no chat there. Is the chat open in that Roblox window?";
                     string filter = Blank(w.ChatContains);
-                    if (filter == null) return "It read:\r\n" + Clip(k.Text);
+                    if (filter == null) return "It saw:\r\n" + Clip(k.Text);
 
                     // The lines that would count come first. In a whole-window
                     // read they are a few among the leaderboard and the buttons,
@@ -129,15 +133,15 @@ namespace RobloxKeeper
                         lines++;
                         if (line.IndexOf(filter, StringComparison.OrdinalIgnoreCase) >= 0) passing.Add(line.Trim());
                     }
-                    string head = "It read " + lines + (lines == 1 ? " line" : " lines") + ". "
+                    string head = "It saw " + lines + (lines == 1 ? " line" : " lines") + ". "
                                 + passing.Count + " of them contain \"" + filter + "\""
                                 + (passing.Count > 0 ? ":\r\n" + string.Join("\r\n", passing.ToArray()) : ".");
-                    return head + "\r\n\r\nEverything it read:\r\n" + Clip(k.Text);
+                    return head + "\r\n\r\nAll the text it saw:\r\n" + Clip(k.Text);
 
                 default:
                     string read = string.IsNullOrEmpty(k.Text) || k.Text.Trim().Length == 0
-                        ? "It didn't read anything there."
-                        : "It read: " + Clip(k.Text.Replace("\n", " / "));
+                        ? "It saw no text there."
+                        : "It saw: " + Clip(k.Text.Replace("\n", " / "));
                     return (k.Seen ? "Matched \"" + k.Matched + "\". " : "No match. ") + read;
             }
         }
@@ -270,7 +274,7 @@ namespace RobloxKeeper
             f.ClientSize = new Size(w, h);
             f.BackColor = Theme.Bg;
             f.ForeColor = Theme.Text;
-            f.Font = new Font("Segoe UI", 9f);
+            f.Font = Ui.F("Segoe UI", 9f);
 
             Panel bar = new Panel();
             bar.Location = new Point(0, 0);
@@ -279,7 +283,7 @@ namespace RobloxKeeper
             f.Controls.Add(bar);
 
             Label t = Ui.RowLabel(title, 16, 0, TITLEBAR_H, w - 80, 10f, Theme.Text);
-            t.Font = new Font("Segoe UI", 10f, FontStyle.Bold);
+            t.Font = Ui.F("Segoe UI", 10f, FontStyle.Bold);
             t.BackColor = Theme.Bg;
             bar.Controls.Add(t);
 
@@ -345,7 +349,7 @@ namespace RobloxKeeper
             t.BorderStyle = BorderStyle.None;
             t.BackColor = Theme.Card;
             t.ForeColor = Theme.Muted;
-            t.Font = new Font("Segoe UI", 8.25f);
+            t.Font = Ui.F("Segoe UI", 8.25f);
             t.TabStop = false;
             t.HandleCreated += delegate { DarkScrollbars.Apply(t); };
             return t;
@@ -366,7 +370,7 @@ namespace RobloxKeeper
         public static Button Primary(string text, int x, int y, int w, int h)
         {
             Button b = Ui.AccentButton(text, x, y, w, h);
-            b.Font = new Font("Segoe UI", 8.25f, FontStyle.Bold);
+            b.Font = Ui.F("Segoe UI", 8.25f, FontStyle.Bold);
             return b;
         }
 
@@ -418,7 +422,7 @@ namespace RobloxKeeper
             zoom = Math.Max(1, Math.Min(12, 360 / Math.Max(1, Math.Max(template.Width, template.Height))));
             int cw = Math.Max(template.Width * zoom, 200), ch = Math.Max(template.Height * zoom, 200);
 
-            WatchUi.Frame(this, "Paint out the background", M + cw + M + SIDE_W + M,
+            WatchUi.Frame(this, "Erase the background", M + cw + M + SIDE_W + M,
                           WatchUi.TITLEBAR_H + Math.Max(ch, 260) + M);
 
             canvas = new StillView();
@@ -448,8 +452,8 @@ namespace RobloxKeeper
             card.Controls.Add(cmbBrush);
 
             Label hint = Ui.MutedLabel(
-                "Paint over everything that isn't the thing itself. Left button paints it out, "
-                + "right button paints it back. Painted-out parts are never compared.",
+                "Paint over everything that isn't the thing itself. Left button erases, "
+                + "right button brings it back. Erased parts are ignored.",
                 Ui.PAD, 76, 8.25f);
             hint.MaximumSize = new Size(SIDE_W - Ui.PAD * 2, 0);
             card.Controls.Add(hint);
@@ -594,7 +598,7 @@ namespace RobloxKeeper
             BuildWhat(WatchUi.CardAt(this, "WHAT TO WATCH FOR", X1, TOP, COL_W, TOP_H));
             BuildWhere(WatchUi.CardAt(this, "WHERE AND WHEN", X2, TOP, COL_W, TOP_H));
             BuildTell(WatchUi.CardAt(this, "TELL ME BY", X1, LOW_Y, COL_W, LOW_H));
-            BuildTry(WatchUi.CardAt(this, "TRY IT ON A CLIENT", X2, LOW_Y, COL_W, LOW_H));
+            BuildTry(WatchUi.CardAt(this, "TRY IT ON A ROBLOX WINDOW", X2, LOW_Y, COL_W, LOW_H));
 
             lblProblem = Ui.RowLabel("", X1 + 4, FOOT_Y, 32, 520, 8.25f, Theme.Amber);
             lblProblem.BackColor = Theme.Bg;
@@ -639,7 +643,7 @@ namespace RobloxKeeper
             textPanel.Controls.Add(cmbMode);
             chkCase = Ui.DarkCheck("Ignore capitals", Ui.PAD, 148, 9f);
             textPanel.Controls.Add(chkCase);
-            chkWhole = Ui.DarkCheck("Whole words only - so \"rat\" doesn't match \"grateful\"", Ui.PAD, 174, 9f);
+            chkWhole = Ui.DarkCheck("Whole words only (\"rat\" won't match \"grateful\")", Ui.PAD, 174, 9f);
             textPanel.Controls.Add(chkWhole);
             AddNoTextNote(textPanel, 206);
 
@@ -648,8 +652,8 @@ namespace RobloxKeeper
             chatBox = WatchUi.Input(Ui.PAD, 18, INNER);
             chatPanel.Controls.Add(chatBox);
             Label chatHint = Ui.MutedLabel(
-                "Leave it blank to be told about every new line. You get the whole line, not just "
-                + "the word - and only while the chat is open on that client.", Ui.PAD, 50, 8.25f);
+                "Leave it blank to hear about every new line. You get the whole line, not just "
+                + "the word. The chat must be open in that Roblox window.", Ui.PAD, 50, 8.25f);
             chatHint.MaximumSize = new Size(INNER, 0);
             chatPanel.Controls.Add(chatHint);
             AddNoTextNote(chatPanel, 112);
@@ -662,22 +666,22 @@ namespace RobloxKeeper
             thumb.BackColor = Theme.Inset;
             thumb.SizeMode = PictureBoxSizeMode.Zoom;
             picturePanel.Controls.Add(thumb);
-            Button cut = WatchUi.Primary("Cut out from a client", Ui.PAD + 86, 18, INNER - 86, 28);
+            Button cut = WatchUi.Primary("Cut out from a Roblox window", Ui.PAD + 86, 18, INNER - 86, 28);
             cut.Click += delegate { CutPicture(); };
             picturePanel.Controls.Add(cut);
-            Button paint = WatchUi.Secondary("Paint out the background", Ui.PAD + 86, 52, INNER - 86, 28);
+            Button paint = WatchUi.Secondary("Erase the background", Ui.PAD + 86, 52, INNER - 86, 28);
             paint.Click += delegate { PaintMask(); };
             picturePanel.Controls.Add(paint);
             lblPicture = Ui.MutedLabel("", Ui.PAD, 98, 8.25f);
             lblPicture.MaximumSize = new Size(INNER, 0);
             picturePanel.Controls.Add(lblPicture);
-            picturePanel.Controls.Add(Ui.RowLabel("How alike", Ui.PAD, 128, ROW_H, 90, 9f, Theme.Muted));
+            picturePanel.Controls.Add(Ui.RowLabel("How close", Ui.PAD, 128, ROW_H, 90, 9f, Theme.Muted));
             numTolerance = Ui.DarkNumeric(FIELD_X, 128, 56, 50, 99, 82);
             picturePanel.Controls.Add(numTolerance);
             picturePanel.Controls.Add(Ui.RowLabel("%", FIELD_X + 60, 128, ROW_H, 30, 9f, Theme.Muted));
             Label tolHint = Ui.MutedLabel(
-                "Lower finds it more often but can match the wrong thing. Test it below to see "
-                + "how alike it really is.", Ui.PAD, 162, 8.25f);
+                "A lower number finds it more often but may match the wrong thing. "
+                + "Use the test below to check.", Ui.PAD, 162, 8.25f);
             tolHint.MaximumSize = new Size(INNER, 0);
             picturePanel.Controls.Add(tolHint);
         }
@@ -705,9 +709,9 @@ namespace RobloxKeeper
 
         void BuildWhere(Card card)
         {
-            card.Controls.Add(Ui.RowLabel("Clients", Ui.PAD, 44, ROW_H, 90, 9f, Theme.Muted));
+            card.Controls.Add(Ui.RowLabel("Windows", Ui.PAD, 44, ROW_H, 90, 9f, Theme.Muted));
             cmbWho = Ui.DarkCombo(FIELD_X, 44, FIELD_W);
-            cmbWho.Items.Add("All clients");
+            cmbWho.Items.Add("All Roblox windows");
             cmbWho.Items.Add("Only these accounts");
             // Hidden rather than disabled: a themed tick box looks the same
             // either way, and a live-looking list that does nothing misleads.
@@ -722,7 +726,7 @@ namespace RobloxKeeper
             card.Controls.Add(accountsList);
 
             Label who = Ui.MutedLabel(
-                "A client opened outside the account manager has no name, so only All clients covers it.",
+                "Roblox windows you didn't open from Accounts have no name, so pick All Roblox windows for them.",
                 Ui.PAD, 150, 8.25f);
             who.MaximumSize = new Size(INNER, 0);
             card.Controls.Add(who);
@@ -749,12 +753,12 @@ namespace RobloxKeeper
             firingPanel.Controls.Add(Ui.RowLabel("Seen", Ui.PAD, 0, ROW_H, 90, 9f, Theme.Muted));
             numConfirm = Ui.DarkNumeric(FIELD_X, 0, 50, 1, 10, 2);
             firingPanel.Controls.Add(numConfirm);
-            firingPanel.Controls.Add(Ui.RowLabel("scans in a row before it counts", FIELD_X + 58, 0, ROW_H, 200, 8.25f, Theme.Muted));
+            firingPanel.Controls.Add(Ui.RowLabel("scans in a row to count it", FIELD_X + 58, 0, ROW_H, COL_W - FIELD_X - 58 - 8, 8.25f, Theme.Muted));
 
             firingPanel.Controls.Add(Ui.RowLabel("Then wait", Ui.PAD, 34, ROW_H, 90, 9f, Theme.Muted));
             numCooldown = Ui.DarkNumeric(FIELD_X, 34, 64, 0, 3600, 30);
             firingPanel.Controls.Add(numCooldown);
-            firingPanel.Controls.Add(Ui.RowLabel("seconds before saying it again", FIELD_X + 72, 34, ROW_H, 180, 8.25f, Theme.Muted));
+            firingPanel.Controls.Add(Ui.RowLabel("seconds before telling you again", FIELD_X + 72, 34, ROW_H, 180, 8.25f, Theme.Muted));
 
             lblChatOnly = Ui.MutedLabel("Every new chat line is its own message, so there is nothing to wait for.",
                 Ui.PAD, 304, 8.25f);
@@ -781,8 +785,8 @@ namespace RobloxKeeper
             card.Controls.Add(Ui.RowLabel("Then play", Ui.PAD, 172, ROW_H, 90, 9f, Theme.Muted));
             cmbThen = Ui.DarkCombo(FIELD_X, 172, FIELD_W);
             card.Controls.Add(cmbThen);
-            tips.SetToolTip(cmbThen, "A macro played on the client that saw it - at most once every "
-                + "15 seconds on each client. Make macros from the Macros button in the watchers list.");
+            tips.SetToolTip(cmbThen, "Plays a macro in the Roblox window that saw it, at most once every "
+                + "15 seconds per window. Make macros with the Macros button in the watchers list.");
         }
 
         readonly ToolTip tips = new ToolTip();
@@ -801,20 +805,23 @@ namespace RobloxKeeper
         {
             thenNames.Clear();
             foreach (Macro m in kit.Store.Macros) AddName(thenNames, m.Name);
-            AddName(thenNames, select);
+            if (select != Watcher.CLICK_IT) AddName(thenNames, select);
             cmbThen.Items.Clear();
             cmbThen.Items.Add("Nothing");
             cmbThen.Items.AddRange(thenNames);
+            // Last, and not a macro: click what a picture watcher found.
+            thenNames.Add(Watcher.CLICK_IT);
+            cmbThen.Items.Add("Click the picture, where it was found");
             ChooseThen(select);
         }
 
         void BuildTry(Card card)
         {
-            card.Controls.Add(Ui.RowLabel("Client", Ui.PAD, 42, ROW_H, 90, 9f, Theme.Muted));
+            card.Controls.Add(Ui.RowLabel("Window", Ui.PAD, 42, ROW_H, 90, 9f, Theme.Muted));
             cmbClient = Ui.DarkCombo(FIELD_X, 42, FIELD_W);
             card.Controls.Add(cmbClient);
 
-            btnTest = WatchUi.Secondary("Test against this client now", Ui.PAD, 76, INNER, 28);
+            btnTest = WatchUi.Secondary("Test on this Roblox window now", Ui.PAD, 76, INNER, 28);
             btnTest.Click += delegate { RunTest(SelectedClient()); };
             card.Controls.Add(btnTest);
 
@@ -968,7 +975,7 @@ namespace RobloxKeeper
             if (clients.Length > 0) cmbClient.SelectedIndex = 0;
             btnTest.Enabled = clients.Length > 0;
             if (clients.Length == 0)
-                ShowResult("Open a Roblox client to draw boxes, cut out pictures or test this.");
+                ShowResult("Open a Roblox window to draw boxes, cut out pictures or test this.");
         }
 
         WatchedClient SelectedClient()
@@ -994,7 +1001,7 @@ namespace RobloxKeeper
             if (thumb.Image != null) { thumb.Image.Dispose(); thumb.Image = null; }
             if (string.IsNullOrEmpty(templateFile))
             {
-                lblPicture.Text = "No picture yet. Cut one out of a client that is showing it.";
+                lblPicture.Text = "No picture yet. Cut one out of a Roblox window that shows it.";
                 return;
             }
 
@@ -1007,7 +1014,7 @@ namespace RobloxKeeper
             Pixels m = maskFile == null ? null : WatchEngine.LoadPicture(maskFile);
             thumb.Image = WatcherForm.Preview(t, m);
             lblPicture.Text = t.Width + " x " + t.Height + " pixels"
-                + (m != null ? ", background painted out." : ". Paint out its background so scenery can't spoil it.");
+                + (m != null ? ", background erased." : ". Erase its background so scenery can't spoil it.");
         }
 
         void CutPicture()
@@ -1071,8 +1078,8 @@ namespace RobloxKeeper
             if (c == null) return;
             if (string.IsNullOrEmpty(c.PlaceId))
             {
-                ShowResult("That client hasn't joined a game yet, and a box belongs to a game. "
-                         + "Try again once it's in one.");
+                ShowResult("That Roblox window isn't in a game yet, and a box belongs to a game. "
+                         + "Try again once it is.");
                 return;
             }
             Pixels still = Grab(c);
@@ -1102,7 +1109,7 @@ namespace RobloxKeeper
         {
             WatchedClient c = SelectedClient();
             if (c == null)
-                ShowResult("Open a Roblox client first - boxes, pictures and tests all need one to look at.");
+                ShowResult("Open a Roblox window first. Boxes, pictures and tests all need one to look at.");
             return c;
         }
 
@@ -1115,7 +1122,7 @@ namespace RobloxKeeper
             if (p != null && !p.IsEmpty) return p;
 
             ShowResult(state == WatchState.Watchable
-                ? "Couldn't take a picture of that client just now."
+                ? "Couldn't see that Roblox window just now."
                 : WindowCapture.Explain(state));
             return null;
         }

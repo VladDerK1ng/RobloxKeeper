@@ -34,10 +34,10 @@ namespace RobloxKeeper
             if (accounts == null || accounts.Count == 0) return "Tick at least one account to hunt with.";
             foreach (string a in accounts)
                 if (!hasSignIn(a))
-                    return a + " has no saved sign-in, so its client can't be moved. Sign it in again in Accounts.";
+                    return a + " has no saved sign-in, so its Roblox window can't be moved to a new server. Sign it in again in Accounts.";
             foreach (string a in accounts)
                 if (!watched(a))
-                    return "No switched-on watcher in this setup looks at " + a + "'s client, so a hunt would never find anything.";
+                    return "No watcher that's switched on looks at " + a + "'s Roblox window, so the hunt would never find anything.";
             return null;
         }
     }
@@ -171,7 +171,7 @@ namespace RobloxKeeper
             problem = why;
             if (FailuresInARow < MAX_FAILURES) return false;
             Stage = HuntStage.Stopped;
-            problem = MAX_FAILURES + " tries in a row didn't work - the last: " + why;
+            problem = MAX_FAILURES + " tries in a row failed. The last problem: " + why;
             return true;
         }
 
@@ -220,7 +220,7 @@ namespace RobloxKeeper
                     return "looking in server " + Servers + " - " + left + "s left";
                 case HuntStage.Waiting:
                     int wait = Math.Max(0, (int)Math.Ceiling((retryAt - now).TotalSeconds));
-                    return "couldn't move (" + problem + ") - trying again in " + wait + "s";
+                    return "couldn't move (" + problem + "). Trying again in " + wait + "s";
                 case HuntStage.Found:
                     return "found \"" + foundWhat + "\" in server " + Servers + " - staying there";
                 default:

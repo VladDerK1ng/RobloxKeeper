@@ -63,7 +63,7 @@ namespace RobloxKeeper
             MinimumSize = new Size(760, 540);
             BackColor = Theme.Bg;
             ForeColor = Theme.Text;
-            Font = new Font("Segoe UI", 9f);
+            Font = Ui.F("Segoe UI", 9f);
             Ui.GiveAppIcon(this);
 
             BuildBottomBar();
@@ -98,7 +98,7 @@ namespace RobloxKeeper
             if (loginMode)
             {
                 save = Ui.AccentButton("Save account", 0, 10, 130, 26);
-                save.Font = new Font("Segoe UI", 8.25f, FontStyle.Bold);
+                save.Font = Ui.F("Segoe UI", 8.25f, FontStyle.Bold);
                 save.Enabled = false;
                 save.Anchor = AnchorStyles.Top | AnchorStyles.Right;
                 save.Click += delegate { Finish(); };
@@ -106,7 +106,7 @@ namespace RobloxKeeper
             }
 
             cancel = Ui.AccentButton(loginMode ? "Cancel" : "Close", 0, 10, 90, 26);
-            cancel.Font = new Font("Segoe UI", 8.25f, FontStyle.Bold);
+            cancel.Font = Ui.F("Segoe UI", 8.25f, FontStyle.Bold);
             cancel.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             cancel.Click += delegate { DialogResult = DialogResult.Cancel; Close(); };
             bar.Controls.Add(cancel);
@@ -146,7 +146,7 @@ namespace RobloxKeeper
         void AddNav(string text, int x, EventHandler onClick)
         {
             Button b = Ui.AccentButton(text, x, 7, text.Length > 5 ? 74 : 62, 26);
-            b.Font = new Font("Segoe UI", 8.25f, FontStyle.Bold);
+            b.Font = Ui.F("Segoe UI", 8.25f, FontStyle.Bold);
             b.Click += onClick;
             nav.Controls.Add(b);
         }
@@ -214,7 +214,7 @@ namespace RobloxKeeper
             catch (Exception ex)
             {
                 status.ForeColor = Theme.Amber;
-                status.Text = "Could not start the browser: " + ex.Message;
+                status.Text = "Couldn't start the browser: " + ex.Message;
             }
         }
 
@@ -255,7 +255,7 @@ namespace RobloxKeeper
             if (loginMode)
             {
                 status.ForeColor = Theme.Amber;
-                status.Text = "Save the account first, then use Browse to join a game as it.";
+                status.Text = "Save the account first, then use Browse to play as it.";
                 return;
             }
 
@@ -305,7 +305,7 @@ namespace RobloxKeeper
                 save.Enabled = true;
                 if (DetectedName == null)
                 {
-                    status.Text = "Signed in - checking which account...";
+                    status.Text = "Signed in. Checking which account...";
                     string cookie = found;
                     string[] who = await Task.Run(delegate
                     {

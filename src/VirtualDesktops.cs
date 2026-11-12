@@ -117,7 +117,7 @@ namespace RobloxKeeper
             Key(keys, 3, arrow, true);
             Key(keys, 4, 0xA2, true);
             Key(keys, 5, 0x5B, true);
-            Native.SendInput((uint)keys.Length, keys, Marshal.SizeOf(typeof(Native.INPUT)));
+            InputSender.Send(keys);
         }
 
         static void Key(Native.INPUT[] keys, int i, byte vk, bool up)

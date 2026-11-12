@@ -108,13 +108,13 @@ namespace RobloxKeeper
 
         void Offer(string version, string url, string shaUrl)
         {
-            log("Version " + version + " is available (you have " + AppInfo.APP_VERSION + ").");
+            log("Version " + version + " is available. You have " + AppInfo.APP_VERSION + ".");
             if (MessageBox.Show(owner,
-                    "RobloxKeeper " + version + " is available.\r\nYou are running " + AppInfo.APP_VERSION + ".\r\n\r\n" +
+                    "RobloxKeeper " + version + " is available.\r\nYou have " + AppInfo.APP_VERSION + ".\r\n\r\n" +
                     "Download it and restart now?",
                     "Update available", MessageBoxButtons.YesNo, MessageBoxIcon.Information) != DialogResult.Yes)
             {
-                log("Update skipped. It will be offered again next time you start.");
+                log("Update skipped. You'll be asked again next time you start.");
                 return;
             }
             Install(version, url, shaUrl);
@@ -143,13 +143,13 @@ namespace RobloxKeeper
                 }
                 if (!File.Exists(staged) || new FileInfo(staged).Length < 10000)
                 {
-                    log("Update download looked incomplete - keeping the current version.");
+                    log("The update didn't download fully, so you're staying on this version.");
                     try { File.Delete(staged); } catch { }
                     return;
                 }
                 if (expected != null && HashOf(staged) != expected)
                 {
-                    log("The download didn't match the checksum published with the release - keeping the current version.");
+                    log("The update didn't pass its safety check, so you're staying on this version.");
                     try { File.Delete(staged); } catch { }
                     return;
                 }
@@ -157,7 +157,7 @@ namespace RobloxKeeper
                 string why = SelfSwap.Swap(exe, staged, new LiveFileOps());
                 if (why != null)
                 {
-                    log("Update failed: " + why + " - you can download it from the GitHub releases page.");
+                    log("Update failed: " + why + ". You can download it from the GitHub releases page.");
                     try { if (File.Exists(staged)) File.Delete(staged); } catch { }
                     return;
                 }
@@ -166,12 +166,12 @@ namespace RobloxKeeper
                 psi.UseShellExecute = false;
                 Process.Start(psi);
 
-                log("Update ready - restarting into version " + version + ".");
+                log("Update ready. Restarting on version " + version + ".");
                 owner.Close();
             }
             catch (Exception ex)
             {
-                log("Update failed: " + ex.Message + " - you can download it from the GitHub releases page.");
+                log("Update failed: " + ex.Message + ". You can download it from the GitHub releases page.");
                 try { if (File.Exists(staged)) File.Delete(staged); } catch { }
             }
         }

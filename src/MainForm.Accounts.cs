@@ -38,13 +38,13 @@ namespace RobloxKeeper
         {
             follow = new FollowState(f, DateTime.Now);
             Log("Following " + f.Player + " with " + string.Join(", ", f.Accounts.ToArray())
-                + " - when they move to another server, " + (f.Accounts.Count == 1 ? "it goes" : "they go") + " too.");
+                + ". When they move to another server, " + (f.Accounts.Count == 1 ? "it moves" : "they move") + " too.");
         }
 
         void StopFollowing(bool say)
         {
             if (follow == null) return;
-            if (say) Log("Stopped following " + follow.Request.Player + ". Every client stays where it is.");
+            if (say) Log("Stopped following " + follow.Request.Player + ". Every Roblox window stays where it is.");
             follow = null;
         }
 
@@ -64,10 +64,10 @@ namespace RobloxKeeper
             string player = follow.Request.Player;
 
             foreach (string gone in follow.Dropped(delegate(string a) { return PidOfAccount(a) > 0; }, now))
-                Log(gone + "'s client was closed, so it has stopped following " + player + ".");
+                Log(gone + "'s Roblox window was closed, so it stopped following " + player + ".");
             if (follow.Request.Accounts.Count == 0)
             {
-                Log("No account is following " + player + " any more.");
+                Log("No account is following " + player + " now.");
                 follow = null;
                 return;
             }
@@ -85,7 +85,7 @@ namespace RobloxKeeper
             }
             if (asker == null)
             {
-                Log("Stopped following " + player + " - none of the accounts following has a saved sign-in.");
+                Log("Stopped following " + player + ". None of the accounts following have a saved sign-in.");
                 follow = null;
                 return;
             }
@@ -118,13 +118,13 @@ namespace RobloxKeeper
                 state.LastSeenType = seen;
                 if (seen == -3)
                     Log(player + " is in a game, but their privacy settings don't let " + asker
-                        + " join them - the accounts stay where they are.");
+                        + " join them. The accounts stay where they are.");
                 else if (seen == PlayerWhere.UNKNOWN)
-                    Log("Couldn't find out where " + player + " is" + (error != null ? ": " + error : "") + " - trying again shortly.");
+                    Log("Couldn't find out where " + player + " is" + (error != null ? ": " + error : "") + ". Trying again soon.");
                 else if (!there)
-                    Log(player + " isn't in a game right now - the accounts stay where they are until they join one.");
+                    Log(player + " isn't in a game right now. The accounts stay where they are until they join one.");
                 else if (!first)
-                    Log(player + " is in a game again - following.");
+                    Log(player + " is in a game again, so the accounts are following.");
             }
             if (!there) return;
 
@@ -154,7 +154,7 @@ namespace RobloxKeeper
             s.Cookie = acc.Cookie;
             s.RunningPid = PidOfAccount(acc.Name);
             r.Seats.Add(s);
-            Log(state.Request.Player + " moved server - moving " + acc.Name + " there too.");
+            Log(state.Request.Player + " moved to another server. Moving " + acc.Name + " there too.");
 
             ThreadPool.QueueUserWorkItem(delegate
             {

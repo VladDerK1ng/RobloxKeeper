@@ -74,6 +74,13 @@ namespace RobloxKeeper
         public const uint MOUSEEVENTF_LEFTUP = 0x0004;
         public const uint MOUSEEVENTF_RIGHTDOWN = 0x0008;
         public const uint MOUSEEVENTF_RIGHTUP = 0x0010;
+        public const uint MOUSEEVENTF_WHEEL = 0x0800;
+
+        // How finely this process may sleep, in milliseconds. Zero is success.
+        [DllImport("winmm.dll")]
+        public static extern uint timeBeginPeriod(uint ms);
+        [DllImport("winmm.dll")]
+        public static extern uint timeEndPeriod(uint ms);
         public const uint KEYEVENTF_UNICODE = 0x0004;
 
         [StructLayout(LayoutKind.Sequential)]
@@ -139,6 +146,7 @@ namespace RobloxKeeper
         public const int WH_MOUSE_LL = 14;
         public const int WM_KEYDOWN = 0x0100, WM_KEYUP = 0x0101, WM_SYSKEYDOWN = 0x0104, WM_SYSKEYUP = 0x0105;
         public const int WM_LBUTTONDOWN = 0x0201, WM_LBUTTONUP = 0x0202, WM_RBUTTONDOWN = 0x0204, WM_RBUTTONUP = 0x0205;
+        public const int WM_MOUSEMOVE = 0x0200, WM_MOUSEWHEEL = 0x020A;
         public const uint LLKHF_INJECTED = 0x10;
         public const uint LLMHF_INJECTED = 0x01;
 

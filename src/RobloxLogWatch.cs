@@ -187,7 +187,7 @@ namespace RobloxKeeper
 
             string who = null;
             if (NameForLog != null) { try { who = NameForLog(fileName); } catch { } }
-            string prefix = string.IsNullOrEmpty(who) ? "A client " : who + " ";
+            string prefix = string.IsNullOrEmpty(who) ? "A Roblox window " : who + " ";
 
             switch (e.Type)
             {

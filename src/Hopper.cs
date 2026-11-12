@@ -79,8 +79,8 @@ namespace RobloxKeeper
             int pid = world.Start(url, out why);
             if (pid <= 0)
             {
-                result.Problem = (req.CurrentPid > 0 ? "closed the old client, but couldn't start the new one: "
-                                                     : "couldn't start the client: ") + (why ?? "no reason given");
+                result.Problem = (req.CurrentPid > 0 ? "closed the old Roblox window, but couldn't start the new one: "
+                                                     : "couldn't start Roblox: ") + (why ?? "no reason given");
                 return result;
             }
 
@@ -126,7 +126,7 @@ namespace RobloxKeeper
             try
             {
                 string version = RobloxInstall.NewestInstalledVersion();
-                if (version == null) { error = "no installed Roblox client found"; return 0; }
+                if (version == null) { error = "Roblox isn't installed"; return 0; }
                 string exe = Path.Combine(RobloxInstall.VersionsRoot, version, "RobloxPlayerBeta.exe");
                 ProcessStartInfo info = new ProcessStartInfo(exe, launchUrl);
                 info.UseShellExecute = false;

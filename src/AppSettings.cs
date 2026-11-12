@@ -80,6 +80,28 @@ namespace RobloxKeeper
 
         public AccountsPrefs Accounts = new AccountsPrefs();
 
+        // Stops every macro that is playing. F10 to start with: Roblox does
+        // nothing with it.
+        public byte StopKey = 0x79;
+        public AutoClick Clicker = new AutoClick();
+
+        // The page the window opens on, the account the launcher pages act
+        // as, and the key that saves a picture of a Roblox window (none
+        // until one is chosen).
+        public string Page = MainForm.PAGE_HOME;
+        public string PlayAs;
+        public byte ShotKey;
+        public bool TipsHidden;
+
+        // The graphics settings chosen on the Looks page, kept here as well
+        // as in Roblox's folder: Roblox installs a new version into a new
+        // folder, and they have to be written again there.
+        public LooksChoices Looks = new LooksChoices();
+
+        // The shader overlay: which look, if any, and how strong.
+        public string Shader = ShaderLooks.OFF;
+        public int ShaderStrength = 1;
+
         public static string Path
         {
             get
@@ -140,6 +162,18 @@ namespace RobloxKeeper
                 else if (key == "memceilingmb") { if (int.TryParse(val, out tmp)) s.MemoryCeilingMb = tmp; }
                 else if (key == "autotrim") s.AutoTrim = val == "1";
                 else if (key == "autotrimmin") { if (int.TryParse(val, out tmp)) s.AutoTrimMinutes = tmp; }
+                else if (key == "stopkey") { if (int.TryParse(val, out tmp) && tmp > 0 && tmp < 256) s.StopKey = (byte)tmp; }
+                else if (key == "page") { if (val.Length > 0) s.Page = val; }
+                else if (key == "playas") s.PlayAs = val.Length == 0 ? null : val;
+                else if (key == "tipshidden") s.TipsHidden = val == "1";
+                else if (key == "looks_edges") { if (int.TryParse(val, out tmp) && tmp >= 0 && tmp <= (int)LooksAntiAliasing.X8) s.Looks.AntiAliasing = (LooksAntiAliasing)tmp; }
+                else if (key == "looks_quality") { if (int.TryParse(val, out tmp) && tmp >= 0 && tmp <= LooksChoices.QUALITY_MAX) s.Looks.QualityLevel = tmp; }
+                else if (key == "looks_grass") { if (int.TryParse(val, out tmp) && tmp >= 0 && tmp <= (int)LooksGrass.Far) s.Looks.Grass = (LooksGrass)tmp; }
+                else if (key == "looks_noscale") s.Looks.DpiScalingOff = val == "1";
+                else if (key == "shader") s.Shader = val.StartsWith(ShaderLooks.PRESET) || val.StartsWith(ShaderLooks.FILE) ? val : ShaderLooks.OFF;
+                else if (key == "shader_strength") { if (int.TryParse(val, out tmp) && tmp >= 0 && tmp < ShaderLooks.StrengthNames.Length) s.ShaderStrength = tmp; }
+                else if (key == "shotkey") { if (int.TryParse(val, out tmp) && tmp >= 0 && tmp < 256) s.ShotKey = (byte)tmp; }
+                else if (s.Clicker.Read(key, val)) { }
                 else s.Accounts.Read(key, val);
             }
             Clamp(s);
@@ -162,6 +196,7 @@ namespace RobloxKeeper
             if (s.MemoryCeilingMb > 16384) s.MemoryCeilingMb = 16384;
             if (s.AutoTrimMinutes < 1) s.AutoTrimMinutes = 1;
             if (s.AutoTrimMinutes > 120) s.AutoTrimMinutes = 120;
+            s.Clicker.Clamp();
         }
 
         public void Save()
@@ -192,6 +227,18 @@ namespace RobloxKeeper
             lines.Add("memceilingmb=" + MemoryCeilingMb);
             lines.Add("autotrim=" + (AutoTrim ? "1" : "0"));
             lines.Add("autotrimmin=" + AutoTrimMinutes);
+            lines.Add("stopkey=" + StopKey);
+            lines.Add("page=" + (Page ?? ""));
+            lines.Add("playas=" + (PlayAs ?? ""));
+            lines.Add("shotkey=" + ShotKey);
+            lines.Add("tipshidden=" + (TipsHidden ? "1" : "0"));
+            lines.Add("looks_edges=" + (int)Looks.AntiAliasing);
+            lines.Add("looks_quality=" + Looks.QualityLevel);
+            lines.Add("looks_grass=" + (int)Looks.Grass);
+            lines.Add("looks_noscale=" + (Looks.DpiScalingOff ? "1" : "0"));
+            lines.Add("shader=" + (Shader ?? ""));
+            lines.Add("shader_strength=" + ShaderStrength);
+            Clicker.Write(lines);
             Accounts.Write(lines);
             return lines.ToArray();
         }

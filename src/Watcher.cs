@@ -59,6 +59,26 @@ namespace RobloxKeeper
         public string ThenMacro;
         public int MacroGapSeconds = 15;
 
+        // In place of a macro's name: click the picture, where it was found.
+        // Not a name anyone can type, so it can never be a macro's.
+        public const string CLICK_IT = "\u0001click";
+
+        public bool ThenClicks { get { return ThenMacro == CLICK_IT; } }
+
+        // The one-step macro that does it. Looked for again as it plays -
+        // the client has to come to the front first, and by then what the
+        // watcher saw may have moved or gone.
+        public Macro ClickMacro()
+        {
+            Macro m = new Macro();
+            m.Name = "Click " + Name;
+            MacroStep click = MacroStep.ClickPicture(TemplateFile, MaskFile, 0);
+            click.Tolerance = Tolerance;
+            click.Box = RegionName;
+            m.Steps.Add(click);
+            return m;
+        }
+
         public bool WholeWindow { get { return string.IsNullOrEmpty(RegionName); } }
 
         public static Watcher Default(string name, WatchKind kind)

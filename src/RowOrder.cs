@@ -232,7 +232,7 @@ namespace RobloxKeeper
             m.BackColor = Theme.Card;
             m.ForeColor = Theme.Text;
             m.ShowImageMargin = false;
-            m.Font = new Font("Segoe UI", 9f);
+            m.Font = Ui.F("Segoe UI", 9f);
             return m;
         }
 

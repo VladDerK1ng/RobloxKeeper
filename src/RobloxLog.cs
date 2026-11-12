@@ -125,8 +125,8 @@ namespace RobloxKeeper
                 case 277:
                     return "Lost connection to the game server.";
                 case 278:
-                    return "Kicked for being idle. The anti-AFK nudge didn't reach this client - "
-                         + "check it's ticked in the Clients list.";
+                    return "Kicked for being idle. The anti-AFK nudge didn't reach this window - "
+                         + "check it's ticked in the Roblox windows list.";
                 case 285:
                     return "Left the game.";
                 case 264:
@@ -135,7 +135,7 @@ namespace RobloxKeeper
                 case 268:
                     return "The game itself kicked this account.";
                 default:
-                    return "Roblox disconnected this client (reason " + reason + ").";
+                    return "Roblox disconnected this window (reason " + reason + ").";
             }
         }
 

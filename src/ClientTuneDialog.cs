@@ -42,7 +42,7 @@ namespace RobloxKeeper
             ClientSize = new Size(W, H);
             BackColor = Theme.Bg;
             ForeColor = Theme.Text;
-            Font = new Font("Segoe UI", 9.75f);
+            Font = Ui.F("Segoe UI", 9.75f);
 
             Build(label);
         }
@@ -72,7 +72,7 @@ namespace RobloxKeeper
             Controls.Add(bar);
 
             Label title = Ui.RowLabel("Tune " + label, 16, 0, TITLEBAR_H, 240, 10f, Theme.Text);
-            title.Font = new Font("Segoe UI", 10f, FontStyle.Bold);
+            title.Font = Ui.F("Segoe UI", 10f, FontStyle.Bold);
             title.BackColor = Theme.Bg;
             bar.Controls.Add(title);
 
@@ -104,19 +104,19 @@ namespace RobloxKeeper
             cmbPriority.SelectedIndex = Result.Priority;
             card.Controls.Add(cmbPriority);
 
-            chkEco = Ui.DarkCheck("Efficiency mode (EcoQoS)", Ui.PAD, rowEco, 9f);
+            chkEco = Ui.DarkCheck("Low power", Ui.PAD, rowEco, 9f);
             chkEco.ForeColor = Theme.Text;
             chkEco.Checked = Result.Eco;
             Ui.CenterIn(chkEco, rowEco, ROW_H);
             card.Controls.Add(chkEco);
 
             // Indented to sit under the checkbox's text rather than its box.
-            Label hint = Ui.MutedLabel("Parks the client on efficiency cores and caps its clock.", 45, 106, 8.25f);
+            Label hint = Ui.MutedLabel("Uses less CPU and battery.", 45, 106, 8.25f);
             hint.MaximumSize = new Size(283, 0);
             card.Controls.Add(hint);
 
-            btnTrim = Ui.AccentButton("Trim memory now", 188, 132, 140, 30);
-            btnTrim.Font = new Font("Segoe UI", 8.25f, FontStyle.Bold);
+            btnTrim = Ui.AccentButton("Free memory now", 188, 132, 140, 30);
+            btnTrim.Font = Ui.F("Segoe UI", 8.25f, FontStyle.Bold);
             btnTrim.Click += delegate { TrimNow(); };
             card.Controls.Add(btnTrim);
 
@@ -159,7 +159,7 @@ namespace RobloxKeeper
             catch { }
             lblRam.Text = ws > 0
                 ? "Using " + ClientTracker.FormatBytes(ws) + " of memory."
-                : "This client is no longer running.";
+                : "This Roblox window is closed.";
         }
 
         void TrimNow()
@@ -170,7 +170,7 @@ namespace RobloxKeeper
 
             if (!PerformanceManager.Trim(pid))
             {
-                lblRam.Text = "Could not trim this client's memory.";
+                lblRam.Text = "Couldn't free this window's memory.";
                 return;
             }
 
@@ -179,8 +179,8 @@ namespace RobloxKeeper
 
             long freed = before - after;
             lblRam.Text = freed > 0
-                ? "Released " + ClientTracker.FormatBytes(freed) + " - now at " + ClientTracker.FormatBytes(after) + "."
-                : "Now at " + ClientTracker.FormatBytes(after) + ".";
+                ? "Freed " + ClientTracker.FormatBytes(freed) + ". Now using " + ClientTracker.FormatBytes(after) + "."
+                : "Now using " + ClientTracker.FormatBytes(after) + ".";
         }
 
         void Commit(bool useDefault)

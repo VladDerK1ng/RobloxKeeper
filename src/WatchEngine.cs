@@ -318,7 +318,7 @@ namespace RobloxKeeper
                     // Reading the whole window instead would cost nine times as
                     // much and match things outside the box that was drawn.
                     k.Problem = string.IsNullOrEmpty(c.PlaceId)
-                        ? "Waiting to see which game this client is in."
+                        ? "Waiting to see which game this Roblox window is in."
                         : "No box called \"" + w.RegionName + "\" has been drawn for this game yet.";
                     return k;
                 }
@@ -370,7 +370,7 @@ namespace RobloxKeeper
             // picture simply not being there.
             if (template.Width > k.Crop.Width || template.Height > k.Crop.Height)
             {
-                k.Problem = "The box is smaller than the picture it looks for - draw it bigger.";
+                k.Problem = "The box is smaller than the picture it looks for. Draw a bigger box.";
                 return;
             }
 
@@ -380,7 +380,7 @@ namespace RobloxKeeper
                 Pixels m = Image(w.MaskFile);
                 if (m == null || m.Width != template.Width || m.Height != template.Height)
                 {
-                    k.Problem = "The painted-out copy of the picture no longer fits it - paint it again.";
+                    k.Problem = "The erased background no longer fits the picture. Erase it again.";
                     return;
                 }
                 mask = MaskFrom(m);
@@ -454,7 +454,7 @@ namespace RobloxKeeper
                 {
                     k = new WatchCheck();
                     k.Problem = state == WatchState.Watchable
-                        ? "Couldn't take a picture of that client just now."
+                        ? "Couldn't see that Roblox window just now."
                         : WindowCapture.Explain(state);
                 }
                 else

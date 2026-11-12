@@ -364,7 +364,7 @@ namespace RobloxKeeper.Tests
             Watcher w = Good();
             using (WatcherEditDialog d = new WatcherEditDialog(w, k))
             {
-                Assert.Equal(2, d.ThenChoices, "nothing, or the one macro");
+                Assert.Equal(3, d.ThenChoices, "nothing, the one macro, or clicking what it found");
                 Assert.Equal(null, d.Collect().ThenMacro, "nothing chosen yet");
                 d.ChooseThen("Buy egg");
                 Assert.Equal("Buy egg", d.Collect().ThenMacro, "chosen");

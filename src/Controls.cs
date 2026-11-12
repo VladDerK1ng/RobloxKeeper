@@ -48,6 +48,41 @@ namespace RobloxKeeper
         // top edge, so the heading groups with the content under it rather than
         // floating midway between.
         public const int PAD = 20;
+
+        // Every font in the app is made here.
+        //
+        // The windows are laid out in pixels, for a display at 100%. Windows
+        // draws a 9-point font a quarter bigger at 125% - and where it leaves
+        // an app to scale itself, as it does under a custom scaling level,
+        // nothing else grows with it: labels ran out of their rows, the title
+        // wrapped, buttons lost their last letters. So text is asked for at
+        // the size that comes out, in pixels, as it was designed - and every
+        // window looks the way it was drawn, on any display.
+        static float dpi;
+
+        public static float Dpi
+        {
+            get
+            {
+                if (dpi == 0)
+                {
+                    try { using (Graphics g = Graphics.FromHwnd(IntPtr.Zero)) dpi = g.DpiX; }
+                    catch { dpi = 96f; }
+                    if (dpi < 48f) dpi = 96f;
+                }
+                return dpi;
+            }
+        }
+
+        public static Font F(string family, float points)
+        {
+            return F(family, points, FontStyle.Regular);
+        }
+
+        public static Font F(string family, float points, FontStyle style)
+        {
+            return new Font(family, points * 96f / Dpi, style);
+        }
         public const int TITLE_Y = 14;
         public const int SUBTITLE_Y = 32;
 
@@ -80,9 +115,13 @@ namespace RobloxKeeper
             l.Text = text;
             l.AutoSize = true;
             l.Location = new Point(PAD, TITLE_Y);
-            l.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
+            l.Font = Ui.F("Segoe UI", 9f, FontStyle.Bold);
             l.ForeColor = Theme.Muted;
             l.BackColor = Theme.Card;
+            // Sized to end where the line under it starts. Left to size itself
+            // it was 21 high and its background cut the top off that line.
+            l.AutoSize = false;
+            l.Size = new Size(TextRenderer.MeasureText(text ?? "", l.Font).Width + 2, SUBTITLE_Y - TITLE_Y);
             return l;
         }
 
@@ -95,7 +134,7 @@ namespace RobloxKeeper
             l.AutoSize = true;
             l.MaximumSize = new Size(388, 0);
             l.Location = new Point(PAD, SUBTITLE_Y);
-            l.Font = new Font("Segoe UI", 8.25f);
+            l.Font = Ui.F("Segoe UI", 8.25f);
             l.ForeColor = Color.FromArgb(104, 108, 132);
             l.BackColor = Theme.Card;
             return l;
@@ -113,7 +152,7 @@ namespace RobloxKeeper
             l.Location = new Point(x, rowTop);
             l.Size = new Size(width, rowHeight);
             l.TextAlign = ContentAlignment.MiddleLeft;
-            l.Font = new Font("Segoe UI", size);
+            l.Font = Ui.F("Segoe UI", size);
             l.ForeColor = color;
             l.BackColor = Theme.Card;
             return l;
@@ -177,7 +216,7 @@ namespace RobloxKeeper
             l.Text = text;
             l.AutoSize = true;
             l.Location = new Point(x, y);
-            l.Font = new Font("Segoe UI", 7.5f, FontStyle.Bold);
+            l.Font = Ui.F("Segoe UI", 7.5f, FontStyle.Bold);
             l.ForeColor = Theme.Muted;
             l.BackColor = Theme.Card;
             return l;
@@ -190,7 +229,7 @@ namespace RobloxKeeper
             l.AutoSize = true;
             l.MaximumSize = new Size(388, 0);
             l.Location = new Point(x, y);
-            l.Font = new Font("Segoe UI", size);
+            l.Font = Ui.F("Segoe UI", size);
             l.ForeColor = Theme.Muted;
             l.BackColor = Theme.Card;
             return l;
@@ -208,7 +247,7 @@ namespace RobloxKeeper
             b.ForeColor = Color.White;
             b.Cursor = Cursors.Hand;
             Glow(b, Theme.Accent, Theme.AccentHover);
-            b.Font = new Font("Segoe UI", 9.75f, FontStyle.Bold);
+            b.Font = Ui.F("Segoe UI", 9.75f, FontStyle.Bold);
             b.TabStop = false;
             return b;
         }
@@ -217,7 +256,7 @@ namespace RobloxKeeper
         public static Button PlainButton(string text, int x, int y, int w, int h)
         {
             Button b = AccentButton(text, x, y, w, h);
-            b.Font = new Font("Segoe UI", 8.25f, FontStyle.Bold);
+            b.Font = Ui.F("Segoe UI", 8.25f, FontStyle.Bold);
             b.BackColor = Theme.Button;
             b.FlatAppearance.MouseOverBackColor = Theme.ButtonHover;
             return b;
@@ -309,7 +348,7 @@ namespace RobloxKeeper
             ThemedCheckBox c = new ThemedCheckBox();
             c.Text = text;
             c.Location = new Point(x, y);
-            c.Font = new Font("Segoe UI", size);
+            c.Font = Ui.F("Segoe UI", size);
             c.ForeColor = Theme.Muted;
             c.BackColor = Theme.Card;
             return c;
@@ -345,7 +384,7 @@ namespace RobloxKeeper
         public static LinkLabel RowLink(string text, int x, int rowTop, int rowHeight, float fontSize)
         {
             LinkLabel l = RowLink(text, x, rowTop);
-            l.Font = new Font("Segoe UI", fontSize);
+            l.Font = Ui.F("Segoe UI", fontSize);
             return SizeToRow(l, text, rowHeight);
         }
 
@@ -391,7 +430,7 @@ namespace RobloxKeeper
             l.AutoSize = false;
             l.Size = new Size(width, rowHeight);
             l.TextAlign = ContentAlignment.MiddleCenter;
-            l.Font = new Font("Segoe UI", 8.75f);
+            l.Font = Ui.F("Segoe UI", 8.75f);
             return l;
         }
     }

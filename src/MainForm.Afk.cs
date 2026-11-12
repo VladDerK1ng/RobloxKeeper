@@ -34,6 +34,23 @@ namespace RobloxKeeper
             }
             return plan;
         }
+
+        // When the last nudge was, once this one is over. A nudge kept off
+        // the keyboard for its whole wait - a macro holding it - nudged
+        // nothing, so the last one stays the last one and the kick deadline
+        // still counts from it. One that got in counts from when it did.
+        public static DateTime LastNudgeAfter(DateTime before, bool gotIn, DateTime gotInAt)
+        {
+            return gotIn ? gotInAt : before;
+        }
+
+        // Whether to try again in a few seconds rather than a whole interval
+        // later: only for a nudge that never got in, and only while the
+        // nudges are on.
+        public static bool RetrySoon(bool gotIn, bool nudgesOn)
+        {
+            return !gotIn && nudgesOn;
+        }
     }
 
     // The anti-AFK nudge: bring a client forward, send a harmless keypress that
@@ -46,8 +63,8 @@ namespace RobloxKeeper
             if (!chkAfk.Checked) nudgeTimer.Stop();
             if (!initializing)
                 Log(chkAfk.Checked
-                    ? "Anti-AFK enabled - interval " + numInterval.Value + " min. The timer runs while a client is open."
-                    : "Anti-AFK disabled.");
+                    ? "Anti-AFK is on - a nudge every " + numInterval.Value + " min while a Roblox window is open."
+                    : "Anti-AFK is off.");
             UpdateAfkTimer(NudgeableClientCount());
             UpdateCountdown();
             SaveSettings();
@@ -62,7 +79,7 @@ namespace RobloxKeeper
                 nextNudge = DateTime.Now.AddMilliseconds(nudgeTimer.Interval);
                 nudgeTimer.Start();
             }
-            if (!initializing) Log("Interval set to " + numInterval.Value + " min.");
+            if (!initializing) Log("Nudging every " + numInterval.Value + " min.");
             SaveSettings();
         }
 
@@ -86,6 +103,17 @@ namespace RobloxKeeper
             // only the timer defers to what the user is doing.
             if (reason == "timer" && chkIdleOnly.Checked && !DecideTimerNudge()) return;
 
+            // A nudge kept off the keyboard is tried again in a few seconds
+            // (see NudgeWorker); the one that goes ahead puts the timer back
+            // to the real interval. DecideTimerNudge does that itself, but
+            // only when it is asked.
+            if (reason == "timer" && !chkIdleOnly.Checked && nudgeTimer.Interval != numInterval.Value * 60000)
+            {
+                nudgeTimer.Stop();
+                nudgeTimer.Interval = numInterval.Value * 60000;
+                nudgeTimer.Start();
+            }
+
             nextNudge = DateTime.Now.AddMinutes((double)numInterval.Value);
 
             if (nudgeRunning)
@@ -93,7 +121,7 @@ namespace RobloxKeeper
                 // The previous nudge is still working through its clients.
                 // Starting a second one would have two threads fighting over
                 // which window is in the foreground.
-                Log("Skipped a nudge (" + reason + ") - the previous one is still running.");
+                Log("Skipped a nudge (" + reason + ") - the last one is still going.");
                 return;
             }
 
@@ -101,14 +129,15 @@ namespace RobloxKeeper
             List<ClientInfo> clients = ClientTracker.GetClients(out windowless);
             NudgePlan plan = NudgePlan.From(clients, nudgePrefs);
 
-            if (plan.ClientCount == 0) { Log("No Roblox clients found (" + reason + ")."); return; }
-            if (!plan.HasWork) { Log("No client ticked to nudge (" + reason + ")."); return; }
+            if (plan.ClientCount == 0) { Log("No Roblox window is open (" + reason + ")."); return; }
+            if (!plan.HasWork) { Log("No Roblox window is ticked for nudges (" + reason + ")."); return; }
 
             // Read on the UI thread; the worker must not touch a control.
             NudgeStep[] steps = NudgeMethod.StepsFor(cmbKeys.SelectedIndex, CustomNudgeVk());
             IntPtr self = Handle;
 
-            lastNudgeAt = DateTime.Now;
+            // lastNudgeAt is set when the nudge gets the keyboard, not here:
+            // one kept out for a minute nudged nothing.
             deferLogged = false;
 
             nudgeRunning = true;
@@ -116,6 +145,17 @@ namespace RobloxKeeper
             worker.IsBackground = true;
             worker.Name = "Nudge";
             worker.Start();
+        }
+
+        // A fullscreen game in front is taken to be someone playing, however
+        // long since a key - except when it is a macro doing the playing. A
+        // session or the autoclicker left running on a fullscreen client, with
+        // nobody having really touched anything for a minute, is not a game to
+        // protect: the other clients would otherwise only ever be nudged at
+        // the last minute, by the override.
+        bool LeftToASession()
+        {
+            return SessionsRunning > 0 && RealInput.Active && RealInput.IdleFor() >= RuleRunner.AwayAfter;
         }
 
         // Returns false when this nudge should be skipped for now.
@@ -127,7 +167,7 @@ namespace RobloxKeeper
         {
             NudgeDecision decision = NudgePolicy.Decide(
                 NudgePolicy.UserIdleFor(), DateTime.Now - lastNudgeAt,
-                QUIET_THRESHOLD, KICK_DEADLINE, NudgePolicy.FullscreenGameInFront());
+                QUIET_THRESHOLD, KICK_DEADLINE, NudgePolicy.FullscreenGameInFront() && !LeftToASession());
 
             if (decision == NudgeDecision.Defer)
             {
@@ -142,10 +182,10 @@ namespace RobloxKeeper
                 {
                     deferLogged = true;
                     Log(NudgePolicy.FullscreenGameInFront()
-                        ? "A fullscreen game is in front - holding the nudge until you're out of it. " +
-                          "It will go ahead regardless if a client gets close to the idle kick."
-                        : "You're at the keyboard - holding the nudge until you're idle. " +
-                          "It will go ahead regardless if a client gets close to the idle kick.");
+                        ? "A fullscreen game is in front, so the nudge waits until you leave it. " +
+                          "It still goes ahead before Roblox would kick you."
+                        : "You're at the keyboard, so the nudge waits until you stop. " +
+                          "It still goes ahead before Roblox would kick you.");
                 }
                 return false;
             }
@@ -157,12 +197,12 @@ namespace RobloxKeeper
 
             if (decision == NudgeDecision.Urgent)
             {
-                Log("A client is close to Roblox's idle kick - nudging now even though you're mid-something.");
+                Log("A Roblox window is about to be kicked for being idle - nudging it now.");
                 try
                 {
                     tray.BalloonTipTitle = "Nudging now";
-                    tray.BalloonTipText = "An AFK client is about to be idle-kicked, so RobloxKeeper " +
-                        "is taking focus for a moment.";
+                    tray.BalloonTipText = "A Roblox window is about to be kicked for being idle, so RobloxKeeper " +
+                        "is switching to it for a moment.";
                     tray.BalloonTipIcon = ToolTipIcon.Info;
                     tray.ShowBalloonTip(4000);
                 }
@@ -178,12 +218,16 @@ namespace RobloxKeeper
         {
             int count = 0;
             bool gate = false;
+            DateTime gotInAt = DateTime.MinValue;
             try
             {
                 // A macro playing has the foreground; the nudge waits for it
                 // rather than pulling another client in front mid-macro.
-                gate = FocusGate.TryEnter(60000);
+                // Said to be the nudge, so a macro playing makes way at once
+                // rather than at the end of its turn.
+                gate = FocusGate.TryEnter(60000, true);
                 if (!gate) return;
+                gotInAt = DateTime.Now;
 
                 IntPtr previous = Native.GetForegroundWindow();
                 // Bringing a client on another virtual desktop in front takes
@@ -222,6 +266,8 @@ namespace RobloxKeeper
             {
                 if (gate) FocusGate.Exit();
                 int nudged = count;
+                bool gotIn = gate;
+                DateTime inAt = gotInAt;
                 // Back to the UI thread to report, and to clear the guard even
                 // if a window vanished mid-nudge and threw. If the form is on
                 // its way out there is nothing to report to.
@@ -231,8 +277,27 @@ namespace RobloxKeeper
                         BeginInvoke(new Action(delegate
                         {
                             nudgeRunning = false;
-                            Log("Nudged " + nudged + " client(s)" +
-                                (plan.Skipped > 0 ? ", skipped " + plan.Skipped : "") + " (" + reason + ").");
+                            lastNudgeAt = NudgePlan.LastNudgeAfter(lastNudgeAt, gotIn, inAt);
+                            if (gotIn)
+                            {
+                                Log("Nudged " + nudged + (nudged == 1 ? " Roblox window" : " Roblox windows") +
+                                    (plan.Skipped > 0 ? ", skipped " + plan.Skipped : "") + " (" + reason + ").");
+                                return;
+                            }
+
+                            // Kept out: tried again soon rather than an
+                            // interval later, which with the idle kick at
+                            // twenty minutes could be too late.
+                            if (NudgePlan.RetrySoon(gotIn, chkAfk.Checked && nudgeTimer.Enabled))
+                            {
+                                nudgeTimer.Stop();
+                                nudgeTimer.Interval = DEFER_RETRY_SECONDS * 1000;
+                                nudgeTimer.Start();
+                                nextNudge = DateTime.Now.AddSeconds(DEFER_RETRY_SECONDS);
+                                Log("Couldn't nudge (" + reason + ") - a macro kept the keyboard for a minute. " +
+                                    "Trying again in " + DEFER_RETRY_SECONDS + " seconds.");
+                            }
+                            else Log("Couldn't nudge (" + reason + ") - a macro kept the keyboard for a minute.");
                         }));
                     else nudgeRunning = false;
                 }
@@ -266,13 +331,13 @@ namespace RobloxKeeper
                 nextNudge = DateTime.Now.AddMilliseconds(nudgeTimer.Interval);
                 nudgeTimer.Start();
                 if (!initializing)
-                    Log("Roblox client detected - anti-AFK timer started (" + numInterval.Value + " min).");
+                    Log("Roblox is open - anti-AFK started (every " + numInterval.Value + " min).");
             }
             else if (!shouldRun && nudgeTimer.Enabled)
             {
                 nudgeTimer.Stop();
                 if (!initializing && chkAfk.Checked)
-                    Log("No client left to nudge - anti-AFK timer paused until one opens.");
+                    Log("No Roblox window left to nudge - anti-AFK waits until one opens.");
             }
         }
 

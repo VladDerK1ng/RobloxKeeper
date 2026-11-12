@@ -95,7 +95,7 @@ namespace RobloxKeeper
             ClientSize = new Size(W, 538);
             BackColor = Theme.Bg;
             ForeColor = Theme.Text;
-            Font = new Font("Segoe UI", 9f);
+            Font = Ui.F("Segoe UI", 9f);
 
             Card card = new Card();
             card.Location = new Point(12, 12);
@@ -116,7 +116,7 @@ namespace RobloxKeeper
 
             // Inside the list rather than over it: WinForms puts a later-added
             // sibling at the BACK of the z-order, where it would be invisible.
-            empty = Ui.MutedLabel("No accounts yet - Add account opens Roblox's login page.", 6, 10, 9f);
+            empty = Ui.MutedLabel("No accounts yet. Click Add account to sign in to Roblox.", 6, 10, 9f);
             list.Controls.Add(empty);
 
             const int gameRow = 316;
@@ -140,7 +140,7 @@ namespace RobloxKeeper
             // One line, the width of the box above it: MutedLabel wraps at 388
             // by default, which ran it into the Server row.
             Label hint = Ui.MutedLabel(
-                "Optional. Blank uses each account's own game. A private server link, or a server link from Discord, sends them all there.",
+                "Optional. Leave blank to use each account's own game. A private server link sends them all there.",
                 Ui.PAD, gameRow + 30, 8.25f);
             hint.MaximumSize = new Size(W - 24 - Ui.PAD * 2, 0);
             card.Controls.Add(hint);
@@ -162,19 +162,19 @@ namespace RobloxKeeper
             none.Click += delegate { SetAll(false); };
             card.Controls.Add(none);
 
-            launchSelected = Ui.AccentButton("Launch selected", W - 24 - Ui.PAD - 150, selRow, 150, 28);
-            launchSelected.Font = new Font("Segoe UI", 8.25f, FontStyle.Bold);
+            launchSelected = Ui.AccentButton("Play selected", W - 24 - Ui.PAD - 150, selRow, 150, 28);
+            launchSelected.Font = Ui.F("Segoe UI", 8.25f, FontStyle.Bold);
             launchSelected.Click += delegate { LaunchSelected(); };
             card.Controls.Add(launchSelected);
 
             const int btnRow = 458;
             Button add = Ui.AccentButton("Add account", Ui.PAD, btnRow, 120, 28);
-            add.Font = new Font("Segoe UI", 8.25f, FontStyle.Bold);
+            add.Font = Ui.F("Segoe UI", 8.25f, FontStyle.Bold);
             add.Click += delegate { AddAccount(); };
             card.Controls.Add(add);
 
             Button close = Ui.AccentButton("Close", W - 24 - Ui.PAD - 90, btnRow, 90, 28);
-            close.Font = new Font("Segoe UI", 8.25f, FontStyle.Bold);
+            close.Font = Ui.F("Segoe UI", 8.25f, FontStyle.Bold);
             close.Click += delegate { Close(); };
             card.Controls.Add(close);
 
@@ -204,15 +204,15 @@ namespace RobloxKeeper
             cmbWhere.Items.Add("Busiest servers");
             cmbWhere.Items.Add("Where a player is");
             cmbWhere.SelectedIndexChanged += delegate { WhereChanged(); };
-            tips.SetToolTip(cmbWhere, "Any: wherever Roblox puts them. Emptiest or busiest: each to its own "
-                + "server with the fewest or most players. A player: into the server that player is in.");
+            tips.SetToolTip(cmbWhere, "Any: Roblox picks. Emptiest or busiest: each account gets its own server with the "
+                + "fewest or most players. A player: joins the server that player is in.");
             card.Controls.Add(cmbWhere);
 
             chkTogether = Ui.DarkCheck("All in the same server", 276, y, 8.25f);
             chkTogether.AutoSize = true;
             Ui.CenterIn(chkTogether, y, ROW_H_ROW);
             chkTogether.CheckedChanged += delegate { if (!filling) { host.Prefs.Together = chkTogether.Checked; host.SavePrefs(); } };
-            tips.SetToolTip(chkTogether, "One server with room for every account being launched.");
+            tips.SetToolTip(chkTogether, "Puts every account in one server that has room for all of them.");
             card.Controls.Add(chkTogether);
 
             playerBox = new TextBox();
@@ -224,8 +224,8 @@ namespace RobloxKeeper
             playerBox.AutoCompleteMode = AutoCompleteMode.SuggestAppend;
             playerBox.AutoCompleteSource = AutoCompleteSource.CustomSource;
             playerBox.TextChanged += delegate { if (!filling) { host.Prefs.Player = playerBox.Text.Trim(); host.SavePrefs(); } };
-            tips.SetToolTip(playerBox, "Their Roblox name - one of your own accounts, or anyone whose "
-                + "privacy settings let your accounts join them.");
+            tips.SetToolTip(playerBox, "Their Roblox name. Works for your own accounts, or anyone whose "
+                + "privacy settings let you join them.");
             card.Controls.Add(playerBox);
             Shown += delegate { Ui.CenterIn(playerBox, y, ROW_H_ROW); };
 
@@ -233,8 +233,8 @@ namespace RobloxKeeper
             chkFollow.AutoSize = true;
             Ui.CenterIn(chkFollow, y, ROW_H_ROW);
             chkFollow.CheckedChanged += delegate { if (!filling) { host.Prefs.KeepFollowing = chkFollow.Checked; host.SavePrefs(); } };
-            tips.SetToolTip(chkFollow, "When they move to another server, the accounts follow them there - "
-                + "one at a time, checking every half minute.");
+            tips.SetToolTip(chkFollow, "When they move to another server, your accounts follow, one at a time. "
+                + "It checks every 30 seconds.");
             card.Controls.Add(chkFollow);
 
             // Sized in the font it is drawn in, or it wraps.
@@ -468,7 +468,7 @@ namespace RobloxKeeper
         {
             if (busy) return;              // it is counting a launch through
             int n = Selected().Count;
-            selectedCount.Text = n == 0 ? "Tick accounts to launch several at once"
+            selectedCount.Text = n == 0 ? "Tick accounts to play several at once"
                                         : n + " selected";
             launchSelected.Enabled = n > 0;
         }
@@ -492,7 +492,7 @@ namespace RobloxKeeper
             string name = detected;
             if (string.IsNullOrEmpty(name))
             {
-                name = Prompt("Roblox didn't say which account that was. What should it be called?", "");
+                name = Prompt("Roblox didn't tell us the account name. What should it be called?", "");
                 if (string.IsNullOrEmpty(name)) { TryDelete(tempDir); return; }
             }
 
@@ -530,11 +530,11 @@ namespace RobloxKeeper
             if (note == null) return;          // cancelled
             a.Note = note;
 
-            string game = Prompt("Game link or private server link for " + a.Name + ", or blank for none:", a.GameUrl);
+            string game = Prompt("Game link or private server link for " + a.Name + " (leave blank for none):", a.GameUrl);
             if (game != null)
             {
                 if (game.Length > 0 && RobloxAuth.PlaceIdFromUrl(game) == null && PrivateLink.Parse(game) == null)
-                    MessageBox.Show(this, "That doesn't look like a Roblox game link, private server link or place id - leaving the old one.",
+                    MessageBox.Show(this, "That isn't a Roblox game link, private server link or place id. The old one stays.",
                         "Not a game link", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 else
                     a.GameUrl = game;
@@ -548,8 +548,8 @@ namespace RobloxKeeper
         void RemoveAccount(RobloxAccount a)
         {
             if (MessageBox.Show(this,
-                    "Remove " + a.Name + "?\r\n\r\nIts saved sign-in and browser profile are deleted from this PC. "
-                    + "The Roblox account itself is not affected.",
+                    "Remove " + a.Name + "?\r\n\r\nIts saved sign-in is deleted from this PC. "
+                    + "Your Roblox account isn't affected.",
                     "Remove account", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
                 return;
 
@@ -607,7 +607,7 @@ namespace RobloxKeeper
         {
             if (busy)
             {
-                Say("Still starting the last lot - one moment.", true);
+                Say("Still starting the last ones. One moment.", true);
                 return;
             }
 
@@ -636,7 +636,7 @@ namespace RobloxKeeper
                 typedPlace = RobloxAuth.PlaceIdFromUrl(link);
                 if (typedPlace == null && r.Where != JoinWhere.Player)
                 {
-                    MessageBox.Show(this, "That doesn't look like a Roblox game link, a private server link, a server link or a place id.",
+                    MessageBox.Show(this, "That isn't a Roblox game link, private server link, server link or place id.",
                         "Not a game link", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     return;
                 }
@@ -661,7 +661,7 @@ namespace RobloxKeeper
             if (alone && r.Seats[0].RunningPid > 0 && r.ServerId == null && r.Seats[0].Private == null
                 && r.Where == JoinWhere.Any && !r.Together)
             {
-                if (MessageBox.Show(this, accounts[0].Name + " is already playing.\r\n\r\nClose that client and start it again?",
+                if (MessageBox.Show(this, accounts[0].Name + " is already playing.\r\n\r\nClose that Roblox window and start it again?",
                         "Already playing", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
                 r.Seats[0].Restart = true;
             }
@@ -683,7 +683,7 @@ namespace RobloxKeeper
                 catch (Exception ex)
                 {
                     results = new List<LaunchResult>();
-                    host.Log("Launching stopped: " + ex.Message);
+                    host.Log("Couldn't finish launching: " + ex.Message);
                 }
                 Report(r, results, alone, follow);
             });
@@ -737,9 +737,9 @@ namespace RobloxKeeper
                 if (pid > 0)
                 {
                     host.Launched(pid, account);
-                    host.Log(runningPid > 0 ? "Moved " + account + " - its old client closed first." : "Launched " + account + ".");
+                    host.Log(runningPid > 0 ? "Moved " + account + ". Its old Roblox window was closed first." : "Launched " + account + ".");
                 }
-                else host.Log("Couldn't launch " + account + ": " + (why ?? "no reason given") + ".");
+                else host.Log("Couldn't launch " + account + ": " + (why ?? "Roblox gave no reason") + ".");
                 OnWindow(delegate { RefreshPlaying(); });
             });
         }
@@ -854,7 +854,7 @@ namespace RobloxKeeper
             t = box;
 
             Button ok = Ui.AccentButton("OK", 224, 102, 90, 26);
-            ok.Font = new Font("Segoe UI", 8.25f, FontStyle.Bold);
+            ok.Font = Ui.F("Segoe UI", 8.25f, FontStyle.Bold);
             ok.Click += delegate { f.DialogResult = DialogResult.OK; f.Close(); };
             f.Controls.Add(ok);
             f.AcceptButton = ok;

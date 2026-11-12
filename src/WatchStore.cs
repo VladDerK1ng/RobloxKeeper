@@ -107,6 +107,19 @@ namespace RobloxKeeper
             return n;
         }
 
+        // The same for a Lua script: every rule, in every setup, that runs
+        // the script called `was` runs `now` instead - null for a script that
+        // was removed. Called by the Scripts window after a rename or remove,
+        // so a rule never points at a script that is gone. Returns how many.
+        public int RenameScriptUses(string was, string now)
+        {
+            int n = 0;
+            foreach (WatchSetup s in setups)
+                foreach (Rule r in s.Rules)
+                    if (string.Equals(r.Script, was, StringComparison.OrdinalIgnoreCase)) { r.Script = now; n++; }
+            return n;
+        }
+
         public Macro FindMacro(string name)
         {
             if (string.IsNullOrEmpty(name)) return null;
@@ -476,8 +489,33 @@ namespace RobloxKeeper
                     s.RightButton ? "1" : "0",
                     s.Ms.ToString(CultureInfo.InvariantCulture),
                     s.Text ?? "",
-                    s.InChat ? "1" : "0" }));
-            return Escape(m.Name) + FIELD + Escape(Join(steps.ToArray()));
+                    s.InChat ? "1" : "0",
+                    // From 1.4, always after what older builds read. Text
+                    // stays empty for the new kinds: an older build plays a
+                    // kind it doesn't know as typing, and types nothing.
+                    s.AtPointer ? "1" : "0",
+                    s.X2.ToString("R", CultureInfo.InvariantCulture),
+                    s.Y2.ToString("R", CultureInfo.InvariantCulture),
+                    s.Notches.ToString(CultureInfo.InvariantCulture),
+                    s.Picture ?? "",
+                    s.Mask ?? "",
+                    s.Tolerance.ToString("R", CultureInfo.InvariantCulture),
+                    s.Box ?? "",
+                    s.OffX.ToString(CultureInfo.InvariantCulture),
+                    s.OffY.ToString(CultureInfo.InvariantCulture),
+                    s.TimeoutMs.ToString(CultureInfo.InvariantCulture),
+                    s.StopIfMissing ? "1" : "0",
+                    s.UntilGone ? "1" : "0",
+                    ((int)s.Mode).ToString(CultureInfo.InvariantCulture),
+                    s.Count.ToString(CultureInfo.InvariantCulture) }));
+            // From 1.4, after the steps, where older builds never look: where
+            // it plays, its key and what the key does, and how a play goes.
+            return Escape(m.Name) + FIELD + Escape(Join(steps.ToArray()))
+                 + FIELD + (m.Anywhere ? "1" : "0")
+                 + FIELD + m.Key.ToString(CultureInfo.InvariantCulture)
+                 + FIELD + ((int)m.KeyMode).ToString(CultureInfo.InvariantCulture)
+                 + FIELD + m.Times.ToString(CultureInfo.InvariantCulture)
+                 + FIELD + m.SpeedPct.ToString(CultureInfo.InvariantCulture);
         }
 
         public static Macro DeserializeMacro(string line)
@@ -502,8 +540,42 @@ namespace RobloxKeeper
                 s.Ms = ParseInt(p[6], 0);
                 s.Text = p[7];
                 if (p.Length > 8) s.InChat = p[8] == "1";
+                if (p.Length > 23)
+                {
+                    s.AtPointer = p[9] == "1";
+                    s.X2 = ParseDouble(p[10], 0);
+                    s.Y2 = ParseDouble(p[11], 0);
+                    s.Notches = ParseInt(p[12], 0);
+                    s.Picture = Blank(p[13]);
+                    s.Mask = Blank(p[14]);
+                    s.Tolerance = ParseDouble(p[15], MacroStep.DEFAULT_TOLERANCE);
+                    s.Box = Blank(p[16]);
+                    s.OffX = ParseInt(p[17], 0);
+                    s.OffY = ParseInt(p[18], 0);
+                    s.TimeoutMs = ParseInt(p[19], 0);
+                    s.StopIfMissing = p[20] == "1";
+                    s.UntilGone = p[21] == "1";
+                    s.Mode = (RepeatMode)ParseInt(p[22], 0);
+                    s.Count = Math.Max(1, ParseInt(p[23], 2));
+                }
                 m.Steps.Add(s);
             }
+
+            // Missing in a line an older build wrote: then it plays as it
+            // always did - on a Roblox window, no key, once, at full speed.
+            if (f.Length > 2) m.Anywhere = f[2] == "1";
+            if (f.Length > 3)
+            {
+                int key = ParseInt(f[3], 0);
+                m.Key = key > 0 && key < 256 ? (byte)key : (byte)0;
+            }
+            if (f.Length > 4)
+            {
+                int mode = ParseInt(f[4], 0);
+                m.KeyMode = mode >= 0 && mode <= (int)MacroKeyMode.Hold ? (MacroKeyMode)mode : MacroKeyMode.Once;
+            }
+            if (f.Length > 5) m.Times = Math.Max(0, ParseInt(f[5], 1));
+            if (f.Length > 6) m.SpeedPct = MacroPlay.ClampSpeed(ParseInt(f[6], 100));
             return m;
         }
 
@@ -524,7 +596,11 @@ namespace RobloxKeeper
             sb.Append((int)r.On).Append(FIELD);
             sb.Append(Escape(Join(r.Accounts))).Append(FIELD);
             sb.Append(r.GapSeconds).Append(FIELD);
-            sb.Append(r.OnlyWhenAway ? "1" : "0");
+            sb.Append(r.OnlyWhenAway ? "1" : "0").Append(FIELD);
+            // From the Lua scripts on, after what older builds read. A rule
+            // that runs a script has no macro, so an older build sees a rule
+            // with nothing to play and leaves it alone.
+            sb.Append(Escape(r.Script));
             return sb.ToString();
         }
 
@@ -551,6 +627,7 @@ namespace RobloxKeeper
             if (f.Length > 12) { string[] a = Split(Unescape(f[12])); r.Accounts = a.Length == 0 ? null : a; }
             if (f.Length > 13) r.GapSeconds = ParseInt(f[13], 15);
             if (f.Length > 14) r.OnlyWhenAway = f[14] == "1";
+            if (f.Length > 15) r.Script = Blank(Unescape(f[15]));
             return r;
         }
 

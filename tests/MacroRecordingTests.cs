@@ -51,7 +51,7 @@ namespace RobloxKeeper.Tests
         // to stay overlapped, or it is a different move.
         public static void TestKeysHeldTogetherStayTogether()
         {
-            Assert.Equal("Hold down W | Wait 1s | Press Space | Wait 0.95s | Let go of W",
+            Assert.Equal("Hold down W | Wait 1s | Press Space | Wait 0.95s | Release W",
                 Said(Steps(3000, Down(0x57, 0), Down(0x20, 1000), Up(0x20, 1050), Up(0x57, 2000))), "walk and jump");
         }
 
@@ -110,6 +110,59 @@ namespace RobloxKeeper.Tests
             InputAction last = plan[plan.Count - 1];
             Assert.Equal(InputActionKind.KeyUp, last.Kind, "ends by letting go");
             Assert.Equal((byte)0x57, last.Vk, "of W");
+        }
+
+        // ---------- thinning moves as they come in ----------
+
+        public static void TestTheFirstMoveIsAlwaysKept()
+        {
+            Assert.True(MacroRecorder.KeepsMove(0, -1), "at the very start");
+            Assert.True(MacroRecorder.KeepsMove(5000, -1), "or later on");
+        }
+
+        public static void TestAMoveTooSoonAfterTheLastKeptIsLetGo()
+        {
+            Assert.False(MacroRecorder.KeepsMove(1004, 1000), "4 ms after");
+            Assert.False(MacroRecorder.KeepsMove(1009, 1000), "9 ms after");
+            Assert.True(MacroRecorder.KeepsMove(1010, 1000), "10 ms after");
+            Assert.True(MacroRecorder.KeepsMove(1500, 1000), "half a second after");
+        }
+
+        // A 1000 Hz mouse moved for the whole ten minutes a recording of the
+        // screen can last stays well under the cap, so no move is lost at
+        // the end.
+        public static void TestTenMinutesOfAFastMouseFitUnderTheCap()
+        {
+            long last = -1;
+            int kept = 0;
+            for (long ms = 0; ms < MacroRecorder.MAX_SCREEN_MS; ms++)
+                if (MacroRecorder.KeepsMove(ms, last)) { kept++; last = ms; }
+            Assert.True(kept <= MacroRecorder.MAX_SCREEN_MS / MacroRecorder.MOVE_THIN_MS, "a hundred a second at most");
+            Assert.True(kept < 100000, "under the hundred thousand events kept");
+        }
+
+        // Thinned to a hundred a second as they come in, a recording still
+        // keeps where the pointer went - ToSteps keeps far fewer anyway.
+        public static void TestMovesThinnedAsTheyComeInStillMakeTheSameSteps()
+        {
+            Rectangle client = new Rectangle(0, 0, 1000, 1000);
+            List<RawInput> all = new List<RawInput>(), thinned = new List<RawInput>();
+            long last = -1;
+            for (int ms = 0; ms < 3000; ms++)
+            {
+                RawInput move = RawInput.Move(100 + ms / 5, 100 + ms / 10, ms);
+                all.Add(move);
+                if (MacroRecorder.KeepsMove(ms, last)) { thinned.Add(move); last = ms; }
+            }
+            List<MacroStep> a = MacroRecording.ToSteps(all, client, 3000);
+            List<MacroStep> b = MacroRecording.ToSteps(thinned, client, 3000);
+            Assert.Equal(a.Count, b.Count, "as many steps");
+            for (int i = 0; i < a.Count; i++)
+            {
+                Assert.Equal(a[i].Kind, b[i].Kind, "step " + i);
+                Assert.Equal(a[i].X, b[i].X, "step " + i + " across");
+                Assert.Equal(a[i].Y, b[i].Y, "step " + i + " down");
+            }
         }
     }
 }

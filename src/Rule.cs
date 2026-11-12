@@ -38,6 +38,9 @@ namespace RobloxKeeper
         public bool Ctrl, Alt, Shift;       // Hotkey
 
         public string Macro;
+        // A Lua script to run instead of a macro; exactly one of the two is
+        // set. A script repeats by itself, so Times means nothing to it.
+        public string Script;
         public int Times = 1;
         public int DelaySeconds;            // wait this long first - a game still loading, a shop opening
 
@@ -50,19 +53,23 @@ namespace RobloxKeeper
         // A timer faster than this would hold the keyboard nearly all the time.
         public const int MIN_EVERY = 5;
 
+        public bool PlaysScript { get { return !string.IsNullOrEmpty(Script); } }
+
         public bool HappensOnAClient { get { return When == RuleWhen.WatcherFinds || When == RuleWhen.Joins; } }
 
         public string Problem()
         {
             if (string.IsNullOrEmpty(Name) || Name.Trim().Length == 0) return "Give the rule a name.";
-            if (string.IsNullOrEmpty(Macro)) return "Choose a macro for it to play.";
+            if (string.IsNullOrEmpty(Macro) && !PlaysScript) return "Choose a macro or a script for it to play.";
+            if (!string.IsNullOrEmpty(Macro) && PlaysScript) return "Choose a macro or a script, not both.";
             if (When == RuleWhen.Every && EverySeconds < MIN_EVERY)
-                return "Make it every " + MIN_EVERY + " seconds or more - a macro holds the keyboard while it plays.";
+                return "Use " + MIN_EVERY + " seconds or more. A " + (PlaysScript ? "script" : "macro")
+                     + " holds the keyboard while it " + (PlaysScript ? "runs." : "plays.");
             if (When == RuleWhen.Hotkey && HotkeyVk == 0) return "Choose a key.";
             if (When == RuleWhen.Hotkey && OnlyWhenAway)
-                return "Pressing the key means you're at the keyboard, so it could never fire while you're away - untick that.";
+                return "Pressing a key means you're at the keyboard, so it can't run while you're away. Untick that.";
             if (On == RuleOn.WhereItHappened && !HappensOnAClient)
-                return "Choose which clients it plays on - a timer or a key doesn't happen on one client.";
+                return "Choose which Roblox windows it plays on.";
             if (On == RuleOn.TheseAccounts && (Accounts == null || Accounts.Length == 0))
                 return "Tick at least one account for it to play on.";
             return null;
@@ -75,16 +82,17 @@ namespace RobloxKeeper
             {
                 case RuleWhen.Every: when = "Every " + Duration(EverySeconds); break;
                 case RuleWhen.Hotkey: when = "When you press " + HotkeyText(); break;
-                case RuleWhen.Joins: when = "When a client joins a server"; break;
+                case RuleWhen.Joins: when = "When a Roblox window joins a server"; break;
                 default:
                     when = "When " + (string.IsNullOrEmpty(Watcher) ? "any watcher" : Watcher) + " finds something"
                          + (string.IsNullOrEmpty(FoundContains) ? "" : " with \"" + FoundContains + "\" in it");
                     break;
             }
 
-            string what = "play " + (Macro ?? "nothing")
-                        + (Times > 1 ? " " + Times + " times" : "")
-                        + (DelaySeconds > 0 ? " after " + DelaySeconds + "s" : "");
+            // A script repeats by itself, so "times" is only said for a macro.
+            string what = PlaysScript ? "run the script " + Script
+                        : "play " + (Macro ?? "nothing") + (Times > 1 ? " " + Times + " times" : "");
+            what += (DelaySeconds > 0 ? " after " + DelaySeconds + "s" : "");
             return when + ", " + what + " on " + OnText() + (OnlyWhenAway ? " - only while you're away" : "");
         }
 
@@ -92,12 +100,12 @@ namespace RobloxKeeper
         {
             switch (On)
             {
-                case RuleOn.InFront: return "the client in front";
-                case RuleOn.EveryClient: return "every client";
+                case RuleOn.InFront: return "the Roblox window in front";
+                case RuleOn.EveryClient: return "every Roblox window";
                 case RuleOn.TheseAccounts:
                     return Accounts == null || Accounts.Length == 0 ? "no account yet" : string.Join(", ", Accounts);
                 default:
-                    return When == RuleWhen.WatcherFinds ? "the client that saw it" : "that client";
+                    return When == RuleWhen.WatcherFinds ? "the Roblox window that saw it" : "that Roblox window";
             }
         }
 
@@ -170,7 +178,7 @@ namespace RobloxKeeper
         public bool Ctrl, Alt, Shift;   // Hotkey
     }
 
-    // A rule's macro, to be played on one client.
+    // A rule's macro or script, to be played on one client.
     class RuleFiring
     {
         public Rule Rule;
@@ -232,6 +240,12 @@ namespace RobloxKeeper
             foreach (Rule r in nextDue.Keys) if (!rules.Contains(r)) gone.Add(r);
             foreach (Rule r in gone) { nextDue.Remove(r); lastPlayed.Remove(r); }
             return fire;
+        }
+
+        // As if it had never played: its next happening plays at once.
+        public void Forget(Rule r)
+        {
+            lastPlayed.Remove(r);
         }
 
         static bool Ready(Rule r)

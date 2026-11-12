@@ -25,6 +25,14 @@ namespace RobloxKeeper
             WebView2Runtime.Install();
 
             string[] args = Environment.GetCommandLineArgs();
+            // Started by the app itself to draw a shader over one Roblox
+            // window: that is all this copy does, and it is not the app.
+            if (Array.IndexOf(args, "--overlay") >= 0)
+            {
+                Environment.Exit(RunOverlay(args));
+                return;
+            }
+
             for (int i = 1; i < args.Length; i++)
                 if (args[i] == "--minimized") StartMinimized = true;
 
@@ -58,6 +66,21 @@ namespace RobloxKeeper
             Application.SetCompatibleTextRenderingDefault(false);
             Application.Run(new MainForm());
             GC.KeepAlive(appMutex);
+        }
+
+        // On a thread of its own kind: capturing a window is asked of
+        // Windows in a way a window's own thread may not ask it. Kept in a
+        // method of its own, so nothing the overlay needs is loaded by a
+        // copy that is not one.
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        static int RunOverlay(string[] args)
+        {
+            int code = 5;
+            Thread t = new Thread(delegate() { code = Shader.Overlay.Run(args); });
+            t.SetApartmentState(ApartmentState.MTA);
+            t.Start();
+            t.Join();
+            return code;
         }
 
         // A second copy opened by hand brings the running one forward. One

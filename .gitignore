@@ -17,3 +17,6 @@ Desktop.ini
 .vs/
 *.user
 *.suo
+
+# --- Local debug logs ---
+*.log

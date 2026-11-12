@@ -104,7 +104,7 @@ namespace RobloxKeeper
             // opaque, and one added earlier sits higher in the z-order, so an
             // oversized box here silently paints over the version beside it.
             Label lblTitle = Ui.RowLabel("RobloxKeeper", 18, 0, TITLEBAR_H, TITLE_W, 13f, Theme.Text);
-            lblTitle.Font = new Font("Segoe UI", 13f, FontStyle.Bold);
+            lblTitle.Font = Ui.F("Segoe UI", 13f, FontStyle.Bold);
             lblTitle.BackColor = Theme.Bg;
             titleBar.Controls.Add(lblTitle);
 
@@ -121,9 +121,8 @@ namespace RobloxKeeper
                                               (TITLEBAR_H - chkAutostart.PreferredSize.Height) / 2);
             chkAutostart.CheckedChanged += OnAutostartToggled;
             Explain(chkAutostart,
-                "Starts RobloxKeeper in the tray the moment you sign in to Windows - ahead of other startup apps, "
-                + "the way Wallpaper Engine's high-priority start does - so it holds Roblox's lock before any "
-                + "client opens. No administrator rights needed.");
+                "Opens RobloxKeeper in the tray when Windows starts, so it's ready before you open Roblox. "
+                + "No admin needed.");
             titleBar.Controls.Add(chkAutostart);
             // Checked once the window exists (OnHandleCreated): the answer is
             // handed back to it, and before then there is nothing to hand it to.
@@ -186,7 +185,7 @@ namespace RobloxKeeper
             cmbKeys.SelectedIndex = NudgeMethod.CAMERA;
             cmbKeys.SelectedIndexChanged += delegate
             {
-                if (!initializing) Log("Nudge method set: " + cmbKeys.Text);
+                if (!initializing) Log("Nudge method: " + cmbKeys.Text);
                 UpdateCustomKeyRow();
                 SaveSettings();
             };
@@ -209,13 +208,13 @@ namespace RobloxKeeper
             caption.Location = new Point(0, 8);
             caption.Size = new Size(WELL_W, 14);
             caption.TextAlign = ContentAlignment.MiddleCenter;
-            caption.Font = new Font("Segoe UI", 7.5f, FontStyle.Bold);
+            caption.Font = Ui.F("Segoe UI", 7.5f, FontStyle.Bold);
             caption.ForeColor = Theme.Muted;
             caption.BackColor = Theme.Inset;
             well.Controls.Add(caption);
 
-            countdownClock = new Font("Segoe UI", 19f, FontStyle.Bold);
-            countdownWord = new Font("Segoe UI", 12f, FontStyle.Bold);
+            countdownClock = Ui.F("Segoe UI", 19f, FontStyle.Bold);
+            countdownWord = Ui.F("Segoe UI", 12f, FontStyle.Bold);
 
             lblCountdown = new Label();
             lblCountdown.AutoSize = false;
@@ -243,16 +242,14 @@ namespace RobloxKeeper
             {
                 if (!initializing)
                     Log(chkIdleOnly.Checked
-                        ? "Nudges will wait for a lull - your game won't be interrupted unless a client is about to be kicked."
-                        : "Nudges will happen on the interval regardless of what you're doing.");
+                        ? "Nudges will wait until you're away, unless a Roblox window is about to be kicked."
+                        : "Nudges will run on the timer, whatever you're doing.");
                 SaveSettings();
             };
             Explain(chkIdleOnly,
-                "A nudge has to bring a client to the front for about a third of a second, which in a "
-                + "game costs you the fight. With this on it waits for a pause first, and never "
-                + "interrupts a fullscreen game.\r\n\r\n"
-                + "The exception is a client about to hit Roblox's 20-minute idle kick - then it goes "
-                + "ahead anyway and warns you first.");
+                "A nudge briefly puts a Roblox window in front, which can cost you a fight. "
+                + "This waits until you pause, and never interrupts a fullscreen game.\r\n\r\n"
+                + "If a window is about to be kicked for idling (20 minutes), it nudges anyway and warns you first.");
             card.Controls.Add(chkIdleOnly);
 
             // Used by the "Custom key" method. Offered as a list of keys known
@@ -274,8 +271,8 @@ namespace RobloxKeeper
             };
             card.Controls.Add(cmbCustomKey);
 
-            btnCaptureKey = Ui.AccentButton("Press a key", BTN_X, keyRow, BTN_W, ROW_H);
-            btnCaptureKey.Font = new Font("Segoe UI", 8.25f, FontStyle.Bold);
+            btnCaptureKey = Ui.AccentButton("Choose a key", BTN_X, keyRow, BTN_W, ROW_H);
+            btnCaptureKey.Font = Ui.F("Segoe UI", 8.25f, FontStyle.Bold);
             btnCaptureKey.Click += delegate { CaptureCustomKey(); };
             card.Controls.Add(btnCaptureKey);
         }
@@ -305,12 +302,12 @@ namespace RobloxKeeper
                 else
                 {
                     capturedVk = d.Captured;
-                    Log("Custom nudge key captured: " + (char)d.Captured + ".");
+                    Log("Custom nudge key is now " + (char)d.Captured + ".");
                     SaveSettings();
                 }
 
                 if (cmbKeys.SelectedIndex != NudgeMethod.CUSTOM)
-                    Log("Pick the Custom key method above to start using it.");
+                    Log("Choose the Custom key method above to use it.");
             }
         }
 
@@ -331,9 +328,9 @@ namespace RobloxKeeper
             card.Size = new Size(CARD_W, CLIENTS_H);
             Controls.Add(card);
 
-            lblClientsTitle = Ui.SectionTitle("CLIENTS");
+            lblClientsTitle = Ui.SectionTitle("ROBLOX WINDOWS");
             card.Controls.Add(lblClientsTitle);
-            card.Controls.Add(Ui.Subtitle("Untick a client to skip its nudge · Tune sets its CPU and memory"));
+            card.Controls.Add(Ui.Subtitle("Untick a window to skip its nudge · Tune sets its limits"));
 
             clientsPanel = new ScrollPanel();
             clientsPanel.Location = new Point(Ui.PAD, 54);
@@ -349,16 +346,15 @@ namespace RobloxKeeper
             chkAutoGhost.CheckedChanged += delegate
             {
                 if (!initializing)
-                    Log("Auto-clear ghosts " + (chkAutoGhost.Checked
-                        ? "on - stuck clients are ended after " + ClientTracker.GHOST_GRACE_SECONDS + "s."
+                    Log("Auto-close leftovers " + (chkAutoGhost.Checked
+                        ? "on - stuck Roblox windows close after " + ClientTracker.GHOST_GRACE_SECONDS + "s."
                         : "off."));
                 SaveSettings();
             };
             Explain(chkAutoGhost,
-                "Roblox sometimes leaves a process running with no window after you close a client. "
-                + "Those hold memory and stop you opening new clients, so they're closed for you.\r\n\r\n"
-                + "Roblox also starts a copy of itself in the tray every time a client closes and never ends "
-                + "them; once one has sat there as long, it is closed too.");
+                "Sometimes Roblox keeps running, hidden, after you close a window. It uses memory and can "
+                + "stop new windows opening, so it's closed for you.\r\n\r\n"
+                + "Copies Roblox leaves in the tray are closed too.");
             card.Controls.Add(chkAutoGhost);
 
             // Amber, not muted grey: "stuck" is a state that wants attention, and
@@ -367,7 +363,7 @@ namespace RobloxKeeper
             card.Controls.Add(lblGhosts);
 
             btnZombie = Ui.AccentButton("Close leftovers", BTN_X, row, BTN_W, ROW_H);
-            btnZombie.Font = new Font("Segoe UI", 8.25f, FontStyle.Bold);
+            btnZombie.Font = Ui.F("Segoe UI", 8.25f, FontStyle.Bold);
             btnZombie.Visible = false;
             // Ends exactly what the counter beside it says is leaked, nothing
             // more. "Close all Roblox" is the button for ending everything.
@@ -382,11 +378,11 @@ namespace RobloxKeeper
             card.Controls.Add(lblAccounts);
 
             btnAccounts = Ui.AccentButton("Accounts", BTN_X, accRow, BTN_W, ROW_H);
-            btnAccounts.Font = new Font("Segoe UI", 8.25f, FontStyle.Bold);
+            btnAccounts.Font = Ui.F("Segoe UI", 8.25f, FontStyle.Bold);
             btnAccounts.Click += delegate { OpenAccounts(); };
             Explain(btnAccounts,
-                "Save as many Roblox accounts as you like and launch them without signing out. "
-                + "Roblox itself only holds five.");
+                "Save as many Roblox accounts as you like and open them without signing out. "
+                + "Roblox itself only keeps five.");
             card.Controls.Add(btnAccounts);
 
             // Watching lives here too: what it watches is these clients.
@@ -400,16 +396,15 @@ namespace RobloxKeeper
             cmbSetup.Visible = false;
             cmbSetup.SelectedIndexChanged += delegate { ChooseSetup(cmbSetup.Text); };
             Explain(cmbSetup,
-                "Which set of watchers is in use - one for each game, say. Make and name them in Watchers, "
-                + "then switch between them here in one click.");
+                "Pick which set of watchers is on, for example one per game. Make sets in Watchers.");
             card.Controls.Add(cmbSetup);
 
             btnWatchers = Ui.AccentButton("Watchers", BTN_X, watchRow, BTN_W, ROW_H);
-            btnWatchers.Font = new Font("Segoe UI", 8.25f, FontStyle.Bold);
+            btnWatchers.Font = Ui.F("Segoe UI", 8.25f, FontStyle.Bold);
             btnWatchers.Click += delegate { OpenWatchers(); };
             Explain(btnWatchers,
-                "Get told on Discord, with a pop-up or a sound when a word, a new chat line or a picture "
-                + "turns up on a client's screen. Clients are only looked at - never focused, clicked or typed into.");
+                "Get a Discord message, pop-up or sound when a word, chat line or picture shows up in a Roblox window. "
+                + "It only looks. It never clicks or types.");
             card.Controls.Add(btnWatchers);
         }
 
@@ -420,10 +415,9 @@ namespace RobloxKeeper
             if (!WebView2Runtime.RuntimeAvailable())
             {
                 MessageBox.Show(this,
-                    "The account manager needs the Microsoft Edge WebView2 runtime, which isn't installed.\r\n\r\n"
-                    + "It ships with Windows 11 and with current versions of Edge. Installing Edge, or the "
-                    + "WebView2 runtime from Microsoft, will enable it.",
-                    "WebView2 runtime missing", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    "Accounts needs Microsoft Edge WebView2, and it isn't installed.\r\n\r\n"
+                    + "It comes with Windows 11 and with up-to-date Edge. Install either one to use Accounts.",
+                    "WebView2 missing", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
 
@@ -444,7 +438,7 @@ namespace RobloxKeeper
         {
             int n = accounts == null ? -1 : accounts.Accounts.Count;
             string text;
-            if (n < 0) text = "Launch accounts without signing out";
+            if (n < 0) text = "Open accounts without signing out";
             else if (n == 0) text = "No accounts saved yet";
             else text = n + " account" + (n == 1 ? "" : "s") + " saved";
             if (lblAccounts.Text != text) lblAccounts.Text = text;
@@ -460,24 +454,23 @@ namespace RobloxKeeper
             Controls.Add(card);
 
             card.Controls.Add(Ui.SectionTitle("PERFORMANCE"));
-            card.Controls.Add(Ui.Subtitle("What each Roblox client is allowed to use"));
+            card.Controls.Add(Ui.Subtitle("How much each Roblox window may use"));
 
             const int row1 = 54;
-            card.Controls.Add(Ui.RowLabel("New clients:", Ui.PAD, row1, ROW_H, 80, 9f, Theme.Muted));
+            card.Controls.Add(Ui.RowLabel("New windows:", Ui.PAD, row1, ROW_H, 84, 9f, Theme.Muted));
 
-            cmbPerfPriority = Ui.DarkCombo(104, row1, 108);
+            cmbPerfPriority = Ui.DarkCombo(104, row1, 122);       // "Below normal" fits closed
             Ui.FillPriorityCombo(cmbPerfPriority);
             cmbPerfPriority.SelectedIndexChanged += OnPerfDefaultsChanged;
             card.Controls.Add(cmbPerfPriority);
 
             // No core count beside it: every client gets every core. Locking a
             // client to cores is what froze it - see ClientProfile.
-            chkPerfEco = Ui.DarkCheck("Low power", 228, row1, 9f);
+            chkPerfEco = Ui.DarkCheck("Low power", 240, row1, 9f);
             Ui.CenterIn(chkPerfEco, row1, ROW_H);
             chkPerfEco.CheckedChanged += OnPerfDefaultsChanged;
             Explain(chkPerfEco,
-                "Windows efficiency mode: the client uses less CPU and less battery. Good for accounts "
-                + "sitting in an AFK game, not for one you're playing.");
+                "Uses less CPU and battery. Good for windows left AFK, not the one you're playing.");
             card.Controls.Add(chkPerfEco);
 
             const int row2 = 88;
@@ -490,20 +483,20 @@ namespace RobloxKeeper
                 perf.ResetAutoTrimClock();
                 if (!initializing)
                     Log(chkAutoTrim.Checked
-                        ? "Auto-trim on - background clients release idle memory every " + numTrimEvery.Value + " min."
-                        : "Auto-trim off.");
+                        ? "Free up memory is on - idle windows give memory back every " + numTrimEvery.Value + " min."
+                        : "Free up memory is off.");
                 SaveSettings();
             };
             Explain(chkAutoTrim,
-                "Hands memory a client isn't using back to Windows, on a timer. Safe to do while "
-                + "playing - it costs a brief hitch, and the client you're looking at is skipped.");
+                "Gives back memory a window isn't using, on a timer. You may notice a tiny hitch. "
+                + "The window you're looking at is skipped.");
             card.Controls.Add(chkAutoTrim);
 
             numTrimEvery = Ui.DarkNumeric(188, row2, 46, 1, 120, 10);
             numTrimEvery.ValueChanged += delegate
             {
                 if (!initializing && chkAutoTrim.Checked)
-                    Log("Auto-trim interval set to " + numTrimEvery.Value + " min.");
+                    Log("Free up memory every " + numTrimEvery.Value + " min.");
                 SaveSettings();
             };
             card.Controls.Add(numTrimEvery);
@@ -511,7 +504,7 @@ namespace RobloxKeeper
             card.Controls.Add(Ui.RowLabel("min", 240, row2, ROW_H, 32, 8.25f, Theme.Muted));
 
             btnTrimAll = Ui.AccentButton("Free memory now", BTN_X, row2, BTN_W, ROW_H);
-            btnTrimAll.Font = new Font("Segoe UI", 8.25f, FontStyle.Bold);
+            btnTrimAll.Font = Ui.F("Segoe UI", 8.25f, FontStyle.Bold);
             btnTrimAll.Click += delegate { OnTrimAllClicked(); };
             card.Controls.Add(btnTrimAll);
 
@@ -521,15 +514,14 @@ namespace RobloxKeeper
             // because the usual reason to change it is to set up the NEXT AFK
             // client without disturbing the one being played.
             const int row3 = 122;
-            card.Controls.Add(Ui.RowLabel("Running clients keep their current settings",
+            card.Controls.Add(Ui.RowLabel("Open windows keep their settings",
                 Ui.PAD, row3, ROW_H, 250, 8.25f, Theme.Muted));
 
             btnApplyAll = Ui.AccentButton("Apply to all", BTN_X, row3, BTN_W, ROW_H);
-            btnApplyAll.Font = new Font("Segoe UI", 8.25f, FontStyle.Bold);
+            btnApplyAll.Font = Ui.F("Segoe UI", 8.25f, FontStyle.Bold);
             btnApplyAll.Click += delegate { OnApplyToAllClicked(); };
             Explain(btnApplyAll,
-                "The settings above only reach clients opened from now on. This applies them to the "
-                + "ones already running too.");
+                "The settings above only affect new windows. This applies them to the open ones too.");
             card.Controls.Add(btnApplyAll);
 
             // Capping a client's FPS is not reachable from outside the process -
@@ -537,29 +529,27 @@ namespace RobloxKeeper
             // client. Dropping priority and switching on EcoQoS for the clients
             // you are not looking at is, and it touches nothing on disk.
             const int row4 = 156;
-            chkThrottleBg = Ui.DarkCheck("Slow down clients I'm not using", Ui.PAD, row4, 8.25f);
+            chkThrottleBg = Ui.DarkCheck("Slow down windows I'm not using", Ui.PAD, row4, 8.25f);
             Ui.CenterIn(chkThrottleBg, row4, ROW_H);
             chkThrottleBg.CheckedChanged += delegate
             {
                 perf.ThrottleBackground = chkThrottleBg.Checked;
                 if (!initializing)
                     Log(chkThrottleBg.Checked
-                        ? "Background clients will drop a priority step and run in efficiency mode; the one you're using stays at full speed."
-                        : "Background throttling off.");
+                        ? "Windows you're not using will run slower. The one you're using stays at full speed."
+                        : "Slowing down other windows is off.");
                 SaveSettings();
             };
             Explain(chkThrottleBg,
-                "Any client you're not looking at drops a step in priority and switches to efficiency "
-                + "mode. The one in front of you stays at full speed, and clients go back to normal "
-                + "the moment you switch to them.");
+                "Roblox windows you're not looking at run slower. The one in front stays at full speed, "
+                + "and the others speed up when you switch to them.");
             card.Controls.Add(chkThrottleBg);
 
             btnAfkMode = Ui.AccentButton("AFK mode", BTN_X, row4, BTN_W, ROW_H);
-            btnAfkMode.Font = new Font("Segoe UI", 8.25f, FontStyle.Bold);
+            btnAfkMode.Font = Ui.F("Segoe UI", 8.25f, FontStyle.Bold);
             btnAfkMode.Click += delegate { OnAfkModeClicked(); };
             Explain(btnAfkMode,
-                "Parks every client except the one you're playing, in one click. Press it again to put "
-                + "them all back.");
+                "Slows every Roblox window except the one you're playing. Press it again to undo.");
             card.Controls.Add(btnAfkMode);
 
             // A real ceiling: Windows holds each background client at or under
@@ -572,21 +562,20 @@ namespace RobloxKeeper
             {
                 if (!initializing)
                     Log(chkCeiling.Checked
-                        ? "Memory ceiling on - clients you aren't using are held under " + numCeiling.Value + " MB."
-                        : "Memory ceiling off - clients may use what they like again.");
+                        ? "Memory limit on - windows you're not using stay under " + numCeiling.Value + " MB."
+                        : "Memory limit off - windows can use what they need again.");
                 SaveSettings();
             };
             Explain(chkCeiling,
-                "Holds every client you aren't using at or under this much memory. Windows moves out "
-                + "what the client has used least, a little at a time, instead of emptying it all at once. "
-                + "The client you're using is never held back.");
+                "Keeps each window you're not using under this much memory. "
+                + "The one you're using is never limited.");
             card.Controls.Add(chkCeiling);
 
             numCeiling = Ui.DarkNumeric(150, row5, 62, 256, 16384, 2000);
             numCeiling.ValueChanged += delegate
             {
                 if (!initializing && chkCeiling.Checked)
-                    Log("Memory ceiling set to " + numCeiling.Value + " MB.");
+                    Log("Memory limit set to " + numCeiling.Value + " MB.");
                 SaveSettings();
             };
             card.Controls.Add(numCeiling);
@@ -622,7 +611,7 @@ namespace RobloxKeeper
             card.Controls.Add(lblMultiStatus);
 
             btnCloseRbx = Ui.AccentButton("Close all Roblox", BTN_X, MULTI_ROW, BTN_W, 28);
-            btnCloseRbx.Font = new Font("Segoe UI", 8.25f, FontStyle.Bold);
+            btnCloseRbx.Font = Ui.F("Segoe UI", 8.25f, FontStyle.Bold);
             btnCloseRbx.Visible = false;
             btnCloseRbx.Click += delegate { CloseAllRoblox(); };
             card.Controls.Add(btnCloseRbx);
@@ -639,7 +628,7 @@ namespace RobloxKeeper
             card.Controls.Add(lblHandler);
 
             btnFixHandler = Ui.AccentButton("Repair", BTN_X, fixRow, BTN_W, ROW_H);
-            btnFixHandler.Font = new Font("Segoe UI", 8.25f, FontStyle.Bold);
+            btnFixHandler.Font = Ui.F("Segoe UI", 8.25f, FontStyle.Bold);
             btnFixHandler.Visible = false;
             btnFixHandler.Click += delegate { RepairLaunchHandler(); };
             card.Controls.Add(btnFixHandler);
@@ -667,12 +656,11 @@ namespace RobloxKeeper
             lnkClean.Click += delegate { CleanOldVersions(); };
             card.Controls.Add(lnkClean);
             Explain(lnkClean,
-                "Roblox keeps every version it has ever installed. This removes the ones nothing "
-                + "is using - never the one Roblox launches, never one a client is running, and "
-                + "never the newest two, since accounts sometimes need different versions.");
+                "Roblox keeps every version it has ever installed. This deletes old ones nothing is using. "
+                + "The current version, any in use and the newest two always stay.");
 
             LinkLabel lnkCopy = Ui.RowLink("Copy log", 352, Ui.TITLE_Y);
-            lnkCopy.Font = new Font("Segoe UI", 8.25f);
+            lnkCopy.Font = Ui.F("Segoe UI", 8.25f);
             Ui.CenterIn(lnkCopy, Ui.TITLE_Y, Ui.TITLE_H);
             lnkCopy.BackColor = Theme.Inset;
             lnkCopy.Click += delegate { CopyLog(); };
@@ -685,7 +673,7 @@ namespace RobloxKeeper
             rtbLog.BorderStyle = BorderStyle.None;
             rtbLog.BackColor = Theme.Inset;
             rtbLog.ForeColor = Theme.LogFg;
-            rtbLog.Font = new Font("Consolas", 8.75f);
+            rtbLog.Font = Ui.F("Consolas", 8.75f);
             rtbLog.WordWrap = true;
             // Vertical, not ForcedVertical: the bar only appears once the log
             // actually overflows the box.
@@ -704,7 +692,7 @@ namespace RobloxKeeper
             IList<string> spare = RobloxInstall.DeletableVersions(KEEP_NEWEST_VERSIONS, lastClients);
             if (spare.Count == 0)
             {
-                Log("Nothing to clean up - every installed Roblox version is either in use or recent.");
+                Log("Nothing to clean up - every installed Roblox version is in use or recent.");
                 return;
             }
 
@@ -714,8 +702,8 @@ namespace RobloxKeeper
             string size = ClientTracker.FormatBytes(bytes);
             if (MessageBox.Show(this,
                     "Delete " + spare.Count + " old Roblox version(s) and free about " + size + "?\r\n\r\n"
-                    + "The version Roblox launches, any version a client is running, and the newest two "
-                    + "are all kept. If Roblox ever needs one of these again it downloads it.",
+                    + "The current version, any in use and the newest two stay. "
+                    + "If Roblox needs one again, it downloads it.",
                     "Free up disk", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
                 return;
 
@@ -731,7 +719,7 @@ namespace RobloxKeeper
 
             Log(removed > 0
                 ? "Removed " + removed + " old Roblox version(s) and freed " + ClientTracker.FormatBytes(freed) + "."
-                : "Could not remove those versions - Roblox may still have files open.");
+                : "Couldn't remove those versions - Roblox may still be using them.");
         }
 
         // ---------- Tray ----------
@@ -746,15 +734,20 @@ namespace RobloxKeeper
             ContextMenuStrip menu = new ContextMenuStrip();
             menu.Items.Add("Open", null, delegate { RestoreFromTray(); });
             menu.Items.Add("Nudge now", null, delegate { NudgeAll("tray"); });
-            menu.Items.Add("Trim client memory", null, delegate { OnTrimAllClicked(); });
+            menu.Items.Add("Free up memory", null, delegate { OnTrimAllClicked(); });
+            menu.Items.Add("Macros...", null, delegate { OpenMacros(); });
+            menu.Items.Add("Autoclicker...", null, delegate { OpenClicker(); });
             // A hunt closes and reopens clients every minute or so, and the
             // app usually sits in the tray while it does - so it can be
             // stopped from here. Only offered while one is running.
             ToolStripItem stopHunt = menu.Items.Add("Stop hunting", null, delegate { StopHunts(true); });
             // The same for following a player, which also moves clients.
             ToolStripItem stopFollow = menu.Items.Add("Stop following", null, delegate { StopFollowing(true); });
+            // And for a macro that goes on until stopped, or the autoclicker.
+            ToolStripItem stopMacros = menu.Items.Add("Stop macros", null, delegate { StopEverything(); });
             menu.Opening += delegate
             {
+                stopMacros.Visible = SessionsRunning > 0;
                 stopHunt.Visible = HuntsActive() > 0;
                 stopFollow.Visible = follow != null;
                 if (follow != null) stopFollow.Text = "Stop following " + follow.Request.Player;
@@ -770,7 +763,7 @@ namespace RobloxKeeper
         ThemedToggle MakeToggle()
         {
             ThemedToggle c = new ThemedToggle();
-            c.Font = new Font("Segoe UI", 9.75f);
+            c.Font = Ui.F("Segoe UI", 9.75f);
             c.Text = "Enabled";
             c.ForeColor = Theme.Text;
             c.BackColor = Theme.Card;
@@ -815,7 +808,7 @@ namespace RobloxKeeper
             if (clients.Count == 0)
             {
                 clientsPanel.Controls.Add(
-                    Ui.RowLabel("No Roblox clients running.", 2, 2, ROW_INNER, 300, 9.75f, Theme.Muted));
+                    Ui.RowLabel("No Roblox windows open.", 2, 2, ROW_INNER, 300, 9.75f, Theme.Muted));
             }
 
             int y = 2;
@@ -829,6 +822,7 @@ namespace RobloxKeeper
                 // started from the website is still just a number,
                 // because there is no honest way to know whose it is.
                 string account = clientLabels.NameFor(ci.Pid);
+                string label = ClientLabels.RowTitle(account, idx);
                 chk.Text = ClientLabels.RowTitle(account, idx) + " · PID " + ci.Pid;
                 chk.Checked = nudgePrefs[ci.Pid];
                 chk.ForeColor = Theme.Text;
@@ -840,7 +834,7 @@ namespace RobloxKeeper
                 chk.CheckedChanged += delegate
                 {
                     nudgePrefs[pid] = chkRef.Checked;
-                    Log("Client PID " + pid + (chkRef.Checked ? " will be nudged." : " will be left alone."));
+                    Log(label + (chkRef.Checked ? " will be nudged." : " will be left alone."));
                     UpdateAfkTimer(NudgeableClientCount());
                     UpdateCountdown();
                 };
@@ -851,7 +845,6 @@ namespace RobloxKeeper
                 clientsPanel.Controls.Add(ram);
                 ramLabels[ci.Pid] = ram;
 
-                string label = ClientLabels.RowTitle(account, idx);
                 int index = idx - 1;
                 LinkLabel tune = Ui.ColumnLink("Tune", COL_TUNE_X, y, ROW_INNER, COL_LINK_W);
                 tune.Click += delegate { OpenTune(pid, index, label); };
@@ -893,7 +886,7 @@ namespace RobloxKeeper
                 ? PerformanceManager.PRIORITY_NORMAL : cmbPerfPriority.SelectedIndex;
             p.Eco = chkPerfEco.Checked;
             perf.Defaults = p;
-            if (!initializing) Log("Clients without their own settings will run at " + p + ".");
+            if (!initializing) Log("New windows will run at " + p + ".");
             SaveSettings();
         }
 
@@ -905,7 +898,7 @@ namespace RobloxKeeper
                 if (d.ResetToDefault)
                 {
                     perf.Forget(pid);
-                    Log(label + " (PID " + pid + ") now uses the default profile.");
+                    Log(label + " now uses the default settings.");
                 }
                 else
                 {
@@ -921,26 +914,26 @@ namespace RobloxKeeper
         {
             if (lastClients.Count == 0)
             {
-                Log("No Roblox clients to apply settings to.");
+                Log("No Roblox windows to apply settings to.");
                 return;
             }
             perf.ApplyToAllRunning(lastClients);
             Log("Applied " + perf.Defaults + " to " + lastClients.Count +
-                " running client(s). Per-client Tune settings were left alone.");
+                " open window(s). Windows you tuned yourself were left alone.");
         }
 
         // One switch instead of tuning each client by hand: everything except
         // what you are actually playing gets parked.
         void OnAfkModeClicked()
         {
-            if (lastClients.Count == 0) { Log("No Roblox clients to park."); return; }
+            if (lastClients.Count == 0) { Log("No Roblox windows open."); return; }
 
             if (afkModeOn)
             {
                 perf.LeaveAfkMode(lastClients);
                 afkModeOn = false;
                 btnAfkMode.Text = "AFK mode";
-                Log("AFK mode off - every client is back on its normal profile.");
+                Log("AFK mode off - all windows are back to normal.");
                 return;
             }
 
@@ -951,22 +944,22 @@ namespace RobloxKeeper
             bool anyForeground = false;
             foreach (ClientInfo ci in lastClients) if (ci.Pid == fg) anyForeground = true;
             Log(anyForeground
-                ? "AFK mode on - every client parked except the one in front (PID " + fg + ")."
-                : "AFK mode on - all " + lastClients.Count + " client(s) parked; no Roblox window is in front.");
+                ? "AFK mode on - every window slowed except the one in front."
+                : "AFK mode on - all " + lastClients.Count + " window(s) slowed; none is in front.");
         }
 
         void OnTrimAllClicked()
         {
             if (lastClients.Count == 0)
             {
-                Log("No Roblox clients to trim.");
+                Log("No Roblox windows open.");
                 return;
             }
             long freed = perf.TrimAll(lastClients, 0);
             perf.ResetAutoTrimClock();
             Log(freed > 0
-                ? "Trimmed " + lastClients.Count + " client(s) - released " + ClientTracker.FormatBytes(freed) + "."
-                : "Trimmed " + lastClients.Count + " client(s) - nothing idle left to release.");
+                ? "Freed " + ClientTracker.FormatBytes(freed) + " of memory from " + lastClients.Count + " window(s)."
+                : "Checked " + lastClients.Count + " window(s) - no idle memory to free.");
         }
     }
 }

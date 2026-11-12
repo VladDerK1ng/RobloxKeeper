@@ -17,6 +17,46 @@ namespace RobloxKeeper.Tests
             public string Read(Pixels image) { return ""; }
         }
 
+        // The few things a rule asks of the scripts: their names.
+        class FakeHost : IScriptHost
+        {
+            readonly ScriptStore store;
+            public FakeHost(ScriptStore store) { this.store = store; }
+            public ScriptStore Store { get { return store; } }
+            public string StartScript(string name) { return null; }
+            public string StartScript(string name, int pid, string tag) { return null; }
+            public bool StopScript(string name) { return false; }
+            public bool IsScriptRunning(string name) { return false; }
+            public List<ScriptRunInfo> ScriptsRunning() { return new List<ScriptRunInfo>(); }
+            public string ScriptKeyProblem(byte vk, string name) { return null; }
+            public void ScriptsSaved() { }
+            public bool IsScriptTrusted(string name) { return true; }
+            public void TrustScript(string name) { }
+            public string RenameScript(string from, string to) { return null; }
+            public string RemoveScript(string name) { return null; }
+            public string MacroAsLua(Macro m) { return ""; }
+            public string ExportScript(string name, string zipPath) { return null; }
+            public ScriptImport ImportScript(string zipPath) { return null; }
+            public string Notices { get { return ""; } }
+            public event Action<string, string> ScriptOutput { add { } remove { } }
+            public event Action<string, int> ScriptLine { add { } remove { } }
+            public event Action<string, string> ScriptStatus { add { } remove { } }
+            public event Action<string, ScriptResult> ScriptEnded { add { } remove { } }
+        }
+
+        // A kit whose scripts are the ones named; they are files in a folder
+        // of their own.
+        static WatchKit KitWithScripts(string path, params string[] scripts)
+        {
+            WatchKit k = Kit(path);
+            string dir = Path.Combine(Path.GetTempPath(), "rk-ruleui-scripts-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(dir);
+            ScriptStore store = new ScriptStore(dir);
+            foreach (string s in scripts) store.Create(s, "print(1)");
+            k.Scripts = new FakeHost(store);
+            return k;
+        }
+
         static WatchKit Kit(string path)
         {
             WatchKit k = new WatchKit();
@@ -67,6 +107,75 @@ namespace RobloxKeeper.Tests
                     Assert.Equal(WatchStore.SerializeRule(r), WatchStore.SerializeRule(d.Collect()), "unchanged: " + r.When);
         }
 
+        // Macros first, then scripts, each labelled once there are scripts.
+        public static void TestTheEditorListsMacrosThenScripts()
+        {
+            using (RuleEditDialog d = new RuleEditDialog(new Rule(), KitWithScripts(TempStore(), "Farm loop", "Chat")))
+            {
+                List<string> items = d.PlayItems();
+                Assert.Equal(4, items.Count, "the prompt, a macro and two scripts");
+                Assert.Equal("Choose a macro or a script", items[0], "the prompt");
+                Assert.Equal("Macro: Buy egg", items[1], "the macro");
+                Assert.Equal("Script: Chat", items[2], "a script");
+                Assert.Equal("Script: Farm loop", items[3], "another");
+            }
+            // With no scripts the list reads as it always did.
+            using (RuleEditDialog d = new RuleEditDialog(new Rule(), Kit(TempStore())))
+            {
+                List<string> items = d.PlayItems();
+                Assert.Equal("Choose a macro", items[0], "the prompt");
+                Assert.Equal("Buy egg", items[1], "no label needed");
+                Assert.Equal(2, items.Count, "nothing else");
+            }
+        }
+
+        public static void TestChoosingAScriptHidesWhatOnlyMacrosUse()
+        {
+            using (RuleEditDialog d = new RuleEditDialog(new Rule(), KitWithScripts(TempStore(), "Farm loop")))
+            {
+                d.SetName("Farm");
+                d.SetWhen(RuleWhen.Hotkey);
+                d.SetHotkey(0x71, false, false, false);
+                d.SetOn(RuleOn.InFront);
+                d.SetMacro("Buy egg");
+                Assert.True(d.TimesShown, "a macro can be played several times");
+                Assert.Equal(null, d.ScriptNote, "and has no note");
+
+                d.SetScript("Farm loop");
+                Assert.False(d.TimesShown, "a script repeats by itself");
+                Assert.Contains("Press the key again", d.ScriptNote, "a key rule says how to stop it");
+                d.SetWhen(RuleWhen.Every);
+                Assert.False(d.ScriptNote.Contains("Press the key"), "a timer doesn't");
+
+                d.SetWhen(RuleWhen.Hotkey);
+                d.SetOn(RuleOn.InFront);
+                Assert.True(d.TrySave(), "saved");
+                Assert.Equal("Farm loop", d.Result.Script, "the script");
+                Assert.Equal(null, d.Result.Macro, "and no macro");
+                Assert.Equal("When you press F2, run the script Farm loop on the Roblox window in front", d.Result.Describe(), "as chosen");
+
+                d.SetMacro("Buy egg");
+                Assert.True(d.TimesShown, "back to a macro: Times is back");
+                Assert.True(d.TrySave(), "saved again");
+                Assert.Equal("Buy egg", d.Result.Macro, "the macro");
+                Assert.Equal(null, d.Result.Script, "and no script");
+            }
+        }
+
+        public static void TestAScriptRuleSurvivesTheEditorUnchanged()
+        {
+            Rule r = Timer();
+            r.Macro = null;
+            r.Script = "Farm loop";
+            using (RuleEditDialog d = new RuleEditDialog(r, KitWithScripts(TempStore(), "Farm loop")))
+                Assert.Equal(WatchStore.SerializeRule(r), WatchStore.SerializeRule(d.Collect()), "unchanged");
+
+            // A script that has since been removed stays chosen, so opening
+            // the rule doesn't quietly drop it.
+            using (RuleEditDialog d = new RuleEditDialog(r, KitWithScripts(TempStore())))
+                Assert.Equal("Farm loop", d.Collect().Script, "kept");
+        }
+
         public static void TestANewRuleIsBuiltFromWhatIsChosen()
         {
             using (RuleEditDialog d = new RuleEditDialog(new Rule(), Kit(TempStore())))
@@ -77,7 +186,7 @@ namespace RobloxKeeper.Tests
                 d.SetMacro("Buy egg");
                 d.SetOn(RuleOn.InFront);
                 Assert.True(d.TrySave(), "saved");
-                Assert.Equal("When you press Ctrl+Shift+F2, play Buy egg on the client in front", d.Result.Describe(), "as chosen");
+                Assert.Equal("When you press Ctrl+Shift+F2, play Buy egg on the Roblox window in front", d.Result.Describe(), "as chosen");
             }
         }
 

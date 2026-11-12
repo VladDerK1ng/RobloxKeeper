@@ -73,8 +73,7 @@ namespace RobloxKeeper
         {
             if (box.Width <= 0 || box.Height <= 0 || w <= 0 || h <= 0)
                 return "Drag a box over the part of the window to watch.";
-            return box.Width + " x " + box.Height + " pixels - "
-                 + Percent(box.Width, w) + " x " + Percent(box.Height, h) + " of the window";
+            return Percent(box.Width, w) + " wide, " + Percent(box.Height, h) + " tall (of the window)";
         }
 
         static string Percent(int part, int whole)
@@ -88,13 +87,13 @@ namespace RobloxKeeper
         {
             if (string.IsNullOrEmpty(text) || text.Trim().Length == 0)
                 return "It didn't read anything in that box.";
-            return "It read:\r\n" + text.Trim().Replace("\n", "\r\n");
+            return "It found this text:\r\n" + text.Trim().Replace("\n", "\r\n");
         }
 
         public static string NameProblem(string name)
         {
             if (string.IsNullOrEmpty(name) || name.Trim().Length == 0)
-                return "Give the box a name, so watchers can say which box they read.";
+                return "Give the box a name so watchers can pick it.";
             return null;
         }
 
@@ -261,7 +260,7 @@ namespace RobloxKeeper
             KeyPreview = true;
             BackColor = Theme.Bg;
             ForeColor = Theme.Text;
-            Font = new Font("Segoe UI", 9f);
+            Font = Ui.F("Segoe UI", 9f);
             ClientSize = new Size(M + viewSize.Width + M + SIDE_W + M,
                                   TITLEBAR_H + Math.Max(viewSize.Height, SIDE_H) + M);
 
@@ -304,7 +303,7 @@ namespace RobloxKeeper
                 ? "Draw a box on " + clientLabel
                 : "Cut out the picture to look for, from " + clientLabel;
             Label title = Ui.RowLabel(heading, 16, 0, TITLEBAR_H, ClientSize.Width - 80, 10f, Theme.Text);
-            title.Font = new Font("Segoe UI", 10f, FontStyle.Bold);
+            title.Font = Ui.F("Segoe UI", 10f, FontStyle.Bold);
             title.BackColor = Theme.Bg;
             bar.Controls.Add(title);
 
@@ -346,7 +345,7 @@ namespace RobloxKeeper
 
             string saveText = mode == RegionPickMode.Region ? "Save box" : "Use this picture";
             btnSave = Ui.AccentButton(saveText, SIDE_W - Ui.PAD - 124, SIDE_H - 48, 124, 30);
-            btnSave.Font = new Font("Segoe UI", 8.25f, FontStyle.Bold);
+            btnSave.Font = Ui.F("Segoe UI", 8.25f, FontStyle.Bold);
             btnSave.Click += delegate { Save(); };
             card.Controls.Add(btnSave);
 
@@ -363,8 +362,8 @@ namespace RobloxKeeper
             card.Controls.Add(grid);
 
             Label gridHint = Ui.MutedLabel(
-                "The edge or corner the box stays with when the window changes size. "
-                + "Guessed from where you drew it - click another to change it.",
+                "The edge or corner the box stays attached to when the window changes size. "
+                + "It's a guess from where you drew it. Click another to change it.",
                 Ui.PAD + grid.Width + 12, 102, 8.25f);
             gridHint.MaximumSize = new Size(INNER - grid.Width - 12, 0);
             card.Controls.Add(gridHint);
@@ -400,8 +399,8 @@ namespace RobloxKeeper
         void BuildPictureControls(Card card)
         {
             Label hint = Ui.MutedLabel(
-                "Keep it tight around the thing itself. You can paint out whatever is "
-                + "behind it next, so the scenery changing doesn't stop it matching.",
+                "Keep it tight around the thing itself. Next you can erase the background, "
+                + "so changing scenery doesn't stop it matching.",
                 Ui.PAD, 86, 8.25f);
             hint.MaximumSize = new Size(INNER, 0);
             card.Controls.Add(hint);

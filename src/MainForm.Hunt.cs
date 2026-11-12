@@ -54,8 +54,8 @@ namespace RobloxKeeper
                 hunts[a] = h;
                 huntPids[a] = PidOfAccount(a);
             }
-            Log("Hunting with " + string.Join(", ", s.Accounts) + " - " + s.LookSeconds
-                + " seconds a server" + (s.StayWhenFound ? ", staying wherever a watcher finds something." : "."));
+            Log("Hunting with " + string.Join(", ", s.Accounts) + ": " + s.LookSeconds
+                + " seconds in each server" + (s.StayWhenFound ? ", staying where a watcher finds something." : "."));
             UpdateWatchStatus();
             return null;
         }
@@ -69,7 +69,7 @@ namespace RobloxKeeper
             hunts.Clear();
             huntPids.Clear();
             hopLine.Clear();
-            if (say && any) Log("Hunt stopped. Every client stays where it is.");
+            if (say && any) Log("Hunt stopped. Every Roblox window stays where it is.");
             UpdateWatchStatus();
         }
 
@@ -215,7 +215,7 @@ namespace RobloxKeeper
                 if (!huntPids.TryGetValue(h.Account, out mine) || mine != d.Pid) continue;
                 if (!h.Found(d.WatcherName, d.When)) return;
 
-                string said = d.WatcherName + " found something on " + h.Account + " - the hunt stays in this server.";
+                string said = d.WatcherName + " found something on " + h.Account + ". The hunt is staying in this server.";
                 Log(said);
                 try
                 {

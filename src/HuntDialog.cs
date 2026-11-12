@@ -137,8 +137,8 @@ namespace RobloxKeeper
                 list.Controls.Add(Ui.MutedLabel("No accounts saved yet - add them in Accounts on the main window.", 2, 2, 8.25f));
 
             Label hint = Ui.MutedLabel(
-                "Each account's client is closed and opened again in the next server, so only accounts "
-                + "saved in Accounts can hunt. The watchers of the setup in use do the looking.", Ui.PAD, 312, 8.25f);
+                "Each account's Roblox window closes and reopens in the next server, so only accounts "
+                + "saved in Accounts can hunt. Your watchers do the looking.", Ui.PAD, 312, 8.25f);
             hint.MaximumSize = new Size(INNER, 0);
             set.Controls.Add(hint);
 
@@ -198,8 +198,8 @@ namespace RobloxKeeper
 
             IList<string> lines = kit.Hunts == null ? null : kit.Hunts.Lines(DateTime.Now);
             string text = lines == null || lines.Count == 0
-                ? "Not hunting. Start moves each ticked account to a server of the game, looks for as long "
-                  + "as set above, and moves on."
+                ? "Not hunting. Press Start to send each ticked account to a server of the game, "
+                  + "look around for the time set above, then move on."
                 : string.Join("\r\n", new List<string>(lines).ToArray());
             if (lblLines.Text != text) lblLines.Text = text;
         }

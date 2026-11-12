@@ -13,12 +13,12 @@ namespace RobloxKeeper.Tests
 
         public static void TestTheStatusLineCountsWatchersClientsAndHits()
         {
-            Assert.Equal("3 watchers · 2 clients · 4 hits today", Watching.StatusLine(3, 3, 2, 4), "the spec's line");
+            Assert.Equal("3 watchers · 2 windows · 4 hits today", Watching.StatusLine(3, 3, 2, 4), "the spec's line");
         }
 
         public static void TestTheStatusLineUsesTheSingular()
         {
-            Assert.Equal("1 watcher · 1 client · 1 hit today", Watching.StatusLine(1, 1, 1, 1), "one of each");
+            Assert.Equal("1 watcher · 1 window · 1 hit today", Watching.StatusLine(1, 1, 1, 1), "one of each");
         }
 
         public static void TestWithNoWatchersItSaysWhatWatchingIsFor()
@@ -45,9 +45,9 @@ namespace RobloxKeeper.Tests
         // Beside the picker the line has half the room, so it says less.
         public static void TestTheLineBesideTheSetupPickerSaysLess()
         {
-            Assert.Equal("2 clients · 4 hits today", Watching.SetupStatusLine(3, 3, 2, 4, true), "clients and hits");
-            Assert.Equal("2 clients · 4 hits", Watching.SetupStatusLine(3, 3, 2, 4, false), "without today when tight");
-            Assert.Equal("1 client · 1 hit today", Watching.SetupStatusLine(1, 1, 1, 1, true), "the singular");
+            Assert.Equal("2 windows · 4 hits today", Watching.SetupStatusLine(3, 3, 2, 4, true), "windows and hits");
+            Assert.Equal("2 windows · 4 hits", Watching.SetupStatusLine(3, 3, 2, 4, false), "without today when tight");
+            Assert.Equal("1 window · 1 hit today", Watching.SetupStatusLine(1, 1, 1, 1, true), "the singular");
             Assert.Equal("no watchers yet", Watching.SetupStatusLine(0, 0, 0, 0, true), "an empty setup");
             Assert.Equal("all switched off", Watching.SetupStatusLine(0, 2, 0, 0, true), "nothing on");
             Assert.Equal("switched off", Watching.SetupStatusLine(0, 1, 0, 0, true), "its one watcher off");
@@ -57,7 +57,7 @@ namespace RobloxKeeper.Tests
         // in half.
         public static void TestTheShortLineAlwaysFitsBesideThePicker()
         {
-            using (System.Drawing.Font f = new System.Drawing.Font("Segoe UI", 8.25f))
+            using (System.Drawing.Font f = Ui.F("Segoe UI", 8.25f))
             {
                 foreach (string s in new string[] {
                     Watching.SetupStatusLine(20, 20, 20, 9999, false),
@@ -153,7 +153,7 @@ namespace RobloxKeeper.Tests
         {
             Watcher w = Watcher.Default("Secret Egg", WatchKind.TextAppears);
             w.RegionName = "banner";
-            Assert.Equal("A word appears · the box called \"banner\" · every client", WatchList.Describe(w), "all three");
+            Assert.Equal("A word appears · the box called \"banner\" · every Roblox window", WatchList.Describe(w), "all three");
             w.Accounts = new string[] { "VladDerKing", "alt1" };
             w.RegionName = null;
             Assert.Equal("A word appears · the whole window · VladDerKing, alt1", WatchList.Describe(w), "named accounts");

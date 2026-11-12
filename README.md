@@ -28,6 +28,13 @@ Roblox isn't supported.
 
 ## What it does
 
+**A home for your games**
+- Opens on a Home page: the Roblox windows you have open, the games you played last, your
+  favourites, and what's popular - click one and pick which account plays it.
+- Search Roblox's games, see which friends are online and join them, and save screenshots.
+- No adverts, no sponsored games, no account with us, and no server of ours: everything is
+  kept on your PC, and the only thing it talks to is Roblox itself.
+
 **Keeps you online**
 - Nudges each Roblox window every few minutes so you never get kicked for being idle, then hands
   your screen straight back. That works even when the games are on another virtual desktop.
@@ -47,8 +54,16 @@ Roblox isn't supported.
 **Watches the screen for you**
 - Watchers spot a word, a chat message or a picture on any client, even behind other windows,
   and ping you on Discord with a screenshot and a link back into that server.
-- Macros replay keys, clicks and chat messages. Rules run them when a watcher finds something,
-  on a timer, on a hotkey, or when a client joins a server.
+- Macros replay keys, clicks, drags and chat messages - and can **click a picture wherever it is
+  on screen**, wait for one, and repeat until you stop them. Rules run them when a watcher finds
+  something, on a timer, on a hotkey, or when a client joins a server.
+- **Quick Record**, like TinyTask: record anything you do on your screen and play it back - once,
+  a few times or until you stop it, at half, normal, double or four times the speed. No Roblox
+  window needed. Save a recording as a macro to keep it.
+- **A key on every macro**, like MacroGamer: press it to play the macro once, to start it and
+  press again to stop, or hold it to keep it playing. Macros can play on a Roblox window or
+  anywhere on your screen.
+- An autoclicker, on the client you're playing or on several clients taking turns.
 - Hunt mode moves accounts from server to server until a watcher finds what you're after.
 
 **Easy on your PC**
@@ -57,6 +72,76 @@ Roblox isn't supported.
 - Cleans up the leftover Roblox processes that pile up after you close games.
 - Can start with Windows, ahead of other startup apps, so it's ready before any Roblox window
   opens.
+
+## New in 1.4
+
+- **A launcher.** A strip of pages down the left: **Home** (your open Roblox windows with a live
+  picture of each, the games you played last, favourites, what's popular now), **Games** (Roblox's
+  own lists, and search), **Friends** (who is online, where, and Join), **Automation** (every tool
+  by name with a line saying what it's for), **Screenshots**, and **Keeper** - the window as it
+  always was, unchanged. Click a game and choose which account plays it.
+- **Start here.** Home opens with the jobs people come for - add an account, stop the idle kick,
+  click something over and over, record a macro - each one click away. Hide it when you know
+  your way round.
+- **Text that fits.** Under a Windows custom scaling level - 125%, say - text was drawn a quarter
+  bigger than the windows were laid out for: labels ran out of their rows and the title wrapped.
+  Text is now drawn at the size the windows were designed around, so everything fits. The windows
+  are not scaled up with the display: at 125% they are the size they would be at 100%.
+- **Looks.** Graphics settings Roblox allows to be set from a file - smoother edges, quality
+  level, grass, display scaling - chosen from plain lists; and **mod packs** that replace fonts,
+  cursors, sounds, sky and textures, from a folder or a zip (packs made for Bloxstrap work). The
+  original of every replaced file is kept, a new Roblox version gets your looks put back on it by
+  itself, and **Put Roblox back** undoes all of it. Off until you use it.
+- **Shaders, without touching Roblox.** Looks > Shaders lays a see-through window over the game
+  that shows the game itself drawn through a shader - sixteen looks, from sharper and more vivid
+  to soft glow, golden hour, comic book, old film and night vision - at three strengths, or
+  **your own `.hlsl` file**. Nothing is loaded into Roblox; clicks and keys go straight through
+  to the game. New, and not yet tried on many PCs.
+- **Ready-made pointers.** Looks > Mod packs > *Add a pack* has seven mouse pointers that come
+  with the app - crosshairs, dots, a ring, a scope, a big bright arrow - drawn by the app itself,
+  so there is nothing to download. *Not yet seen inside Roblox.*
+- **Macros as text.** *Write it as text* in the macro editor shows the steps as lines -
+  `press E`, `wait 2`, `click picture "Buy" wait 3`, `repeat forever` ... `end` - to type, change,
+  copy out and paste in. It is the same macro as the one made with the buttons, and a wrong line
+  says which line and what it expected.
+- **A guide to making your own.** [MODDING.md](MODDING.md) - also behind *How to make one* in
+  the app - explains mod packs, shader looks and macros as text for someone who has never made
+  one, with examples to copy. Every example in it is run by the tests.
+- **Screenshots.** A key of your choice saves a picture of the Roblox window you're in to
+  `Pictures\RobloxKeeper`. Nothing is uploaded.
+- **Click a picture, wherever it is.** A macro step that looks at the client as it plays and
+  clicks the picture where it is right then - a button that moves, an egg that spawns somewhere
+  new. It can wait for the picture to turn up first, and either skip it or stop the macro if it
+  never does. **Wait for a picture** does the same without clicking: until a shop has opened, or a
+  loading screen has gone. A picture watcher can now **click what it found** with no macro at all.
+- **Repeats.** Put steps in a repeat: a number of times, until a picture shows or goes, or
+  **until you stop it**. A macro that repeats until stopped has no one-minute limit - it steps
+  aside whenever the anti-AFK nudge or another macro needs the keyboard, then carries on.
+- **A stop key.** F10 stops everything that is playing, at once, and lets go of every key. It is
+  only taken while something is playing, and you can change it in Macros. A key rule that starts
+  a repeating macro stops it when you press the key again.
+- **Keys still reach the game.** The autoclicker key, the screenshot key, rule keys and macro
+  keys are heard without being taken away, so F6 still does whatever it does in Roblox. Pick keys
+  the game doesn't use. Only the stop key is taken, and only while something is playing.
+- **Autoclicker.** Left or right button, a speed picked by name (or your own), where the mouse
+  is, at one spot you **pick by clicking it on a picture of the game**, or on a picture. The
+  window only shows the rows your answers need. Once you have set it up, F6 switches it on for the client in front. Or
+  set it to take turns over several clients, each brought to the front for its few seconds.
+- **Play, on every macro.** Each macro's row has **Play**: now, on every Roblox window or on one
+  of them - or by itself, when you press a key, every few minutes, when a watcher finds something
+  or when a window joins a game. Picking one opens the rule already filled in (a free key, every
+  client), so *press a key and it plays on all of them* is two clicks. The row then says what
+  starts it.
+- **Start from an example.** Macros > *Start from an example* opens a ready-made macro to change
+  and save: jump every few seconds, click one spot over and over, click a picture whenever it
+  shows up, hold a key down.
+- **Pick it on the game.** A click, move, scroll or drag step no longer needs percentages typed:
+  press the button and click the spot on a picture of your game. The numbers are still there.
+- **Macros and Autoclicker in the tray menu**, so they are two clicks away.
+- **Drags, scrolling and pointer moves** as macro steps. Recording keeps drags and the wheel, and
+  pointer movement too if you tick it.
+- "Only while I'm away" and the nudge now go by when *you* last touched the keyboard or mouse,
+  not by the keys a macro is pressing.
 
 ## New in 1.3.3
 
@@ -106,10 +191,14 @@ Roblox isn't supported.
 
 ## Is it safe?
 
-RobloxKeeper stays completely outside Roblox. It doesn't inject anything, doesn't read or write
-the game's memory, and doesn't change any Roblox files. It works through Windows itself: the
-same keyboard and mouse input a real keyboard makes, screenshots of the window, and Roblox's own
-website launch. Your saved logins are encrypted for your Windows user and never go anywhere but
+RobloxKeeper stays completely outside Roblox. It doesn't inject anything and doesn't read or
+write the game's memory. It works through Windows itself: the same keyboard and mouse input a
+real keyboard makes, screenshots of the window, and Roblox's own website launch.
+
+It changes none of Roblox's files either - **unless you ask it to on the Looks page**, which is
+off until you use it. Looks writes graphics settings Roblox itself allows into a small settings
+file, and can replace fonts, sounds and textures with a pack; it keeps the original of every
+file it replaces, and one button puts Roblox back exactly as it was installed. Your saved logins are encrypted for your Windows user and never go anywhere but
 roblox.com. Details are in [How it works](#how-it-works) and
 [Byfron / Hyperion compatibility](#byfron--hyperion-compatibility).
 
@@ -132,14 +221,31 @@ own risk.
 | **Multi-Instance** | Holds Roblox's `ROBLOX_singletonMutex` (and `ROBLOX_singletonEvent`) so multiple clients can run simultaneously. A dedicated thread queue-waits on the mutex the same way Roblox clients do, so ownership transfers to RobloxKeeper at the kernel level the instant it frees - a launching client can never win the race. If clients already own it, one click on **Close all Roblox** clears them (ghost processes included) and takeover is immediate. |
 | **Client monitor** | Live count of open Roblox clients with each one's memory use, plus detection of window-less "ghost" Roblox processes (they can silently block multi-instance) with a one-click **Close leftovers** button. Roblox's own tray process - the window-less one it relaunches with `--launch-to-tray` when you close a client - is recognised as such and shown as *in tray* rather than *stuck*. Roblox starts one for every client closed and never ends them, so once one has sat idle for 150 seconds **Auto-close leftovers** closes it too. Processes still starting up are shown as *starting* rather than *stuck*, so a normal launch never looks like a fault. |
 | **Per-client resources** | Each client row has a **Tune** link: set its **CPU priority**, switch on **efficiency mode** (EcoQoS - the same throttling as Task Manager's), or **trim its memory** on the spot. Every client always runs on **every core**: locking a Roblox client to a few cores starves its ninety-odd threads and freezes it for seconds at a time, so there is no core setting, and a client an older version locked is put back on every core. |
-| **Throttle what you aren't using** | **Slow down clients I'm not using** drops every background client a priority step and puts it in efficiency mode, restoring it the moment you switch back. **AFK mode** is the one-click version: everything parked except the client in front of you. **Keep memory under N MB** holds every client you aren't using at or under that much - a hard working-set limit, so Windows moves out what the client has used least, a little at a time, instead of emptying it all at once - and lets the client in front of you use what it needs. There is deliberately no FPS cap: capping Roblox's FPS is only reachable by editing its own config file, it applies to every client at once, and this tool does not touch Roblox's files. |
+| **Throttle what you aren't using** | **Slow down clients I'm not using** drops every background client a priority step and puts it in efficiency mode, restoring it the moment you switch back. **AFK mode** is the one-click version: everything parked except the client in front of you. **Keep memory under N MB** holds every client you aren't using at or under that much - a hard working-set limit, so Windows moves out what the client has used least, a little at a time, instead of emptying it all at once - and lets the client in front of you use what it needs. There is deliberately no FPS cap: Roblox has its own Maximum Framerate setting, up to 240, and nothing higher is supported by Roblox - the frame-rate flag launchers used to write is no longer on the list Roblox honours. |
 | **Client defaults + auto-trim** | The **Performance** card sets the profile every newly launched client gets, so the foreground account can outrank the AFK ones without touching anything per-launch. Clients already running keep what they started with - the account you are playing is never retuned behind your back - and **Apply to all** is there when you do want everything changed at once. Each client's priority and low power are read back every half minute and put back if anything else has changed them, and a client found locked to fewer cores is given every core again. **Auto-trim** hands idle memory back to Windows on a timer, skipping whichever client you're actually looking at. **Free memory now** does it immediately, from the window or the tray menu. |
 | **Account manager** | Roblox stores five accounts and makes you sign out to switch. This stores as many as you like. **Add account** opens Roblox's own login page in an embedded browser - you type your own credentials into Roblox's page, solve Roblox's own CAPTCHA and handle your own 2FA; nothing here reads a password, fills a login form or works around a CAPTCHA. Each account gets its **own browser profile**, so each stays signed in on its own. Every launch sends the device's own browser tracker, as the website does - sending each account its own made Roblox 0.740 clients freeze for seconds at a time. **Launch** puts any account straight into a game by asking Roblox for a launch ticket, exactly as pressing Play on the website does - one, or the ticked ones, a few seconds apart, without the window freezing. Choose **where they join**: any server, the **emptiest** or the **busiest** (each its own, or **all in the same server**), **where a player is** - found by name and asked with each account's own sign-in, so it follows that player's privacy settings - a **server link** pasted from a Discord post, or a **private server link** - the share link its owner made, resolved the way roblox.com does it. **Keep following** moves them after that player whenever they change server; stop it from the window or the tray. An account already playing is left alone unless it is being sent somewhere in particular, and then its old client closes only once the new one's ticket is in hand. Drag accounts into the order you like; rows say **playing** while an account has a client open, and the window remembers who was ticked. **Browse** opens Roblox in that account's browser, in Roblox's own **dark theme**, with Home, Games and Friends. Every client is named after the account **Roblox's own log** says it is signed in as, however it was started. |
 | **Where credentials live** | `%APPDATA%\RobloxKeeper\accounts.dat`, encrypted with DPAPI at CurrentUser scope - Windows ties the key to your user on this machine, so the file is useless if it is copied anywhere else. A `.ROBLOSECURITY` cookie IS the account: hold one and you are signed in as that user, no password involved. Nothing is sent anywhere except to roblox.com, and no code path prints a cookie to the log, a tooltip or an error message. Removing an account deletes its stored session and browser profile from this PC. |
 | **Watchers** | Get told when something turns up on a client's screen: a **word** (say, *spawned*), a **new chat line** (you get the whole line, not just the word), or a **picture** you cut out of the game with its background painted out. Each watched client is looked at up to four times a second **without being focused, clicked or typed into** - it works behind other windows and on another virtual desktop, though not while minimized, and the Watchers window says which clients can't be read and why. You're told on **Discord** (with the picture and a link straight back into that server), with a **pop-up**, a **sound** or a line in the activity list - chosen per watcher. Draw a **box** around the part of the screen that matters and it is read about nine times faster than the whole window; boxes belong to a game, so every client in that game uses them. **Test against client now** shows exactly what was read, or how alike a picture was, before you rely on it. Keep a **setup** of watchers for each game - one for Steal an Egg, one for another game - and switch between them in one click from the main window; every watcher swaps at once, and the chat already on screen is not sent again. |
 | **Where watchers live** | `%LOCALAPPDATA%\RobloxKeeper\watchers.dat`, encrypted with DPAPI like the account list: the Discord webhook link in it is enough for anyone who has it to post into your channel, so it is never shown or logged either. Setups are kept in the same file; the webhook link is shared by all of them, and a watcher can have a link of its own. The pictures watchers look for are ordinary PNG files in `%LOCALAPPDATA%\RobloxKeeper\templates` - open the folder and look. |
-| **Macros** | A few keys, clicks, waits and typed text played on a client - **recorded** by doing it once in the game (F8 to stop; only what you do in that client is seen) or built step by step. Typing can **say it in chat** - open the chat with `/`, type, and send with Enter - in one step. Clicks are kept as a place on the window, so they land on the same button at any size. The client comes to the front while a macro plays and whatever you were using comes back after; if another window comes to the front part-way it stops at once and lets go of any key it was holding. A macro can't be longer than a minute. Every list - macros, their steps, rules, watchers, accounts - has a **grip** at the start of each row: drag it into any order, or right-click it to move a row to the top or bottom or **make a copy**. |
-| **Then play a macro** | Any watcher can play a macro on the client that saw it - buy the egg that just spawned, say. At most once every 15 seconds on each client, one macro at a time, and never at the same moment as an anti-AFK nudge. |
+| **Home** | The first page. **Open now** shows every Roblox window with a small live picture (taken the way watchers take theirs - never while the window is minimized - and only while Home is on screen), whose account it is and how much memory it uses; click one to bring it forward. **Continue** is the games you played last, read from the join lines Roblox writes in its own log, so it works for any client, signed in to any account. **Favourites** are the chosen account's. **Popular right now** is Roblox's own list. Click a game for a menu: play as the chosen account, as another, with all of them, or open its page. With no account saved it still shows your windows and Roblox's lists. |
+| **Games** | Roblox's own lists of games - trending, most played, and the rest - a row each, opened out with *See all*, and a search box. Anything Roblox marks as sponsored is left out. |
+| **Friends** | The chosen account's friends: online first, in a game before on the website. **Join** takes that account to a friend's server when Roblox says which one it is - their privacy settings decide that. Asked again once a minute, and only while the page is on screen. |
+| **Automation** | Autoclicker, Macros, Watchers, Rules, Hunt and Stop everything as six tiles, each with a line saying what it is for and what it is doing now. The tools themselves are unchanged. |
+| **Screenshots** | Choose a key on the Screenshots page; pressed, it saves a PNG of the Roblox window in front (or every open one, if none is) to `Pictures\RobloxKeeper`, named by date, time and account. The page shows the newest sixty; click one to open it. |
+| **Looks: graphics** | *Built and tested against a pretend Roblox folder; not yet tried on a real install, so which of these Roblox actually honours today is unconfirmed.* Roblox honours a published list of eighteen settings in `ClientSettings\ClientAppSettings.json` and ignores every other; getting round that list is what Roblox acts against, so this app refuses to write anything that isn't on it. The page offers the ones that change how the game looks, in plain words: **Smoother edges** (anti-aliasing off, 2x, 4x, 8x), **Graphics quality** (Roblox's levels 1 to 21, by name), **Grass** (none, close by, far), and **Don't let Windows stretch the game**. Texture quality is on Roblox's list but the current client no longer contains it, so it isn't offered. Anything else already in that file - your own edits - is left exactly as it was. Written to every installed Roblox version; read by Roblox when a game starts. There is no DLSS, ray tracing or injected shader here: those need the game engine or code inside the game, and Roblox's anti-tamper blocks the second. |
+| **Looks: mod packs** | *Tested against a pretend Roblox folder, not yet on a real install.* A pack is a folder or zip laid out like a Roblox version folder. Only `content`, `ExtraContent` and `PlatformContent` are accepted; programs and scripts, links, and paths that climb out of the folder are refused, and one bad entry refuses the whole pack. Packs are kept in `%LOCALAPPDATA%\RobloxKeeper\mods`; tick the ones you want, put them in order (a later pack wins where two replace the same file), and press **Apply packs**. Before a file is replaced for the first time its original is copied to `%LOCALAPPDATA%\RobloxKeeper\backup`, and never overwritten after. Unticking a pack and applying puts its files back. **Files** on a pack's row lists what it would replace or add, and which of them a pack lower in the list takes instead, before anything is applied. A pack that is only ticked is never put into Roblox by itself: what a new Roblox version is given is what **Apply packs** was last pressed for. **Ready-made**: *Add a pack* lists seven mouse pointers the app draws itself when you pick one (two crosshairs, two dots, a ring, a scope, a big arrow) - no pictures are carried in the exe and nothing is downloaded. They replace `ArrowCursor.png`, `ArrowFarCursor.png` and, except the arrow, `MouseLockedCursor.png`; only one is ticked at a time, since they replace the same files. A game that sets its own pointer keeps its own. *Not yet seen inside Roblox.* |
+| **Looks: shaders** | A shader overlay: for each Roblox window, a separate copy of this exe opens a borderless window exactly over the game, takes a live copy of the game's picture with Windows' own window capture (what a screen recorder uses), runs it through a pixel shader on its own Direct3D device, and shows the result. The overlay never takes a click, a key or the foreground - they pass through to the game, which stays the window in front, so macros and the nudge work as before - and it is only shown while that game is the window in front. **Built-in looks**: Sharper, Vivid, Sharper and vivid, Warm evening, Cinema, Cool and clean, Black and white, Crisp HD, Soft glow, Golden hour, Dreamy pastel, Deep shadows, Comic book, Old television, Old film and Night vision, each Gentle, Normal or Strong. A look reads the game's picture 5 times a pixel, or 13 for the three that glow; the nine newest were drawn over a test window at Normal strength only. **Your own**: *Make my own...* opens `%LOCALAPPDATA%\RobloxKeeper\shaders` with an `example.hlsl`; a copy under another name appears in the list, and a mistake in it is reported in the compiler's own words. Choosing *Off* ends the overlays. Measured over a test window on a 180Hz laptop with integrated graphics: every frame shown (166 a second), 0.4ms after it arrived, for about 10% of one processor core, 5% of the graphics card and 60-70MB a window. Real delay is at least one screen refresh on top and was not measured. Needs Windows 10 1903 or newer. What it cannot do is anything that needs more than the picture - DLSS, ray tracing, depth of field, ambient occlusion. Not tried with HDR or across two monitors, and not yet run against a live Roblox window. |
+| **Macros as text** | *Write it as text* in the macro editor shows the steps one to a line - `press E`, `hold W`, `wait 2`, `click 50 50`, `click picture "Buy" wait 3 or stop`, `say "hello"`, `repeat forever` ... `end` - and reads them back. It is another way to write the same steps, not a programming language: anything the editor refuses is refused here in the same words with the line's number, and nothing is kept until every line is understood. Pictures and boxes are named, not carried: a macro sent to someone else names pictures they cut and boxes they draw themselves, and the app says which are missing. Nothing in it runs inside Roblox. |
+| **The modding guide** | [MODDING.md](MODDING.md) is carried inside the exe. *How to make one* (Looks) and *Every word it knows* (the text window) write it to `%LOCALAPPDATA%\RobloxKeeper\How to make mods.html` - a page with no script in it that fetches nothing - and open it in your browser. The tests run every macro, every table line and every shader in it. |
+| **Looks: the way back** | **Put Roblox back** restores every original, deletes anything a pack added, removes the settings this app wrote, and switches every pack off. It is safe to press twice, and works even if a pack has since been deleted. When Roblox installs a new version, your graphics settings and the packs **Apply packs** was last pressed for are put onto it within a minute, and the activity list says so. A file a running client has open can't be changed: the page says to close Roblox and try again. |
+| **Pages cost nothing until opened** | A page is built the first time you go to it, and does nothing while the window is in the tray or another page is showing: no sign-in is read, nothing is asked of Roblox, no timer runs. Game icons are kept on disk for a week and at most 96 in memory, and those are let go when the window is hidden. |
+| **Macros** | A few keys, clicks, waits and typed text played on a client - **recorded** by doing it once in the game (F8 to stop; only what you do in that client is seen) or built step by step. Typing can **say it in chat** - open the chat with `/`, type, and send with Enter - in one step. Clicks are kept as a place on the window, so they land on the same button at any size. The client comes to the front while a macro plays and whatever you were using comes back after; if another window comes to the front part-way it stops at once and lets go of any key it was holding. A macro on a Roblox window can't be longer than a minute, unless it repeats until stopped (below); one that plays **anywhere on your screen** can run for 30 minutes. Every list - macros, their steps, rules, watchers, accounts - has a **grip** at the start of each row: drag it into any order, or right-click it to move a row to the top or bottom or **make a copy**. |
+| **Steps that look at the screen** | **Click a picture** finds a picture on the client at the moment the step plays - after the client has come to the front, never from an earlier sighting - and clicks its middle, or a set distance from it. It can wait up to a time you choose for the picture to turn up; if it never does, the step is skipped, or the macro stops, as you choose. **Wait for a picture** waits for one to show or to go. Pictures are cut out of a client and can have their background painted out, exactly as a picture watcher's are, and a watcher's picture can be reused. **Look for it now** says how alike it is on every open client. Whole-window looks take about a fifth of a second each. |
+| **Other steps** | **Move** the pointer, **drag** from one place to another with either button - a right-drag turns the camera, and the same drag turns it the same amount each time - **scroll** the wheel, and **click wherever the pointer already is**. Recording keeps drags and the wheel; pointer movement between clicks is kept, as a place every tenth of a second, only if you tick *Mouse movement too*. A first-person or shift-locked camera reads the mouse differently and can't be replayed from a recording of pointer places. |
+| **Repeats and sessions** | A **repeat** plays the steps down to its *End of repeat* again: a number of times, until a picture shows, until a picture has gone, or until stopped. Repeats can sit inside repeats, three deep. A macro with a repeat that only stopping it or a picture ends is a **session**: it has no one-minute limit. Between steps it gives the keyboard to the anti-AFK nudge the moment the nudge asks, letting go of any held key and pressing it again when it gets its turn back; with other macros waiting it plays for five seconds and lets the next one in. It still only ever plays on the window in front, and still stops the moment another window is brought there. |
+| **Stop key** | One key - **F10** unless you change it in Macros - stops every macro and the autoclicker at once, clears whatever was waiting to play, and lets go of every key and mouse button. Windows is only asked for the key while something is playing, so F10 is every other program's the rest of the time. Stop is in the tray menu too. A rule on a key that starts a session stops it on the next press of the same key. |
+| **Autoclicker** | Tray icon > Autoclicker, or Macros > Autoclicker. Each choice is a list of plain answers, and a row is only shown while the answer above it needs it. Speed is picked by name - slow (1 a second), normal (5), fast (10), very fast (20) - or typed as your own. **One spot** is chosen with **Pick it on the game**: a picture of the client opens and you click the spot. Left or right button; the gap between clicks, from 0.02 seconds; **where the pointer is**, at **one place** on the window, or **on a picture** each time it is found. On **the client in front**: bring the client forward and press **F6** (changeable, and only listened for once you have saved the autoclicker) - your pointer is left alone and holding Shift or Ctrl doesn't stop it. Or on **several clients, taking turns**: each ticked account's client (or every client) is brought to the front for a few seconds of clicking, then the next - this takes over the PC while it runs, so it is for when you're away. It is a session like any other: the stop key, another window in front, or F6 again ends it. Clicks go out at the pace asked - measured on a live client, one every 22-23ms when asked for 20ms and every 53ms when asked for 50ms. Whether a game counts every one is up to the game: a toggle button with an animation missed some at ten a second and none at five. |
+| **Then play a macro** | Any watcher can play a macro on the client that saw it - buy the egg that just spawned, say. A picture watcher can instead **click the picture, where it was found**, with no macro to make. At most once every 15 seconds on each client, one macro at a time, and never at the same moment as an anti-AFK nudge. |
 | **Rules** | For everything else, a rule plays a macro **when you want**: when a watcher finds something (any watcher or one by name, and only if what it found has certain words in it), **every** so many seconds, minutes or hours, when you **press a key** (F1-F12 or the number pad, with Ctrl, Alt or Shift), or when a client **joins a server**. It plays on the client it happened on, the client in front, every client or the accounts you pick - a number of times in a row, after a wait if the game needs one, at most once every so often, and if you like only while you're away from the keyboard. Rules belong to a setup, so a timer for one game never fires in another. |
 | **Hunt mode** | Pick accounts and a game: each account's client is moved to a server of that game, the watchers of the setup in use look for as long as you set, and it moves on - until a watcher finds something, and then it **stays in that server**. Choose **any server, the emptiest or the busiest** - quiet ones for something anyone can take, busy ones for a bounty to hunt - and optionally how many players. Servers are picked from Roblox's public list: never the one it is in, one visited in the last half hour, or one another of your clients is in. A move gets the server list and a launch ticket first and only then closes the client, so a failed move leaves it where it was. Accounts move one at a time, so two never pick the same server. Stop it from the Hunt window or the tray icon. For accounts saved in the account manager. |
 | **Same size windows** | **Same size as Client 1** in the Watchers window makes every client the size of the first, so a box drawn on one - or a click recorded on one - lands exactly on all of them. Windows are sized from outside, as dragging an edge would; nothing in Roblox's files is changed. |
@@ -158,6 +264,31 @@ own risk.
 </details>
 
 > **Note:** one Roblox account can't be in two games at once - Roblox enforces that on its servers. Multi-instance is for running several accounts, or one in a game plus others sitting on the home screen.
+
+## What it talks to
+
+Nothing of ours: there is no RobloxKeeper server, account, sync, advert or analytics. These are
+every host the app contacts, and why.
+
+| Host | For |
+|---|---|
+| `www.roblox.com`, `auth.roblox.com`, `assetgame.roblox.com` | Starting a client as a saved account - the launch ticket and the place launcher, as the website's Play button uses |
+| `users.roblox.com` | Which account a sign-in or a client's log belongs to |
+| `games.roblox.com` | A game's server list (hunting, emptiest/busiest), details and likes, an account's favourites |
+| `apis.roblox.com` | Roblox's lists of games, search, which game a place belongs to, private server links |
+| `thumbnails.roblox.com`, then `*.rbxcdn.com` | Game icons and friends' faces. Pictures are only ever fetched from `rbxcdn.com` |
+| `friends.roblox.com`, `presence.roblox.com` | The Friends page, and following a player. Sent with the chosen account's sign-in |
+| `api.github.com`, then GitHub's download host | Checking for a new version at start; nothing is downloaded until you say yes |
+| The Discord webhook you paste in | Watcher alerts, if you set one up |
+| Whatever you browse to | The per-account browser is a browser |
+
+A sign-in cookie is sent to `roblox.com` and nowhere else - the code that makes the request
+refuses any other address. Offline, the launcher pages say they couldn't load and show what they
+have; anti-AFK, macros, watchers and the rest carry on.
+
+The pages that list games and friends use the addresses Roblox's own website calls. Roblox
+describes them as legacy and may change them without notice; if one changes, that page says it
+couldn't load until the app is updated, and nothing else is affected.
 
 ## Verifying a download
 
@@ -245,6 +376,21 @@ src/
   Program.cs             entry point, single-instance guard
   MainForm.cs            window state, the one-second loop, logging
   MainForm.Ui.cs         layout, client rows, performance handlers
+  MainForm.Shell.cs      the rail of pages, and what pages ask of the window: play, join, screenshots
+  Shell.cs               the rail, what a page is, and the games played lately
+  CardCanvas.cs          a page of cards drawn as one surface: laid out, scrolled, lit under the pointer
+  LauncherPages.cs       Home, Games and Friends
+  ToolPages.cs           Automation, and Screenshots
+  LooksPage.cs           Looks: the page, and putting looks back on a new Roblox version
+  LooksFlags.cs          the graphics settings Roblox allows, and its settings file
+  LooksMods.cs           mod packs: checked, applied with every original kept, and undone
+  PremadeMods.cs         the pointer packs that come with the app, drawn rather than shipped
+  Shaders.cs             the shader looks, their shader text, and one overlay kept over each window
+  ShaderOverlay.cs       the overlay itself: capture, shader, a click-through window - its own process
+  RobloxWeb.cs           Roblox's lists, search, favourites, friends and presence: asked, and read
+  Json.cs                reading those answers properly
+  Thumbs.cs              game icons and faces, kept on disk and a few in memory
+  PlacePicker.cs         choosing a place by clicking it on a picture of the game
   MainForm.Afk.cs        the anti-AFK nudge
   MainForm.Install.cs    Roblox reinstall detection, version switching, repair
   MutexKeeper.cs         the queue-wait that holds ROBLOX_singletonMutex
@@ -296,7 +442,15 @@ src/
   Macro.cs               a macro and its steps
   MacroPlan.cs           what playing a macro sends, and turning a recording into steps
   MacroPlayer.cs         playing and recording, and the lock the nudge shares
-  MacrosDialog.cs        the macro list, editor and step box
+  MacroRunner.cs         playing a step at a time: repeats, picture steps, stepping aside
+  MacroText.cs           a macro as lines of text and back, and the guide carried in the exe
+  MacroTextDialog.cs     the window for writing one
+  MacrosDialog.cs        the macro list and editor
+  MacroStepDialog.cs     one step's window, and choosing a picture for it
+  AutoClick.cs           the autoclicker: a click and a wait, repeated until stopped
+  AutoClickDialog.cs     the autoclicker's window
+  MainForm.Macros.cs     sessions, the stop key and the autoclicker, wired into the main window
+  RealInput.cs           when you last really touched the keyboard, while a macro is pressing keys
   RobloxServers.cs       a game's public server list, and picking the next server
   Hopper.cs              moving an account's client to another server
   Hunt.cs                hunt mode's decisions for one account
@@ -335,9 +489,16 @@ Measured on Windows 11 while idle: about **0.8% of one CPU core** and **67 MB** 
 
 Running two Roblox clients costs whatever two Roblox clients cost on your machine (mostly GPU and RAM), and the number of installed Roblox versions makes no difference. The per-client work added by the Performance card is a memory reading per client per tick, plus a priority/affinity call only when a client's settings have actually drifted from its profile - so it is proportional to the number of clients, not to time.
 
+The launcher pages were measured in a window built only to be drawn - nothing else of the app
+running - and opened one after another: Home, Games with every list, Friends, Automation,
+Screenshots, Looks. The process stood at **61 MB** of working set and 35 MB private, with thirteen
+icons in memory. Roblox's lists arrive in
+about two seconds and a page of icons in two more, the first time; after that they come from disk.
+A page that isn't showing does nothing at all.
+
 Watching costs what it reads. Every picture is read three ways - as it is, with colour turned into brightness so coloured text is read, and with only the plain grey fill of outlined letters kept so chat over the scenery and dark egg names are read too - and measured on frames from a live client that comes to about 15-40ms for a box and about 235-300ms for the whole window, with a picture of the window taking about 25ms on top. So one client watched through its whole window settles at around one and a half scans a second; a box around the part that matters is what gets it to four. A picture looked for across the whole window is found by shrinking both first and looking closely only where it might be: on a 1936x1048 frame an 80x80 picture took 33 seconds to find pixel by pixel and takes 160ms this way. With no watcher switched on, the watch thread isn't running at all.
 
-It touches your desktop only in ways you set up. A nudge focuses each selected client for roughly half a second, sends the keys, and hands focus back. A macro does the same for as long as it plays - a minute at most. And hunting closes a client and opens it again in another server. If you are typing at one of those moments you will notice it; nothing else it does steals focus.
+It touches your desktop only in ways you set up. A nudge focuses each selected client for roughly half a second, sends the keys, and hands focus back. A macro does the same for as long as it plays - a minute at most, unless you made it one that repeats until stopped, or switched the autoclicker on. And hunting closes a client and opens it again in another server. If you are typing at one of those moments you will notice it; nothing else it does steals focus.
 
 ## How it works
 
@@ -349,7 +510,7 @@ The most common reason multi-instance "sometimes doesn't work" with any tool: cl
 
 **Watchers** never send the game anything. A picture of the client is taken with `PrintWindow` and `PW_RENDERFULLCONTENT`, which asks the desktop compositor for the frame it is already holding - Roblox draws with Direct3D, and without that flag the picture comes back as an empty rectangle. That is also why it works behind other windows and on another virtual desktop, and why it can't on a minimized window: Windows stops composing those. Each client is captured once per pass and every watcher on it reads that one picture. Text is read by `Windows.Media.Ocr`, which is part of Windows - nothing is downloaded, and if the English text pack is missing the Watchers window offers to install it (Windows asks for administrator rights) while picture watchers keep working without it. The pass aims for four a second and slows itself down when there is more to read than that allows.
 
-**Macros** go through the same `SendInput` scan codes as the nudge, with the mouse moved to a place on the client's window and pressed there. Everything a macro will send is worked out as a list before any of it is sent, and only one thing - a nudge or a macro - may hold the foreground at a time. Recording uses low-level keyboard and mouse hooks, which see input without changing it, and keeps only what arrives while the chosen client is in front.
+**Macros** go through the same `SendInput` scan codes as the nudge, with the mouse moved to a place on the client's window and pressed there. Everything a plain step will send is worked out as a list before any of it is sent, and only one thing - a nudge or a macro - may hold the foreground at a time. A step that goes by a picture takes a fresh picture of the window the way watchers do, finds the cut-out in it, and turns where it was found into a point on the screen as a fraction of the window - so it lands on the same spot whatever size the window is. A macro that repeats until stopped is played in turns: it looks between steps for a nudge waiting and steps aside for it. Recording uses low-level keyboard and mouse hooks, which see input without changing it, and keeps only what arrives while the chosen client is in front.
 
 **Hunt mode** moves a client with the same official launch the account manager uses: a launch ticket for the account's own saved session, and Roblox's place launcher asked for one particular server by its id - what the website's Join button on a server does. The server list is the public one the website's Servers tab shows. Arriving is confirmed by the join line in the client's own log.
 
@@ -359,7 +520,8 @@ RobloxKeeper is designed to stay entirely **outside** the Roblox process:
 
 - **No DLL injection** - nothing is loaded into the client.
 - **No memory reads or writes** - the game's process memory is never opened.
-- **No file modification** - the Roblox installation is untouched.
+- **No file modification unless you ask** - the Roblox installation is untouched until you use the Looks page. That page writes only what Roblox's own launcher-style tools write: allowlisted settings in `ClientSettings\ClientAppSettings.json`, and files under `content`, `ExtraContent` and `PlatformContent`. The program itself, and anything Hyperion protects, is never touched.
+- **Shaders are drawn outside the game** - the overlay is this app's own window, showing a picture of the game that Windows' window capture hands it. Nothing is loaded into the client and its Direct3D device is never touched.
 - **OS-level only** - a named kernel mutex (a Windows object, not a Roblox one) and synthesized keyboard and mouse input, identical in mechanism to a hardware keyboard and mouse.
 - **Moving servers is Roblox's own launch** - a launch ticket and the place launcher, as the website's Join button uses. Same size windows are sized from outside, as dragging an edge would.
 - **Watching reads pixels, not memory** - a picture of the window from the desktop compositor, the same one a screenshot tool gets.
@@ -387,10 +549,42 @@ Open the watcher and press **Test against this client now** - it says exactly wh
 Yes - that is what a **setup** is. In Watchers, press **New** beside the setup picker, name it after the game, and add its watchers (tick *Start with a copy* to begin from the ones you have). Once there are two, a picker appears beside the Watchers button on the main window and switching is one click. Boxes don't need doing twice: they already belong to the game they were drawn on. Anything in a chat when you switch is treated as already seen, so switching never sends old messages to Discord.
 
 **How do I make a macro run by itself?**
-With a rule - Rules, at the bottom of the Watchers window. When a watcher sees something, every few minutes, on a key you press, or when a client joins a server; on the client it happened on, the one in front, all of them or chosen accounts. A timer that shouldn't interrupt you can wait until you've been away from the keyboard for a minute.
+Press **Play** on the macro's row in Macros and choose how: a key, a timer, a watcher or a join. That makes a rule, already filled in. All rules are also under Automation > Rules, and at the bottom of the Watchers window. When a watcher sees something, every few minutes, on a key you press, or when a client joins a server; on the client it happened on, the one in front, all of them or chosen accounts. A timer that shouldn't interrupt you can wait until you've been away from the keyboard for a minute.
+
+**Can it add DLSS, ray tracing or ReShade shaders?**
+Shaders, yes - a different way. DLSS and ray tracing, no, and nothing can add them safely: they
+have to be built into the game by its developer, because they need things only the engine knows,
+like how far away each pixel is, and Roblox hasn't built them in. ReShade works by loading code
+into the game, which Roblox's anti-tamper blocks and Roblox treats as a modified client.
+
+What **Looks > Shaders** does instead is stay outside: it shows a copy of the game's picture, run
+through a shader, in its own window laid over the game. That gets you sharpening, colour, contrast,
+tint and your own `.hlsl` effects - anything that works on the finished picture - with nothing
+loaded into Roblox. The rest of the Looks page is the graphics settings Roblox allows, and
+replacement fonts, sounds and textures.
+
+**Can I write Lua scripts for it?**
+No, and nothing safe can offer that. Running your own Lua inside a game you are playing means
+loading code into the Roblox program - a script executor - which Roblox's anti-tamper exists to
+stop and which gets accounts banned. RobloxKeeper never reads or changes Roblox's memory. What
+you can write is in [MODDING.md](MODDING.md): macros as plain lines of text, shader looks, and
+mod packs - all of which work from outside the game.
+
+**Will Looks get my account banned?**
+Roblox has said it does not act against accounts for a modified settings file - settings it
+doesn't allow are simply ignored - and that file-only launchers like Bloxstrap are unsupported but
+not what its modified-client policy is aimed at. It has also said it makes no promise for the
+future. So Looks is off until you use it, writes only allowlisted settings and ordinary content
+files, and **Put Roblox back** removes every trace.
 
 **Can a macro play without taking over my screen?**
-No. Roblox only reads input that reaches the window in front, which was tested four ways before any of this was built - so a macro brings its client to the front, plays, and gives you your window back. That is why a macro is kept under a minute, why only one plays at a time, and why it stops the moment another window comes to the front.
+No. Roblox only reads input that reaches the window in front, which was tested four ways before any of this was built - so a macro brings its client to the front, plays, and gives you your window back. That is why a macro is kept under a minute unless you ask for one that repeats until stopped, why only one plays at a time, and why it stops the moment another window comes to the front. It is also why an autoclicker on several clients takes turns: each has to be in front for its clicks to count.
+
+**How do I make an autoclicker?**
+Watchers > Macros > Autoclicker. Choose the button, the gap and where it clicks, save, then bring the client to the front and press **F6**. F6 again, **F10**, or clicking another window stops it. For several clients at once choose *Several clients, taking turns* - it brings each to the front for its turn, so use it when you're away from the PC.
+
+**How do I click something that moves around?**
+Add the step **More... > Click a picture** to a macro, press Choose, and cut the thing out of a client that is showing it. Paint out its background if it sits over scenery. *Look for it now* tells you how alike it reads on each open client before you rely on it. To keep doing it, put the steps in a **repeat until stopped**.
 
 **What does hunting do to my accounts?**
 It starts each one the way the website's Play and Join buttons do, with that account's own saved sign-in, so it is only for accounts saved in the account manager. Each move closes the client and opens it in another server - roughly once a minute per account at the default. If Roblox asks it to slow down, or a move keeps failing, it waits and tries again, and stops after five failures in a row with the reason. Automation is against the Roblox Terms of Use - see the compatibility section above.
@@ -449,6 +643,8 @@ Yes - the mutex is only held while the app runs. Closing it releases the mutex (
 ## License
 
 [MIT](LICENSE) - do whatever you want, no warranty.
+
+Scripts run in [MoonSharp](https://www.moonsharp.org), a Lua interpreter packed into the exe under its own BSD 3-clause licence. Its copyright notice and disclaimer are in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
 ---
 

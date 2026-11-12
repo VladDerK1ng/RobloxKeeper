@@ -20,45 +20,42 @@ namespace RobloxKeeper
             List<ClientInfo> clients = ClientTracker.GetClients(out windowless);
             if (clients.Count == 0 && windowless == 0)
             {
-                Log("No Roblox processes to close.");
+                Log("Roblox isn't running.");
                 return;
             }
-            string msg = "Close " + clients.Count + " Roblox client(s)" +
-                (windowless > 0 ? " and end " + windowless + " background process(es)" : "") +
-                "?\n\nYou'll need to rejoin your games, but multi-instance activates the moment they're gone.";
+            string msg = "Close " + clients.Count + " Roblox window(s)" +
+                (windowless > 0 ? " and " + windowless + " hidden Roblox program(s)" : "") +
+                "?\n\nYou'll need to rejoin your games. Multi-instance turns on as soon as they're closed.";
             if (MessageBox.Show(this, msg, "RobloxKeeper", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
                 return;
             foreach (ClientInfo ci in clients)
                 Native.PostMessage(ci.Hwnd, Native.WM_CLOSE, IntPtr.Zero, IntPtr.Zero);
             if (windowless > 0) ghostCleaner.KillEveryWindowless();
             lastCloseRequest = DateTime.Now;
-            Log("Close request sent to " + clients.Count + " client(s) - taking the mutex as soon as they exit.");
+            Log("Closing " + clients.Count + " Roblox window(s). Multi-instance turns on when they're gone.");
         }
 
         void CheckLaunchPath()
         {
             if (RobloxInstall.HasActiveThirdPartyLauncher())
-                Log("Third-party Roblox launcher detected: " + RobloxInstall.ThirdPartyLaunchers() +
-                    ". These install and register their OWN Roblox version. If clients keep " +
-                    "closing and Roblox keeps reinstalling, use only ONE launcher - remove the " +
-                    "others, then reinstall Roblox once.");
+                Log("Another Roblox launcher is installed: " + RobloxInstall.ThirdPartyLaunchers() +
+                    ". It installs its own copy of Roblox. If your windows keep closing and Roblox " +
+                    "keeps reinstalling, use just one launcher: remove the others, then reinstall Roblox once.");
 
             // Registered, but pointing at a version folder that no longer
             // exists. Windows then runs a missing exe, Roblox's installer fires
             // to repair the install, and that installer closes every open
             // client - which reads as clients closing at random.
             if (RobloxInstall.HandlerTargetMissing())
-                Log("BROKEN LAUNCH HANDLER: Play on roblox.com points at " +
-                    RobloxInstall.LaunchPathVersion() + ", which is not installed. " +
-                    "Every launch therefore starts Roblox's installer, and that installer closes " +
-                    "every open client. Click Repair in the Multi-instance card to point it at an " +
-                    "installed version.");
+                Log("Play on roblox.com points at " +
+                    RobloxInstall.LaunchPathVersion() + ", which isn't installed. " +
+                    "Every launch starts Roblox's installer, and that closes all your open windows. " +
+                    "Click Repair in the Multi-instance card to fix it.");
 
             if (RobloxInstall.UsesLegacyBootstrapper())
-                Log("WARNING: Roblox launches through the legacy bootstrapper " +
-                    "(RobloxPlayerLauncher). It closes running clients on every launch, " +
-                    "even while RobloxKeeper holds the mutex. Fix: reinstall Roblox from " +
-                    "roblox.com so Play opens RobloxPlayerBeta.exe directly.");
+                Log("WARNING: Your Roblox install uses an old launcher that closes your open windows " +
+                    "every time you launch, even with multi-instance on. " +
+                    "To fix it, reinstall Roblox from roblox.com.");
         }
 
         // Shows or hides the repair row, and keeps its wording current.
@@ -72,7 +69,7 @@ namespace RobloxKeeper
                 btnFixHandler.Visible = broken;
                 if (broken)
                     lblHandler.Text = "Play points at " + RobloxInstall.LaunchPathVersion() +
-                                      ", which isn't installed - every launch closes your clients.";
+                                      ", which isn't installed - every launch closes your windows.";
             }
         }
 
@@ -87,23 +84,21 @@ namespace RobloxKeeper
 
             if (target == null)
             {
-                Log("Nothing to repair the launch handler to - no installed Roblox version has a " +
-                    "player executable. Reinstall Roblox from roblox.com once; this will then stay fixed.");
+                Log("Can't repair Play - no installed Roblox version can run. " +
+                    "Reinstall Roblox from roblox.com once and it will stay fixed.");
                 return;
             }
 
             if (!RobloxInstall.SetRegisteredVersion(target))
             {
-                Log("Could not rewrite the launch handler. Try running RobloxKeeper again, " +
-                    "or reinstall Roblox from roblox.com.");
+                Log("Couldn't repair Play. Try again, or reinstall Roblox from roblox.com.");
                 return;
             }
 
             lastRegisteredVersion = target;
             RobloxInstall.RetargetShortcuts(target, RobloxInstall.VersionsRoot, Log);
-            Log("Launch handler repaired: " + broken + " -> " + target +
-                ". Play on roblox.com now opens a client directly, so it no longer runs the " +
-                "installer that was closing your other clients.");
+            Log("Play is repaired: " + broken + " -> " + target +
+                ". It now opens Roblox directly, so it won't close your other windows.");
             UpdateLaunchHandlerRow();
         }
 
@@ -122,7 +117,7 @@ namespace RobloxKeeper
 
             int fixedCount = RobloxInstall.RetargetShortcuts(reg, RobloxInstall.VersionsRoot, Log);
             if (fixedCount > 0)
-                Log("Repointed " + fixedCount + " Roblox shortcut(s) at the current version (" + reg + ").");
+                Log("Updated " + fixedCount + " Roblox shortcut(s) to the current version (" + reg + ").");
         }
 
         // Two installed Roblox versions take turns re-registering themselves.
@@ -135,9 +130,9 @@ namespace RobloxKeeper
             if (string.Equals(clientVersion, launchVer, StringComparison.OrdinalIgnoreCase)) return;
             if (versionConflictLogged) return;
             versionConflictLogged = true;
-            Log("VERSION CONFLICT: this client runs " + clientVersion + " but Roblox is registered to launch " +
-                launchVer + ". Two Roblox installs are competing - each launch re-runs the installer, " +
-                "which closes your open clients. FIX: close Roblox, delete %LOCALAPPDATA%\\Roblox, " +
+            Log("Version mismatch: this window runs " + clientVersion + " but Roblox launches " +
+                launchVer + ". Two Roblox installs are competing, and each launch closes your open windows. " +
+                "To fix it, close Roblox, delete %LOCALAPPDATA%\\Roblox, " +
                 "then reinstall once from roblox.com.");
         }
 
@@ -205,8 +200,7 @@ namespace RobloxKeeper
                 if (pendingArgs == lastRedirectArgs ||
                     (DateTime.Now - lastRedirectAt).TotalSeconds < 20)
                 {
-                    LogInstallerKill(ups, "a launch was already redirected moments ago - " +
-                        "redirecting the same join ticket twice burns it");
+                    LogInstallerKill(ups, "that launch was already redirected a moment ago, and redirecting it twice would break the join");
                     foreach (Process p in ups) { try { p.Kill(); } catch { } }
                     return;
                 }
@@ -226,18 +220,18 @@ namespace RobloxKeeper
                     try
                     {
                         Process.Start(new ProcessStartInfo(exe, pendingArgs) { UseShellExecute = false });
-                        Log("This account needs a different Roblox version - started it on " + target +
-                            " directly, so no reinstall was needed and your " + openClients +
-                            " other client(s) stayed open.");
+                        Log("This account needs a different Roblox version, so it was opened on " + target +
+                            ". No reinstall was needed and your " + openClients +
+                            " other window(s) stayed open.");
                     }
-                    catch (Exception ex) { Log("Could not start the client on " + target + ": " + ex.Message); }
+                    catch (Exception ex) { Log("Couldn't open Roblox on " + target + ": " + ex.Message); }
                 }
                 return;
             }
 
             // No launch waiting: this is a background update, so keep it away from
             // the running clients. It will install once everything is closed.
-            LogInstallerKill(ups, "background update while " + openClients + " client(s) were open");
+            LogInstallerKill(ups, "a background update while " + openClients + " window(s) were open");
             foreach (Process p in ups) { try { p.Kill(); } catch { } }
         }
 
@@ -251,9 +245,9 @@ namespace RobloxKeeper
             if (ups.Count == 0) return;
             if ((DateTime.Now - lastInstallerKillLog).TotalSeconds < 30) return;
             lastInstallerKillLog = DateTime.Now;
-            Log("Stopped " + ups.Count + " Roblox installer process(es) - " + why +
-                ". Roblox's installer closes every open client, so if one just disappeared, this was why. " +
-                "It will update by itself once you close all clients.");
+            Log("Stopped Roblox's installer (" + ups.Count + ") because " + why +
+                ". It would have closed your open windows. " +
+                "Roblox will update on its own once you close them all.");
         }
 
         // The duplicate-install ping-pong can only be broken by removing the
@@ -268,7 +262,7 @@ namespace RobloxKeeper
 
             string[] all;
             try { all = Directory.Exists(versionsRoot) ? Directory.GetDirectories(versionsRoot) : new string[0]; }
-            catch (Exception ex) { Log("Repair aborted - can't read Versions folder: " + ex.Message); return; }
+            catch (Exception ex) { Log("Repair stopped - can't read the Roblox versions folder: " + ex.Message); return; }
 
             // Accounts can legitimately sit on different Roblox release channels,
             // and then BOTH versions are needed - deleting one forces a reinstall
@@ -278,18 +272,17 @@ namespace RobloxKeeper
             {
                 DialogResult keepBoth = MessageBox.Show(this,
                     "Two Roblox versions are installed.\r\n\r\n" +
-                    "That is normal if your accounts are on different Roblox release channels " +
-                    "(a premium/main account often is) - each account needs its own version, and " +
-                    "deleting one makes Roblox reinstall it every time you switch.\r\n\r\n" +
-                    "Do your accounts need DIFFERENT versions?\r\n\r\n" +
-                    "Yes  = keep both versions (recommended if two accounts fail to run together)\r\n" +
-                    "No   = remove the extra copy",
+                    "That's normal if your accounts need different versions. " +
+                    "If you delete one, Roblox reinstalls it every time you switch accounts.\r\n\r\n" +
+                    "Do your accounts need different versions?\r\n\r\n" +
+                    "Yes = keep both (best if two accounts can't run together)\r\n" +
+                    "No = remove the extra copy",
                     "Keep both Roblox versions?", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
                 if (keepBoth == DialogResult.Cancel) { Log("Repair cancelled."); return; }
                 if (keepBoth == DialogResult.Yes)
                 {
-                    Log("Repair: keeping BOTH versions - accounts on different channels each need their own. " +
-                        "Leave \"Block Roblox updater\" ticked so neither install can close your clients.");
+                    Log("Repair: keeping both versions, since your accounts each need their own. " +
+                        "Leave \"Block Roblox updater\" ticked so neither install closes your windows.");
                     RobloxInstall.RetargetShortcuts(RobloxInstall.LaunchPathVersion(), versionsRoot, Log);
                     return;
                 }
@@ -321,12 +314,12 @@ namespace RobloxKeeper
             if (dirs.Length == 0)
             {
                 MessageBox.Show(this,
-                    "Only one Roblox version is installed (" + (keep ?? "none") + "), so there is nothing " +
-                    "for duplicate installs to fight over.\n\nIf clients still close on their own, the cause is a " +
-                    "third-party launcher reinstalling its own copy: " + RobloxInstall.ThirdPartyLaunchers() +
-                    "\nUninstall the ones you don't use, then launch Roblox from one source only.",
+                    "Only one Roblox version is installed (" + (keep ?? "none") + "), so there's nothing to fix.\n\n" +
+                    "If your windows still close on their own, another launcher may be reinstalling its own copy: " +
+                    RobloxInstall.ThirdPartyLaunchers() +
+                    "\nUninstall the ones you don't use and open Roblox from just one place.",
                     "Nothing to repair", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                Log("Repair: only one version folder present (" + (keep ?? "none") + ") - nothing to remove.");
+                Log("Repair: only one version is installed (" + (keep ?? "none") + "), so there's nothing to remove.");
                 return;
             }
 
@@ -335,23 +328,21 @@ namespace RobloxKeeper
             string tp = RobloxInstall.ThirdPartyLaunchers();
 
             StringBuilder msg = new StringBuilder();
-            msg.AppendLine("This repairs a Roblox install whose copies keep fighting and closing your clients.");
+            msg.AppendLine("This fixes a Roblox install whose copies keep fighting and closing your windows.");
             msg.AppendLine();
             msg.AppendLine("It will:");
-            msg.AppendLine("  - close " + clients.Count + " running client(s) and " + windowless + " background process(es)");
-            msg.AppendLine("  - KEEP the version Roblox currently uses:  " + (keep ?? "(none)"));
-            msg.AppendLine("  - DELETE " + dirs.Length + " leftover version folder(s) from:");
+            msg.AppendLine("  - close " + clients.Count + " Roblox window(s) and " + windowless + " hidden Roblox program(s)");
+            msg.AppendLine("  - KEEP the version Roblox uses now:  " + (keep ?? "(none)"));
+            msg.AppendLine("  - DELETE " + dirs.Length + " extra version folder(s) from:");
             msg.AppendLine("    " + versionsRoot);
             msg.AppendLine();
-            msg.AppendLine("Your working Roblox stays installed - only the duplicate copies go, so there is");
-            msg.AppendLine("nothing left to fight over. You WILL have to rejoin your games.");
+            msg.AppendLine("Roblox stays installed. Only the extra copies go. You will have to rejoin your games.");
             msg.AppendLine();
             if (RobloxInstall.HasActiveThirdPartyLauncher())
             {
-                msg.AppendLine("IMPORTANT - third-party launchers found: " + tp);
-                msg.AppendLine("These install their OWN Roblox version and will recreate the conflict.");
-                msg.AppendLine("Uninstall the ones you don't use (Windows Settings > Apps) BEFORE relaunching,");
-                msg.AppendLine("then always launch Roblox from one source only.");
+                msg.AppendLine("IMPORTANT - other Roblox launchers found: " + tp);
+                msg.AppendLine("They install their own copy of Roblox and will bring the problem back.");
+                msg.AppendLine("Uninstall the ones you don't use (Windows Settings > Apps) before opening Roblox again.");
                 msg.AppendLine();
             }
             msg.Append("Continue?");
@@ -363,7 +354,7 @@ namespace RobloxKeeper
                 return;
             }
 
-            Log("Repair started - keeping " + (keep ?? "(none)") + ", removing " + dirs.Length + " duplicate version folder(s).");
+            Log("Repair started. Keeping " + (keep ?? "(none)") + " and removing " + dirs.Length + " extra version folder(s).");
 
             foreach (ClientInfo ci in clients)
                 Native.PostMessage(ci.Hwnd, Native.WM_CLOSE, IntPtr.Zero, IntPtr.Zero);
@@ -391,26 +382,25 @@ namespace RobloxKeeper
                 catch (Exception ex)
                 {
                     failed++;
-                    Log("Could not remove " + Path.GetFileName(d) + ": " + ex.Message);
+                    Log("Couldn't remove " + Path.GetFileName(d) + ": " + ex.Message);
                 }
             }
 
             int retargeted = RobloxInstall.RetargetShortcuts(keep, versionsRoot, Log);
             if (retargeted > 0)
-                Log("Fixed " + retargeted + " stale Roblox shortcut(s) that still pointed at a removed version - " +
-                    "those were launching the wrong client and triggering the repair loop.");
+                Log("Fixed " + retargeted + " Roblox shortcut(s) that pointed at a removed version.");
 
-            Log("Repair finished - removed " + removed + " duplicate version folder(s)" +
-                (failed > 0 ? ", " + failed + " could not be removed (try again once everything Roblox is closed)" : "") +
+            Log("Repair finished. Removed " + removed + " extra version folder(s)" +
+                (failed > 0 ? " (" + failed + " couldn't be removed - close everything Roblox and try again)" : "") +
                 ". Kept " + (keep ?? "(none)") + ".");
             if (RobloxInstall.HasActiveThirdPartyLauncher())
             {
-                Log("IMPORTANT: a third-party launcher is still installed (" + tp +
-                    ") - it will reinstall its own copy and the conflict returns unless you remove it.");
+                Log("IMPORTANT: another Roblox launcher is still installed (" + tp +
+                    "). It will reinstall its own copy and the problem will come back unless you remove it.");
                 OfferLauncherUninstall();
             }
             else
-                Log("No active third-party launcher found. Launch Roblox from one source only from now on.");
+                Log("No other Roblox launcher found. Open Roblox from just one place from now on.");
 
             versionConflictLogged = false;
             lastRegisteredVersion = null;
@@ -422,28 +412,27 @@ namespace RobloxKeeper
             if (unins.Count == 0)
             {
                 MessageBox.Show(this,
-                    "No third-party launcher uninstaller was found in Windows' installed-programs list.\r\n\r\n" +
-                    "If one is still installed, remove it from Windows Settings > Apps > Installed apps, " +
+                    "Windows doesn't list an uninstaller for another Roblox launcher.\r\n\r\n" +
+                    "If one is still installed, remove it in Windows Settings > Apps > Installed apps, " +
                     "then delete any leftover folder in %LOCALAPPDATA%.",
                     "Nothing to uninstall", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
 
             StringBuilder sb = new StringBuilder();
-            sb.AppendLine("These third-party Roblox launchers are installed:");
+            sb.AppendLine("These other Roblox launchers are installed:");
             sb.AppendLine();
             foreach (string[] u in unins) sb.AppendLine("  - " + u[0]);
             sb.AppendLine();
-            sb.AppendLine("They install and register their OWN Roblox version, which is what makes");
-            sb.AppendLine("clients close by themselves when a second install disagrees.");
+            sb.AppendLine("They install their own copy of Roblox, which can make your windows close by themselves.");
             sb.AppendLine();
-            sb.AppendLine("Run their uninstallers now? Each one opens its own uninstall window;");
-            sb.AppendLine("follow the prompts. Keep a launcher only if it is the ONLY way you start Roblox.");
+            sb.AppendLine("Run their uninstallers now? Each opens its own window - follow the steps.");
+            sb.AppendLine("Keep a launcher only if it's the only way you start Roblox.");
 
-            if (MessageBox.Show(this, sb.ToString(), "Uninstall third-party launchers",
+            if (MessageBox.Show(this, sb.ToString(), "Uninstall other Roblox launchers",
                     MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
             {
-                Log("Launcher uninstall cancelled.");
+                Log("Uninstall cancelled.");
                 return;
             }
 
@@ -466,12 +455,12 @@ namespace RobloxKeeper
                         args = sp > 0 ? cmd.Substring(sp + 1) : "";
                     }
                     Process.Start(new ProcessStartInfo(exe, args) { UseShellExecute = true });
-                    Log("Started uninstaller for " + u[0] + ".");
+                    Log("Opened the uninstaller for " + u[0] + ".");
                 }
                 catch (Exception ex)
                 {
-                    Log("Could not start uninstaller for " + u[0] + ": " + ex.Message +
-                        " - remove it from Windows Settings > Apps instead.");
+                    Log("Couldn't open the uninstaller for " + u[0] + ": " + ex.Message +
+                        ". Remove it in Windows Settings > Apps instead.");
                 }
             }
         }

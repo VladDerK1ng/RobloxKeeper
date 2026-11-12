@@ -77,7 +77,7 @@ namespace RobloxKeeper.Tests
             Assert.Equal("Hunting · 2 accounts · 7 servers so far", Watching.HuntStatusLine(2, 7, false), "the full line");
             Assert.Equal("Hunting · 1 account · 1 server so far", Watching.HuntStatusLine(1, 1, false), "the singular");
             Assert.Equal("hunting · 7 servers", Watching.HuntStatusLine(2, 7, true), "beside the setup picker");
-            using (System.Drawing.Font f = new System.Drawing.Font("Segoe UI", 8.25f))
+            using (System.Drawing.Font f = Ui.F("Segoe UI", 8.25f))
             {
                 Assert.True(System.Windows.Forms.TextRenderer.MeasureText(Watching.HuntStatusLine(20, 999, false), f).Width <= 262, "fits its row");
                 Assert.True(System.Windows.Forms.TextRenderer.MeasureText(Watching.HuntStatusLine(20, 999, true), f).Width <= Watching.SETUP_LINE_W, "and beside the picker");

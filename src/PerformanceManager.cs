@@ -35,7 +35,7 @@ namespace RobloxKeeper
         public override string ToString()
         {
             string s = PerformanceManager.PriorityName(Priority);
-            if (Eco) s += ", eco";
+            if (Eco) s += ", low power";
             return s;
         }
     }
@@ -257,8 +257,8 @@ namespace RobloxKeeper
             bool first = !capRetry.ContainsKey(pid);
             capRetry[pid] = Clock().AddSeconds(60);
             if (first)
-                Log((mb == 0 ? "Couldn't let go of PID " + pid + "'s memory ceiling: "
-                             : "Couldn't hold PID " + pid + " under " + mb + " MB: ")
+                Log((mb == 0 ? "Couldn't remove the memory limit for PID " + pid + ": "
+                             : "Couldn't keep PID " + pid + " under " + mb + " MB: ")
                     + error + ". Trying again in a minute.");
         }
 
@@ -278,7 +278,7 @@ namespace RobloxKeeper
                 Native.PROCESS_SET_QUOTA | Native.PROCESS_QUERY_LIMITED_INFORMATION, false, pid);
             if (h == IntPtr.Zero)
             {
-                error = "Windows wouldn't let the app reach it (error " + Marshal.GetLastWin32Error() + ")";
+                error = "Windows wouldn't let RobloxKeeper reach it (error " + Marshal.GetLastWin32Error() + ")";
                 return false;
             }
             try
@@ -287,7 +287,7 @@ namespace RobloxKeeper
                 uint flags;
                 if (!Native.GetProcessWorkingSetSizeEx(h, out curMin, out curMax, out flags))
                 {
-                    error = "Windows wouldn't say how much it may use (error " + Marshal.GetLastWin32Error() + ")";
+                    error = "Windows wouldn't say how much memory it may use (error " + Marshal.GetLastWin32Error() + ")";
                     return false;
                 }
 
@@ -302,7 +302,7 @@ namespace RobloxKeeper
                     ok = Native.SetProcessWorkingSetSizeEx(h, (IntPtr)min, (IntPtr)max,
                         Native.QUOTA_LIMITS_HARDWS_MIN_DISABLE | Native.QUOTA_LIMITS_HARDWS_MAX_ENABLE);
                 }
-                if (!ok) error = "Windows refused (error " + Marshal.GetLastWin32Error() + ")";
+                if (!ok) error = "Windows said no (error " + Marshal.GetLastWin32Error() + ")";
                 return ok;
             }
             catch (Exception ex) { error = ex.Message; return false; }
@@ -401,7 +401,7 @@ namespace RobloxKeeper
                     checkedAt[pid] = Clock();
                     bool recovered = retries.Remove(pid);
                     if (!drifted && (recovered || !first || !want.SameAs(new ClientProfile())))
-                        Log("Client PID " + pid + " set to " + want + ".");
+                        Log("Roblox window (PID " + pid + ") now runs at " + want + ".");
                 }
                 else
                 {
@@ -415,8 +415,8 @@ namespace RobloxKeeper
                     // Only the first refusal and every fourth after it, so a
                     // process that will never accept the call cannot fill the log.
                     if (attempts == 1 || attempts % 4 == 0)
-                        Log("Could not tune PID " + pid + ": " + error +
-                            " (attempt " + attempts + ", trying again in " + wait + "s).");
+                        Log("Couldn't change the settings for PID " + pid + ": " + error +
+                            ". Trying again in " + wait + "s.");
                 }
             }
         }
@@ -444,7 +444,7 @@ namespace RobloxKeeper
             drifts.TryGetValue(pid, out n);
             drifts[pid] = ++n;
             if (n == 1 || n % 10 == 0)
-                Log("Client PID " + pid + " had changed (" + drift + ") - setting " + want + " again.");
+                Log("PID " + pid + " had changed (" + drift + "). Setting it back to " + want + ".");
             return true;
         }
 
@@ -496,7 +496,7 @@ namespace RobloxKeeper
 
             int ecoError;
             if (!SetEfficiencyMode(pid, profile.Eco, out ecoError))
-                problems.Add("efficiency mode - " + EcoFailureReason(ecoError));
+                problems.Add("low power: " + EcoFailureReason(ecoError));
 
             // Windows can accept a call and leave the process exactly as it was,
             // so ask it afterwards instead of treating "threw nothing" as proof.
@@ -531,12 +531,12 @@ namespace RobloxKeeper
         {
             List<string> drift = new List<string>();
             if (actualPriority != wantPriority)
-                drift.Add("priority did not stick (Windows left it at " + actualPriority + ")");
+                drift.Add("priority didn't stick (Windows kept it at " + actualPriority + ")");
             if (actualMask != wantMask)
-                drift.Add("core affinity did not stick (Windows left it at 0x" +
+                drift.Add("CPU cores didn't stick (Windows kept 0x" +
                           actualMask.ToString("X") + ")");
             if (actualEco.HasValue && actualEco.Value != wantEco)
-                drift.Add("low power did not stick (it is " + (actualEco.Value ? "on" : "off") + ")");
+                drift.Add("low power didn't stick (it is " + (actualEco.Value ? "on" : "off") + ")");
             return drift.Count == 0 ? null : string.Join(", ", drift.ToArray());
         }
 
@@ -566,10 +566,10 @@ namespace RobloxKeeper
         {
             switch (win32Error)
             {
-                case 5:   return "access to the process was denied";
-                case 6:   return "the process handle was rejected";
-                case 87:  return "this build of Windows has no EcoQoS (needs Windows 10 2004 or newer)";
-                default:  return "Windows refused the call (error " + win32Error + ")";
+                case 5:   return "Windows denied access to it";
+                case 6:   return "Windows rejected it";
+                case 87:  return "this version of Windows has no low power mode (it needs Windows 10 2004 or newer)";
+                default:  return "Windows said no (error " + win32Error + ")";
             }
         }
 
@@ -664,7 +664,7 @@ namespace RobloxKeeper
 
             long freed = TrimAll(clients, foregroundPid);
             if (freed > 1048576)
-                Log("Auto-trim released " + ClientTracker.FormatBytes(freed) + " from background client(s).");
+                Log("Freed " + ClientTracker.FormatBytes(freed) + " of memory from idle Roblox windows.");
         }
 
         public void ResetAutoTrimClock() { lastAutoTrim = DateTime.Now; }

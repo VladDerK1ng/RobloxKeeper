@@ -136,12 +136,12 @@ namespace RobloxKeeper
                 int pid = world.Start(url, out why);
                 if (pid <= 0)
                 {
-                    res.Problem = (moving ? "closed " + seat.Account + "'s old client, but couldn't start the new one: "
+                    res.Problem = (moving ? "closed " + seat.Account + "'s old Roblox window, but couldn't start the new one: "
                                           : "couldn't start " + seat.Account + ": ") + (why ?? "no reason given");
                     continue;
                 }
                 res.Pid = pid;
-                res.Said = moving ? "Moved " + seat.Account + " - its old client closed first." : "Launched " + seat.Account + ".";
+                res.Said = moving ? "Moved " + seat.Account + " - its old Roblox window closed first." : "Launched " + seat.Account + ".";
             }
             return results;
         }

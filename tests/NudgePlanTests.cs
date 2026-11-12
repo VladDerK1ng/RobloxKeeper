@@ -90,5 +90,28 @@ namespace RobloxKeeper.Tests
             Assert.Equal(2, plan.ClientCount, "two clients were running");
             Assert.Equal(1, plan.Targets.Count, "one of them was ticked");
         }
+
+        // A nudge a macro kept off the keyboard for its whole minute nudged
+        // nothing. Counted as done, nothing would try again for a whole
+        // interval, and the idle kick could come first.
+        public static void TestANudgeKeptOutIsNotCountedAsANudge()
+        {
+            DateTime before = new DateTime(2026, 11, 12, 10, 0, 0);
+            Assert.Equal(before, NudgePlan.LastNudgeAfter(before, false, DateTime.MinValue), "the last one stays the last one");
+            Assert.True(NudgePlan.RetrySoon(false, true), "and it is tried again soon");
+        }
+
+        public static void TestANudgeThatGotInCountsFromWhenItDid()
+        {
+            DateTime before = new DateTime(2026, 11, 12, 10, 0, 0);
+            DateTime gotIn = before.AddMinutes(15);
+            Assert.Equal(gotIn, NudgePlan.LastNudgeAfter(before, true, gotIn), "counted from getting in");
+            Assert.False(NudgePlan.RetrySoon(true, true), "nothing to try again");
+        }
+
+        public static void TestNoRetryWhileNudgesAreOff()
+        {
+            Assert.False(NudgePlan.RetrySoon(false, false), "switched off, or no Roblox window to nudge");
+        }
     }
 }

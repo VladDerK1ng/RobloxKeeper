@@ -21,8 +21,8 @@ namespace RobloxKeeper
         public static List<KeyValuePair<IntPtr, Size>> Plan(IList<SizedWindow> windows, out string said)
         {
             List<KeyValuePair<IntPtr, Size>> plan = new List<KeyValuePair<IntPtr, Size>>();
-            if (windows.Count == 0) { said = "No client window is open - a client in the tray has none."; return plan; }
-            if (windows.Count == 1) { said = "Only one client is open, so there is nothing to match."; return plan; }
+            if (windows.Count == 0) { said = "No Roblox window is open. One hidden in the tray doesn't count."; return plan; }
+            if (windows.Count == 1) { said = "Only one Roblox window is open, so there's nothing to match."; return plan; }
 
             SizedWindow first = windows[0];
             if (first.Minimized || first.Maximized)
@@ -43,7 +43,7 @@ namespace RobloxKeeper
             string left = skipped == 0 ? "" : " (" + skipped + " left as they are - minimized or full screen)";
             said = plan.Count == 0
                 ? "They're already the same size as Client 1" + left + "."
-                : "Made " + plan.Count + (plan.Count == 1 ? " client" : " clients") + " the size of Client 1, "
+                : "Made " + plan.Count + (plan.Count == 1 ? " Roblox window" : " Roblox windows") + " the size of Client 1, "
                   + want.Width + " x " + want.Height + left + ".";
             return plan;
         }

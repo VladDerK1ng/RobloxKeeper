@@ -20,6 +20,10 @@ namespace RobloxKeeper.Tests
         {
             Console.WriteLine("RobloxKeeper tests");
             Console.WriteLine("------------------");
+            // The Lua interpreter is packed into this exe as it is into the
+            // app, and found the same way - before any type is looked at, as
+            // the main window does it before anything else.
+            LuaRuntime.Ensure();
 
             foreach (Type t in LoadableTypes())
             {

@@ -92,7 +92,7 @@ namespace RobloxKeeper.Tests
 
         public static void TestTheSizeIsShownInPixelsAndPercent()
         {
-            Assert.Equal("968 x 230 pixels - 50% x 22% of the window",
+            Assert.Equal("50% wide, 22% tall (of the window)",
                 RegionPick.Describe(new Rectangle(484, 0, 968, 230), 1936, 1048), "both ways of saying it");
         }
 

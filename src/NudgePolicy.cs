@@ -105,6 +105,9 @@ namespace RobloxKeeper
         // matters here, and this app receives none of its input.
         public static TimeSpan UserIdleFor()
         {
+            // While a session or an autoclicker is pressing keys, Windows'
+            // clock counts those too and would say you never left.
+            if (RealInput.Active) return RealInput.IdleFor();
             try
             {
                 Native.LASTINPUTINFO info = new Native.LASTINPUTINFO();

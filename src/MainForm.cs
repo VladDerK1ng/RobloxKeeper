@@ -18,16 +18,16 @@ namespace RobloxKeeper
 
         // Said in terms of what the user gets, not how it works. "Singleton
         // mutex" is the mechanism and belongs in the code, not on screen.
-        public const string DISABLED = "Off - opening Roblox closes the one already open.";
+        public const string DISABLED = "Off - opening Roblox closes the one that's already open.";
         public const string ACTIVE = "On - you can keep several Roblox windows open at once.";
-        public const string WAITING = "Close every Roblox window once, then this switches on.";
+        public const string WAITING = "Close all Roblox windows once, then this switches on.";
 
         // The hint under the status. Both must fit one line at HINT_WIDTH - the
         // updating one in bold - or the card's bottom padding stops matching its
         // top padding in one state and not the other.
         public const int HINT_WIDTH = 388;
-        public const string HINT_NORMAL = "Accounts needing different Roblox versions are handled automatically.";
-        public const string HINT_UPDATING = "Roblox is UPDATING - it closes every client once. Reopen after.";
+        public const string HINT_NORMAL = "Accounts that need a different Roblox version are handled for you.";
+        public const string HINT_UPDATING = "Roblox is UPDATING - it closes every window once. Reopen after.";
     }
 
     // A client we are following. The open handle is the point: it outlives the
@@ -133,6 +133,9 @@ namespace RobloxKeeper
         // is running.
         internal MainForm(bool start)
         {
+            // Before anything can reach a Lua script: the interpreter is
+            // packed into the exe and found from there (see LuaRuntime).
+            LuaRuntime.Ensure();
             started = start;
             startHidden = start && Program.StartMinimized;
             Text = "RobloxKeeper";
@@ -144,10 +147,11 @@ namespace RobloxKeeper
             StartPosition = FormStartPosition.CenterScreen;
             BackColor = Theme.Bg;
             ForeColor = Theme.Text;
-            Font = new Font("Segoe UI", 9.75f);
+            Font = Ui.F("Segoe UI", 9.75f);
             Ui.GiveAppIcon(this);
 
             BuildUi();
+            BuildShell();
 
             if (!start)
             {
@@ -175,7 +179,7 @@ namespace RobloxKeeper
 
             Log("RobloxKeeper v" + AppInfo.APP_VERSION + " started.");
             if (LeftoverFiles.RemoveCookieBackup(System.IO.Path.GetDirectoryName(AppSettings.Path)))
-                Log("Removed the old copy of Roblox's cookie file that disconnect protection kept.");
+                Log("Removed an old backup copy of Roblox's cookie file.");
 
             initializing = true;
             settings = AppSettings.Load();
@@ -204,13 +208,17 @@ namespace RobloxKeeper
             initializing = false;
 
             UpdateCountdown();
-            Log("Settings: Anti-AFK " + (settings.Afk ? "on, " + settings.IntervalMinutes + " min, " + cmbKeys.Text : "off") +
-                " · multi-instance " + (settings.Multi ? "on" : "off") + ".");
+            Log("Anti-AFK is " + (settings.Afk ? "on (every " + settings.IntervalMinutes + " min, " + cmbKeys.Text + ")" : "off") +
+                ". Multi-instance is " + (settings.Multi ? "on" : "off") + ".");
             if (!perf.Defaults.SameAs(new ClientProfile()))
-                Log("New clients will run at " + perf.Defaults + ".");
+                Log("New Roblox windows will run at " + perf.Defaults + ".");
 
             UpdateAccountsLabel();
             StartWatching();
+            // The page it was last left on; Home the first time.
+            initializing = true;
+            ShowPage(settings.Page);
+            initializing = false;
             CheckLaunchPath();
             FixStaleShortcuts();
             EnsureStartMenuShortcut();
@@ -269,7 +277,7 @@ namespace RobloxKeeper
             // bright white next to the dark log unless asked otherwise.
             DarkScrollbars.Apply(rtbLog);
             DarkScrollbars.Apply(clientsPanel);
-            DarkScrollbars.Apply(this);
+            DarkScrollbars.Apply(keeperPage);
         }
 
         // A borderless window has no frame, so without this it dissolves into a
@@ -307,10 +315,12 @@ namespace RobloxKeeper
         void OnUiTick()
         {
             UpdateCountdown();
+            LooksTick();
+            ShaderTick();
             if (chkMulti.Checked && keeper.Held && !heldLogged)
             {
                 heldLogged = true;
-                Log("Multi-instance on - you can open several Roblox windows now.");
+                Log("Multi-instance is ready - you can open several Roblox windows now.");
             }
             UpdateMultiStatus();
             btnCloseRbx.Visible = chkMulti.Checked && !keeper.Held;
@@ -330,7 +340,7 @@ namespace RobloxKeeper
             // cleaner acts on can never disagree.
             ghostWatch.Observe(snapshot);
 
-            lblClientsTitle.Text = "CLIENTS · " + clients.Count;
+            lblClientsTitle.Text = "ROBLOX WINDOWS · " + clients.Count;
             lblGhosts.Text = GhostLabel(ghostWatch);
             // Only offered for genuinely leaked processes. Showing it while a
             // client is still launching invites the user to kill the client they
@@ -393,10 +403,9 @@ namespace RobloxKeeper
             if (lastRegisteredVersion == null) lastRegisteredVersion = regNow;
             else if (regNow != lastRegisteredVersion)
             {
-                Log("ROBLOX RE-REGISTERED ITSELF: " + lastRegisteredVersion + " -> " + regNow +
-                    ". Two installs are taking turns claiming Roblox; each hand-over runs an " +
-                    "installer that closes every open client. This repeats forever until one is removed. " +
-                    "Launchers present: " + RobloxInstall.ThirdPartyLaunchers());
+                Log("Roblox switched versions by itself: " + lastRegisteredVersion + " -> " + regNow +
+                    ". Two installs keep taking over from each other, and each time Roblox closes all your windows. " +
+                    "It won't stop until you remove one. Other launchers found: " + RobloxInstall.ThirdPartyLaunchers());
                 lastRegisteredVersion = regNow;
             }
 
@@ -421,16 +430,16 @@ namespace RobloxKeeper
             if (installerRunning && !installerSeen)
             {
                 updaterSeenAt = DateTime.Now;
-                Log("Roblox helper running: " + helpers +
-                    " - it can close open clients regardless of the mutex." +
+                Log("Roblox's updater is running: " + helpers +
+                    " - it can close your open windows." +
                     (RobloxInstall.UsesLegacyBootstrapper()
-                        ? " Your install uses it on EVERY launch - reinstall Roblox from roblox.com to stop this."
-                        : " Reopen your clients when it finishes."));
+                        ? " Your install runs it on EVERY launch. Reinstall Roblox from roblox.com to stop this."
+                        : " Reopen your windows when it's done."));
                 try
                 {
                     tray.BalloonTipTitle = "Roblox is updating";
-                    tray.BalloonTipText = "Roblox's own updater closes every open client once. " +
-                        "Wait for it to finish, then reopen your clients - multi-instance keeps working.";
+                    tray.BalloonTipText = "Roblox's updater closes all your open windows once. " +
+                        "Wait for it to finish, then reopen them.";
                     tray.BalloonTipIcon = ToolTipIcon.Warning;
                     tray.ShowBalloonTip(10000);
                 }
@@ -446,7 +455,7 @@ namespace RobloxKeeper
                 updatingShown = updating;
                 lblUpdating.Text = updating ? MultiStatus.HINT_UPDATING : MultiStatus.HINT_NORMAL;
                 lblUpdating.ForeColor = updating ? Theme.Amber : Theme.Muted;
-                lblUpdating.Font = new Font("Segoe UI", 8.25f, updating ? FontStyle.Bold : FontStyle.Regular);
+                lblUpdating.Font = Ui.F("Segoe UI", 8.25f, updating ? FontStyle.Bold : FontStyle.Regular);
             }
 
             TrackClientLifecycle(clients, installerRunning);
@@ -537,10 +546,9 @@ namespace RobloxKeeper
                 if (!clientTrackingReady) continue;   // don't narrate clients already open at startup
                 lastClientOpened = DateTime.Now;
                 string clientVer = RobloxInstall.VersionOfPid(ci.Pid);
-                Log("Client PID " + ci.Pid + " [" + clientVer + "] opened, launched by " + RobloxInstall.ParentOf(ci.Pid) +
-                    " - mutex " +
-                    (mutexHeld ? "HELD by RobloxKeeper, other clients are safe." :
-                                 "NOT held (a Roblox process owns it) - THIS CAN CLOSE YOUR OTHER CLIENTS."));
+                Log("Roblox window opened (PID " + ci.Pid + ", version " + clientVer + ", started by " + RobloxInstall.ParentOf(ci.Pid) + "). " +
+                    (mutexHeld ? "Your other windows are safe." :
+                                 "Multi-instance isn't active, so this can close your other windows."));
                 if (clientVer != "?" && !seenClientVersions.Contains(clientVer))
                     seenClientVersions.Add(clientVer);
                 WarnOnVersionConflict(clientVer);
@@ -566,18 +574,17 @@ namespace RobloxKeeper
                 double sinceOther = (DateTime.Now - lastClientOpened).TotalSeconds;
                 string why;
                 if (installerRunning)
-                    why = "the Roblox launcher/bootstrapper ran and closed it. This is Roblox's own installer, " +
-                          "not the mutex - it happens even while RobloxKeeper holds the mutex.";
+                    why = "Roblox's own updater closed it. RobloxKeeper can't stop that.";
                 else if (!mutexHeld && sinceOther < 30 && lastClientOpened != DateTime.MinValue)
-                    why = "SINGLETON KILL - another client launched " + ((int)sinceOther) +
-                          "s ago while a Roblox process (not RobloxKeeper) owned the mutex. Fix: close all clients, wait for the green light, then reopen.";
+                    why = "Another window opened " + ((int)sinceOther) +
+                          "s ago while multi-instance wasn't active. Close all windows, wait for the green light, then reopen.";
                 else if ((DateTime.Now - lastCloseRequest).TotalSeconds < 20)
-                    why = "closed by your \"Close all Roblox\" request.";
+                    why = "You used Close all Roblox.";
                 else if (!mutexHeld)
-                    why = "closed while the mutex was NOT held by RobloxKeeper - check the multi-instance light.";
+                    why = "Multi-instance wasn't active. Check the light on the Multi-instance card.";
                 else
-                    why = "RobloxKeeper held the mutex, so this was NOT a singleton kill.";
-                Log("Client PID " + pid + " ended after " + ((int)lived) + "s - " + exit + " " + why);
+                    why = "Multi-instance was active, so another window didn't close it.";
+                Log("Roblox window (PID " + pid + ") closed after " + ((int)lived) + "s. " + exit + " " + why);
             }
 
             clientTrackingReady = true;
@@ -612,19 +619,19 @@ namespace RobloxKeeper
 
         internal static string DescribeExit(TrackedClient t)
         {
-            if (t.Handle == null) return "[exit code unavailable]";
+            if (t.Handle == null) return "Couldn't tell how it closed.";
             int code;
             try { code = t.Handle.ExitCode; }
-            catch { return "[exit code unreadable]"; }
+            catch { return "Couldn't tell how it closed."; }
 
-            if (code == 0) return "[exit 0: shut itself down cleanly, so you or the game closed it]";
-            if (code == -1) return "[exit -1: TERMINATED by another process, not a clean shutdown]";
+            if (code == 0) return "It closed normally, so you or the game closed it.";
+            if (code == -1) return "Another program forced it to close.";
 
             uint u = unchecked((uint)code);
-            if (u == 0xC0000005) return "[exit 0xC0000005: CRASHED (access violation)]";
+            if (u == 0xC0000005) return "It crashed.";
             if ((u & 0xF0000000) == 0xC0000000)
-                return "[exit 0x" + u.ToString("X8") + ": CRASHED]";
-            return "[exit " + code + " (0x" + u.ToString("X8") + "): did not shut down cleanly]";
+                return "It crashed (code 0x" + u.ToString("X8") + ").";
+            return "It didn't close cleanly (code " + code + ").";
         }
 
         // ---------- Multi-instance ----------
@@ -635,12 +642,12 @@ namespace RobloxKeeper
             if (chkMulti.Checked)
             {
                 StartMulti();
-                if (!initializing) Log("Multi-instance enabled - queued for the singleton mutex.");
+                if (!initializing) Log("Multi-instance is on - waiting for Roblox to be closed.");
             }
             else
             {
                 StopMulti();
-                if (!initializing) Log("Multi-instance disabled - mutex released.");
+                if (!initializing) Log("Multi-instance is off.");
             }
             UpdateMultiStatus();
             SaveSettings();
@@ -753,13 +760,13 @@ namespace RobloxKeeper
                     {
                         string why = Autostart.SwitchOn(autostart, exe);
                         said = why == null
-                            ? "Start with Windows on - RobloxKeeper starts in the tray the moment you sign in, ahead of other startup apps."
-                            : "Start with Windows on, the ordinary way - Task Scheduler said: " + why + ".";
+                            ? "Start with Windows is on. RobloxKeeper opens in the tray when you sign in."
+                            : "Start with Windows is on, but the quick way failed: " + why + ".";
                     }
                     else
                     {
                         Autostart.SwitchOff(autostart);
-                        said = "Start with Windows off.";
+                        said = "Start with Windows is off.";
                     }
                 }
                 catch (Exception ex) { said = "Couldn't change Start with Windows: " + ex.Message; }
@@ -805,11 +812,11 @@ namespace RobloxKeeper
                     new object[] { "Anti-AFK and multi-instance manager for Roblox" });
                 t.InvokeMember("Save", System.Reflection.BindingFlags.InvokeMethod, null, sc, null);
 
-                Log("Added to the Start menu - search \"RobloxKeeper\" to open it.");
+                Log("Added to the Start menu. Search \"RobloxKeeper\" to open it.");
             }
             catch (Exception ex)
             {
-                Log("Could not add a Start menu entry: " + ex.Message);
+                Log("Couldn't add RobloxKeeper to the Start menu: " + ex.Message);
             }
         }
 
@@ -906,9 +913,9 @@ namespace RobloxKeeper
                     "Roblox shortcuts: " + RobloxInstall.DescribeShortcuts() + "\r\n" +
                     "----------------------------------------\r\n";
                 Clipboard.SetText(header + rtbLog.Text);
-                Log("Log copied to clipboard - paste it wherever you need.");
+                Log("Log copied. Paste it wherever you need it.");
             }
-            catch (Exception ex) { Log("Copy failed: " + ex.Message); }
+            catch (Exception ex) { Log("Couldn't copy the log: " + ex.Message); }
         }
 
         void Log(string message)
@@ -922,6 +929,10 @@ namespace RobloxKeeper
                 rtbLog.Text = rtbLog.Text.Substring(0, 20000);
             rtbLog.ReadOnly = true;
             rtbLog.SelectionStart = 0;
+
+            // And on the page in view, which may not be the one with this list.
+            ShellPage page = PageNow;
+            if (page != null) page.Heard(message);
         }
 
         protected override void OnFormClosing(FormClosingEventArgs e)

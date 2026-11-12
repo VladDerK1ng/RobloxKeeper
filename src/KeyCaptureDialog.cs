@@ -12,6 +12,7 @@ namespace RobloxKeeper
     {
         readonly Label prompt;
         readonly bool anyKey;
+        bool pausing;       // counted in GlobalKeys.Capturing, and not yet taken off
         public byte Captured;
 
         public KeyCaptureDialog() : this(false) { }
@@ -35,7 +36,7 @@ namespace RobloxKeeper
             title.Location = new Point(0, 22);
             title.Size = new Size(320, 16);
             title.TextAlign = ContentAlignment.MiddleCenter;
-            title.Font = new Font("Segoe UI", 7.5f, FontStyle.Bold);
+            title.Font = Ui.F("Segoe UI", 7.5f, FontStyle.Bold);
             title.ForeColor = Theme.Muted;
             title.BackColor = Theme.Card;
             Controls.Add(title);
@@ -46,7 +47,7 @@ namespace RobloxKeeper
             prompt.Location = new Point(10, 44);
             prompt.Size = new Size(300, 44);
             prompt.TextAlign = ContentAlignment.MiddleCenter;
-            prompt.Font = new Font("Segoe UI", 11f, FontStyle.Bold);
+            prompt.Font = Ui.F("Segoe UI", 11f, FontStyle.Bold);
             prompt.ForeColor = Theme.Text;
             prompt.BackColor = Theme.Card;
             Controls.Add(prompt);
@@ -57,10 +58,37 @@ namespace RobloxKeeper
             hint.Location = new Point(0, 92);
             hint.Size = new Size(320, 14);
             hint.TextAlign = ContentAlignment.MiddleCenter;
-            hint.Font = new Font("Segoe UI", 7.5f);
+            hint.Font = Ui.F("Segoe UI", 7.5f);
             hint.ForeColor = Theme.Muted;
             hint.BackColor = Theme.Card;
             Controls.Add(hint);
+        }
+
+        // While this is open the keys the app listens for everywhere do
+        // nothing, so choosing F6 does not also switch the autoclicker on.
+        protected override void OnShown(EventArgs e)
+        {
+            if (!pausing) { pausing = true; GlobalKeys.CaptureOpened(); }
+            base.OnShown(e);
+        }
+
+        protected override void OnFormClosed(FormClosedEventArgs e)
+        {
+            Unpause();
+            base.OnFormClosed(e);
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            Unpause();
+            base.Dispose(disposing);
+        }
+
+        void Unpause()
+        {
+            if (!pausing) return;
+            pausing = false;
+            GlobalKeys.CaptureClosed();
         }
 
         protected override void OnPaint(PaintEventArgs e)

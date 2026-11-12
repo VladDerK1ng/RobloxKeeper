@@ -8,6 +8,29 @@ namespace RobloxKeeper
     // here goes through SendInput rather than posted messages.
     static class InputSender
     {
+        // Carried by every key and mouse event this app sends, so its own
+        // listeners can leave out what it sent itself and nothing else. A key
+        // sent by mouse software - a side button bound to F6 - is sent by a
+        // program too, and is still somebody pressing something.
+        public const int OURS = 0x524B6B70;
+
+        public static bool IsOurs(IntPtr extraInfo)
+        {
+            return extraInfo.ToInt64() == OURS;
+        }
+
+        // The one way this app sends input: marked, then sent.
+        public static uint Send(Native.INPUT[] inputs)
+        {
+            IntPtr mark = new IntPtr(OURS);
+            for (int i = 0; i < inputs.Length; i++)
+            {
+                if (inputs[i].type == Native.INPUT_KEYBOARD) inputs[i].U.ki.dwExtraInfo = mark;
+                else if (inputs[i].type == Native.INPUT_MOUSE) inputs[i].U.mi.dwExtraInfo = mark;
+            }
+            return Native.SendInput((uint)inputs.Length, inputs, Marshal.SizeOf(typeof(Native.INPUT)));
+        }
+
         public static void FocusWindow(IntPtr hwnd)
         {
             // A quick Alt tap makes Windows allow the foreground switch.
@@ -48,7 +71,7 @@ namespace RobloxKeeper
             inp[0].U.mi.dx = dx;
             inp[0].U.mi.dy = dy;
             inp[0].U.mi.dwFlags = Native.MOUSEEVENTF_MOVE;
-            Native.SendInput(1, inp, Marshal.SizeOf(typeof(Native.INPUT)));
+            InputSender.Send(inp);
         }
 
         // Plays one nudge method against whatever window currently has focus.
@@ -74,7 +97,7 @@ namespace RobloxKeeper
             if (vk >= 0x21 && vk <= 0x2E) flags |= Native.KEYEVENTF_EXTENDEDKEY;
             if (!down) flags |= Native.KEYEVENTF_KEYUP;
             inp[0].U.ki.dwFlags = flags;
-            Native.SendInput(1, inp, Marshal.SizeOf(typeof(Native.INPUT)));
+            InputSender.Send(inp);
         }
 
         public static void SendVk(byte vk, bool down)
@@ -83,7 +106,7 @@ namespace RobloxKeeper
             inp[0].type = Native.INPUT_KEYBOARD;
             inp[0].U.ki.wVk = vk;
             inp[0].U.ki.dwFlags = down ? 0u : Native.KEYEVENTF_KEYUP;
-            Native.SendInput(1, inp, Marshal.SizeOf(typeof(Native.INPUT)));
+            InputSender.Send(inp);
         }
     }
 }

@@ -15,8 +15,10 @@ namespace RobloxKeeper
         public static string Describe(Watcher w)
         {
             string where = w.WholeWindow ? "the whole window" : "the box called \"" + w.RegionName + "\"";
-            string who = w.Accounts == null || w.Accounts.Length == 0 ? "every client" : string.Join(", ", w.Accounts);
-            string then = string.IsNullOrEmpty(w.ThenMacro) ? "" : " · then plays " + w.ThenMacro;
+            string who = w.Accounts == null || w.Accounts.Length == 0 ? "every Roblox window" : string.Join(", ", w.Accounts);
+            string then = string.IsNullOrEmpty(w.ThenMacro) ? ""
+                        : w.ThenClicks ? " · then clicks it"
+                        : " · then plays " + w.ThenMacro;
             return WatcherForm.KindName(w.Kind) + " · " + where + " · " + who + then;
         }
 
@@ -42,7 +44,7 @@ namespace RobloxKeeper
         {
             return string.IsNullOrEmpty(saved)
                 ? "Not set yet. Watchers can still use a pop-up, a sound and the activity list."
-                : "Set. It is kept encrypted on this PC and never shown.";
+                : "Saved. It is kept private on this PC and never shown.";
         }
     }
 
@@ -124,8 +126,8 @@ namespace RobloxKeeper
             setupPicker = Ui.DarkCombo(282, 10, 200);
             setupPicker.SelectedIndexChanged += delegate { if (!fillingSetups) ChooseSetup(setupPicker.Text); };
             card.Controls.Add(setupPicker);
-            string explain = "A setup is a set of watchers - one for each game, say. "
-                           + "Choosing another setup swaps every watcher at once.";
+            string explain = "A setup is a group of watchers, like one for each game. "
+                           + "Picking another setup switches all of them at once.";
             tips.SetToolTip(setupCap, explain);
             tips.SetToolTip(setupPicker, explain);
 
@@ -160,8 +162,8 @@ namespace RobloxKeeper
             card.Controls.Add(list);
 
             empty = Ui.MutedLabel(
-                "Nothing is being watched yet. Add a watcher to be told when a word, a new chat line "
-                + "or a picture turns up on a client's screen - the client is only looked at, never touched.",
+                "Nothing is being watched yet. Add a watcher to get told when a word, a chat line "
+                + "or a picture shows up in a Roblox window. It only looks and never touches the game.",
                 4, 8, 8.25f);
             empty.MaximumSize = new Size(list.Width - 16, 0);
 
@@ -173,11 +175,11 @@ namespace RobloxKeeper
             lblPace.TextAlign = ContentAlignment.MiddleRight;
             card.Controls.Add(lblPace);
 
-            Card clients = WatchUi.CardAt(this, "CLIENTS", 12, LOW_Y, HALF, LOW_H);
+            Card clients = WatchUi.CardAt(this, "ROBLOX WINDOWS", 12, LOW_Y, HALF, LOW_H);
             LinkLabel same = Ui.RowLink("Same size as Client 1", HALF - Ui.PAD - 130, 10, 26, 8.25f);
             same.Click += delegate { SameSize(); };
-            tips.SetToolTip(same, "Every client the size of the first, so boxes and macro clicks land exactly "
-                + "the same on all of them. Each window stays where it is.");
+            tips.SetToolTip(same, "Makes every Roblox window the same size as the first, so boxes and clicks land "
+                + "in the same spot on all of them. Each window stays where it is.");
             clients.Controls.Add(same);
             clientList = new ScrollPanel();
             clientList.Location = new Point(Ui.PAD, 42);
@@ -218,7 +220,7 @@ namespace RobloxKeeper
 
             Button macros = WatchUi.Secondary("Macros", 12, FOOT_Y, 110, 32);
             macros.Click += delegate { using (MacrosDialog d = new MacrosDialog(kit)) d.ShowDialog(this); };
-            tips.SetToolTip(macros, "Keys and clicks played on a client - on their own, or when a watcher finds something.");
+            tips.SetToolTip(macros, "Keys and clicks played in a Roblox window, on their own or when a watcher finds something.");
             Controls.Add(macros);
 
             Button rules = WatchUi.Secondary("Rules", 12 + 110 + 8, FOOT_Y, 110, 32);
@@ -228,14 +230,14 @@ namespace RobloxKeeper
                 if (changed != null) changed();
             };
             tips.SetToolTip(rules, "Play a macro when you want: when a watcher finds something, every so often, "
-                + "when you press a key, or when a client joins a server.");
+                + "when you press a key, or when a Roblox window joins a server.");
             Controls.Add(rules);
 
             if (kit.Hunts != null)
             {
                 Button hunt = WatchUi.Secondary("Hunt", 12 + (110 + 8) * 2, FOOT_Y, 110, 32);
                 hunt.Click += delegate { using (HuntDialog d = new HuntDialog(kit)) d.ShowDialog(this); };
-                tips.SetToolTip(hunt, "Move accounts from server to server of a game until a watcher finds something.");
+                tips.SetToolTip(hunt, "Hops accounts between servers of a game until a watcher finds something.");
                 Controls.Add(hunt);
             }
         }
@@ -271,7 +273,7 @@ namespace RobloxKeeper
                 list.Controls.Add(on);
 
                 Label name = Ui.RowLabel(w.Name, 46, y + 3, 20, 454, 9.5f, w.Enabled ? Theme.Text : Theme.Muted);
-                name.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
+                name.Font = Ui.F("Segoe UI", 9.5f, FontStyle.Bold);
                 list.Controls.Add(name);
                 rowNames.Add(name);
 
@@ -311,9 +313,9 @@ namespace RobloxKeeper
 
             int pace = kit.Engine.IntervalMs;
             lblPace.Text = !kit.Engine.Running
-                ? "Not looking - no watcher is switched on."
+                ? "Not looking. No watcher is switched on."
                 : "Pace: " + PassPacer.Describe(pace)
-                  + (pace > PassPacer.FastestMs ? " - slowed down to keep up" : "");
+                  + (pace > PassPacer.FastestMs ? ", slowed down to keep up" : "");
 
             RefreshClients();
         }
@@ -331,7 +333,7 @@ namespace RobloxKeeper
                 bool known = kit.Engine.TryStateOf(c.Pid, out state);
                 texts.Add(WatchUi.ClientName(c) + " - " + Watching.StateText(assigned, known, state));
             }
-            if (texts.Count == 0) texts.Add("No Roblox clients are open.");
+            if (texts.Count == 0) texts.Add("No Roblox windows are open.");
 
             bool same = texts.Count == clientTexts.Count;
             for (int i = 0; same && i < texts.Count; i++) same = texts[i] == clientTexts[i];
@@ -602,7 +604,7 @@ namespace RobloxKeeper
 
             DetectionEvent d = new DetectionEvent();
             d.WatcherName = "RobloxKeeper test";
-            d.ClientLabel = "No client";
+            d.ClientLabel = "No Roblox window";
             d.Matched = "If you can read this, watchers can reach this channel.";
             lblHookSays.Text = "Sending...";
             lblHookSays.ForeColor = Theme.Muted;
@@ -614,7 +616,7 @@ namespace RobloxKeeper
                 {
                     BeginInvoke((MethodInvoker)delegate
                     {
-                        lblHookSays.Text = failed == null ? "Sent - check the channel." : "Didn't arrive: " + failed + ".";
+                        lblHookSays.Text = failed == null ? "Sent. Check the channel." : "Didn't arrive: " + failed + ".";
                         lblHookSays.ForeColor = failed == null ? Theme.Green : Theme.Amber;
                     });
                 }

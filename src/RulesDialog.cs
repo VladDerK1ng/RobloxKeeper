@@ -23,10 +23,10 @@ namespace RobloxKeeper
         {
             switch (on)
             {
-                case RuleOn.InFront: return "The client in front";
-                case RuleOn.EveryClient: return "Every client";
+                case RuleOn.InFront: return "The Roblox window in front";
+                case RuleOn.EveryClient: return "Every Roblox window";
                 case RuleOn.TheseAccounts: return "These accounts";
-                default: return when == RuleWhen.Joins ? "The client that joined" : "The client that saw it";
+                default: return when == RuleWhen.Joins ? "The Roblox window that joined" : "The Roblox window that saw it";
             }
         }
 
@@ -46,7 +46,7 @@ namespace RobloxKeeper
             "A watcher finds something",
             "Every so often",
             "I press a key",
-            "A client joins a server"
+            "A Roblox window joins a server"
         };
     }
 
@@ -90,15 +90,14 @@ namespace RobloxKeeper
             card.Controls.Add(list);
 
             empty = Ui.MutedLabel(
-                "No rules in this setup yet. A rule plays a macro when something happens: a watcher finds "
-                + "something, a timer comes round, you press a key, or a client joins a server - on the clients "
-                + "you choose, as often as you allow.", 4, 8, 8.25f);
+                "No rules in this setup yet. A rule plays a macro or runs a script when something happens: a watcher finds "
+                + "something, a timer runs out, you press a key, or a Roblox window joins a server.", 4, 8, 8.25f);
             empty.MaximumSize = new Size(list.Width - 16, 0);
 
             Button add = WatchUi.Primary("Add rule", Ui.PAD, LIST_H - 44, 130, 30);
             add.Click += delegate { Add(); };
             card.Controls.Add(add);
-            Label note = Ui.RowLabel("A watcher can also play a macro on its own - Then play, in its editor.",
+            Label note = Ui.RowLabel("A watcher can also play a macro itself: see \"Then play\" in its editor.",
                                      170, LIST_H - 44, 30, W - 24 - 170 - Ui.PAD, 8.25f, Theme.Muted);
             note.TextAlign = ContentAlignment.MiddleRight;
             card.Controls.Add(note);
@@ -121,6 +120,9 @@ namespace RobloxKeeper
             rowNames.Clear();
             IList<Rule> rules = kit.Store.Rules;
             if (rules.Count == 0) list.Controls.Add(empty);
+            // Read once: the list of scripts comes from the disk. Null where
+            // there is no main window to ask, and then nothing is called gone.
+            List<string> scripts = kit.Scripts == null ? null : kit.Scripts.Store.Names();
 
             int y = 0;
             for (int i = 0; i < rules.Count; i++)
@@ -135,13 +137,18 @@ namespace RobloxKeeper
                 list.Controls.Add(on);
 
                 Label name = Ui.RowLabel(r.Name, 46, y + 3, 20, 484, 9.5f, r.Enabled ? Theme.Text : Theme.Muted);
-                name.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
+                name.Font = Ui.F("Segoe UI", 9.5f, FontStyle.Bold);
                 list.Controls.Add(name);
                 rowNames.Add(name);
 
                 string problem = r.Problem();
-                if (problem == null && kit.Store.FindMacro(r.Macro) == null)
-                    problem = "there is no macro called " + r.Macro + " any more - choose another.";
+                if (problem == null && r.PlaysScript)
+                {
+                    if (scripts != null && scripts.FindIndex(delegate(string s) { return string.Equals(s, r.Script, StringComparison.OrdinalIgnoreCase); }) < 0)
+                        problem = "there is no script called " + r.Script + " any more. Choose another.";
+                }
+                else if (problem == null && kit.Store.FindMacro(r.Macro) == null)
+                    problem = "there is no macro called " + r.Macro + " any more. Choose another.";
                 Label line = Ui.RowLabel(problem != null ? "Needs attention: " + problem : r.Describe(),
                                          46, y + 23, 20, 504, 8.25f, problem != null ? Theme.Amber : Theme.Muted);
                 line.AutoEllipsis = true;
@@ -260,26 +267,39 @@ namespace RobloxKeeper
         readonly Rule original;
         readonly WatchKit kit;
         readonly List<string> watcherNames = new List<string>();
-        readonly List<string> macroNames = new List<string>();
+        readonly List<PlayChoice> playChoices = new List<PlayChoice>();
         readonly List<byte> keys = RuleForm.HotkeyChoices();
         readonly List<RuleOn> onChoices = new List<RuleOn>();
         readonly List<ThemedCheckBox> accountChecks = new List<ThemedCheckBox>();
 
         TextBox nameBox, foundBox;
-        ThemedPicker cmbWhen, cmbWatcher, cmbUnit, cmbKey, cmbMacro, cmbOn;
+        ThemedPicker cmbWhen, cmbWatcher, cmbUnit, cmbKey, cmbPlay, cmbOn;
         ThemedNumeric numEvery, numTimes, numDelay, numGap;
         ThemedCheckBox chkCtrl, chkAlt, chkShift, chkAway;
         Panel watcherPanel, everyPanel, keyPanel, joinPanel;
         ScrollPanel accountsList;
         Label lblProblem;
+        Label lblTimes, lblInARow, lblScriptNote;
+        bool playsScript;       // what ShowPlay last decided, since Visible reads false until the form is shown
+
+        // One line of the "What to play" list: a macro or a script.
+        class PlayChoice
+        {
+            public bool Script;
+            public string Name;
+        }
 
         public Rule Result { get; private set; }
 
-        public RuleEditDialog(Rule r, WatchKit kit)
+        public RuleEditDialog(Rule r, WatchKit kit) : this(r, kit, null) { }
+
+        // title: what the window is called, where it is opened on a rule
+        // that is filled in but not yet anyone's - from a macro's Play menu.
+        public RuleEditDialog(Rule r, WatchKit kit, string title)
         {
             original = r.Copy();
             this.kit = kit;
-            WatchUi.Frame(this, string.IsNullOrEmpty(r.Name) ? "New rule" : "Edit " + r.Name, W, H);
+            WatchUi.Frame(this, title ?? (string.IsNullOrEmpty(r.Name) ? "New rule" : "Edit " + r.Name), W, H);
             Build();
             Fill(original);
         }
@@ -307,7 +327,7 @@ namespace RobloxKeeper
             watcherPanel.Controls.Add(Ui.RowLabel("Only if it found", Ui.PAD, 34, ROW_H, 100, 9f, Theme.Muted));
             foundBox = WatchUi.Input(FIELD_X, 36, FIELD_W);
             watcherPanel.Controls.Add(foundBox);
-            Hint(watcherPanel, "Words that must be in what it found - an egg's name, say. Blank for anything it finds.", 68);
+            Hint(watcherPanel, "Only runs if what it found has these words, like an egg's name. Leave blank for anything.", 68);
 
             everyPanel = WhenPanel(when);
             everyPanel.Controls.Add(Ui.RowLabel("Every", Ui.PAD, 0, ROW_H, 90, 9f, Theme.Muted));
@@ -318,8 +338,8 @@ namespace RobloxKeeper
             cmbUnit.Items.Add("minutes");
             cmbUnit.Items.Add("hours");
             everyPanel.Controls.Add(cmbUnit);
-            Hint(everyPanel, "Over and over, for as long as this setup is in use. Tick \"only while I'm away\" below "
-                           + "so it doesn't take the keyboard while you're using the PC.", 36);
+            Hint(everyPanel, "Runs again and again while this setup is in use. Tick \"Only while I'm away\" below "
+                           + "so it doesn't take over the keyboard while you're playing.", 36);
 
             keyPanel = WhenPanel(when);
             keyPanel.Controls.Add(Ui.RowLabel("Key", Ui.PAD, 0, ROW_H, 90, 9f, Theme.Muted));
@@ -332,21 +352,29 @@ namespace RobloxKeeper
             keyPanel.Controls.Add(chkCtrl);
             keyPanel.Controls.Add(chkAlt);
             keyPanel.Controls.Add(chkShift);
-            Hint(keyPanel, "Heard wherever you are. With the client in front, press it with the Roblox window "
-                         + "you want it played on in front.", 68);
+            Hint(keyPanel, "Works wherever you are. With \"The Roblox window in front\", press the key "
+                         + "while that Roblox window is in front.", 68);
 
             joinPanel = WhenPanel(when);
-            Hint(joinPanel, "When a client arrives in a server - when it starts, after a hop, or after a teleport. "
-                          + "Wait first, on the right, gives the game time to load.", 0);
+            Hint(joinPanel, "Runs when a Roblox window gets into a server: at the start, after a hop, or after a teleport. "
+                          + "Use \"Wait first\", on the right, to let the game load.", 0);
 
             Card doCard = WatchUi.CardAt(this, "PLAY", X2, TOP, COL_W, TOP_H);
-            doCard.Controls.Add(Ui.RowLabel("Macro", Ui.PAD, 44, ROW_H, 90, 9f, Theme.Muted));
-            cmbMacro = Ui.DarkCombo(FIELD_X, 44, FIELD_W);
-            doCard.Controls.Add(cmbMacro);
-            doCard.Controls.Add(Ui.RowLabel("Times", Ui.PAD, 78, ROW_H, 90, 9f, Theme.Muted));
+            doCard.Controls.Add(Ui.RowLabel("What to play", Ui.PAD, 44, ROW_H, 100, 9f, Theme.Muted));
+            cmbPlay = Ui.DarkCombo(FIELD_X, 44, FIELD_W);
+            cmbPlay.SelectedIndexChanged += delegate { ShowPlay(); };
+            doCard.Controls.Add(cmbPlay);
+            lblTimes = Ui.RowLabel("Times", Ui.PAD, 78, ROW_H, 90, 9f, Theme.Muted);
+            doCard.Controls.Add(lblTimes);
             numTimes = Ui.DarkNumeric(FIELD_X, 78, 56, 1, 20, 1);
             doCard.Controls.Add(numTimes);
-            doCard.Controls.Add(Ui.RowLabel("in a row", FIELD_X + 64, 78, ROW_H, 100, 9f, Theme.Muted));
+            lblInARow = Ui.RowLabel("in a row", FIELD_X + 64, 78, ROW_H, 100, 9f, Theme.Muted);
+            doCard.Controls.Add(lblInARow);
+            // Where Times is, when a script is chosen: it has no use for it.
+            lblScriptNote = Ui.MutedLabel("", Ui.PAD, 80, 8.25f);
+            lblScriptNote.MaximumSize = new Size(INNER, 0);
+            lblScriptNote.Visible = false;
+            doCard.Controls.Add(lblScriptNote);
             doCard.Controls.Add(Ui.RowLabel("Wait first", Ui.PAD, 112, ROW_H, 90, 9f, Theme.Muted));
             numDelay = Ui.DarkNumeric(FIELD_X, 112, 64, 0, 600, 0);
             doCard.Controls.Add(numDelay);
@@ -366,8 +394,8 @@ namespace RobloxKeeper
             limits.Controls.Add(Ui.RowLabel("At most once every", Ui.PAD, 40, ROW_H, 130, 9f, Theme.Muted));
             numGap = Ui.DarkNumeric(Ui.PAD + 134, 40, 70, 0, 3600, 15);
             limits.Controls.Add(numGap);
-            limits.Controls.Add(Ui.RowLabel("seconds on each client", Ui.PAD + 212, 40, ROW_H, 200, 9f, Theme.Muted));
-            chkAway = Ui.DarkCheck("Only while I'm away from the keyboard - a minute without typing or moving the mouse",
+            limits.Controls.Add(Ui.RowLabel("seconds for each Roblox window", Ui.PAD + 212, 40, ROW_H, 200, 9f, Theme.Muted));
+            chkAway = Ui.DarkCheck("Only while I'm away (a minute with no typing or mouse moves)",
                                    Ui.PAD, 70, 9f);
             chkAway.AutoSize = true;
             limits.Controls.Add(chkAway);
@@ -427,13 +455,26 @@ namespace RobloxKeeper
             chkAlt.Checked = r.Alt;
             chkShift.Checked = r.Shift;
 
-            macroNames.Clear();
-            foreach (Macro m in kit.Store.Macros) AddName(macroNames, m.Name);
+            playChoices.Clear();
+            // A macro made for the screen has places that mean the whole
+            // screen, so a rule would click the wrong spots on a Roblox
+            // window: those have their own key instead. One a rule already
+            // plays stays in the list, so opening the rule doesn't drop it.
+            List<string> macroNames = new List<string>();
+            foreach (Macro m in kit.Store.Macros) if (!m.Anywhere) AddName(macroNames, m.Name);
             AddName(macroNames, r.Macro);
-            cmbMacro.Items.Clear();
-            cmbMacro.Items.Add(macroNames.Count == 0 ? "No macros yet - make one in Macros" : "Choose a macro");
-            cmbMacro.Items.AddRange(macroNames);
-            cmbMacro.SelectedIndex = IndexIn(macroNames, r.Macro) + 1;
+            // Scripts are listed after the macros. Where there are none, the
+            // list reads as it always did.
+            List<string> scriptNames = new List<string>();
+            if (kit.Scripts != null) foreach (string sn in kit.Scripts.Store.Names()) AddName(scriptNames, sn);
+            AddName(scriptNames, r.Script);
+            foreach (string mn in macroNames) playChoices.Add(Choice(false, mn));
+            foreach (string sn in scriptNames) playChoices.Add(Choice(true, sn));
+            cmbPlay.Items.Clear();
+            cmbPlay.Items.Add(playChoices.Count == 0 ? "No macros or scripts yet"
+                              : scriptNames.Count == 0 ? "Choose a macro" : "Choose a macro or a script");
+            foreach (PlayChoice c in playChoices) cmbPlay.Items.Add(PlayText(c, scriptNames.Count > 0));
+            cmbPlay.SelectedIndex = PlayIndex(r.PlaysScript, r.PlaysScript ? r.Script : r.Macro) + 1;
 
             numTimes.Value = Math.Max(1, Math.Min(20, r.Times));
             numDelay.Value = Math.Max(0, Math.Min(600, r.DelaySeconds));
@@ -460,6 +501,53 @@ namespace RobloxKeeper
             numGap.Value = Math.Max(0, Math.Min(3600, r.GapSeconds));
             chkAway.Checked = r.OnlyWhenAway;
             ShowWhen();
+            ShowPlay();
+        }
+
+        static PlayChoice Choice(bool script, string name)
+        {
+            PlayChoice c = new PlayChoice();
+            c.Script = script;
+            c.Name = name;
+            return c;
+        }
+
+        // "Macro: Buy egg" and "Script: Farm loop" once there are scripts to
+        // tell apart from the macros.
+        static string PlayText(PlayChoice c, bool labelled)
+        {
+            return labelled ? (c.Script ? "Script: " : "Macro: ") + c.Name : c.Name;
+        }
+
+        int PlayIndex(bool script, string name)
+        {
+            if (name == null) return -1;
+            return playChoices.FindIndex(delegate(PlayChoice c)
+            {
+                return c.Script == script && string.Equals(c.Name, name, StringComparison.OrdinalIgnoreCase);
+            });
+        }
+
+        PlayChoice SelectedPlay()
+        {
+            int i = cmbPlay.SelectedIndex - 1;
+            return i >= 0 && i < playChoices.Count ? playChoices[i] : null;
+        }
+
+        // Times belongs to macros. For a script that spot says what it does
+        // instead, so nothing is left empty or cut off.
+        void ShowPlay()
+        {
+            PlayChoice c = SelectedPlay();
+            bool script = c != null && c.Script;
+            playsScript = script;
+            lblTimes.Visible = !script;
+            numTimes.Visible = !script;
+            lblInARow.Visible = !script;
+            lblScriptNote.Visible = script;
+            lblScriptNote.Text = SelectedWhen() == RuleWhen.Hotkey
+                ? "A script repeats by itself, so it starts once. Press the key again to stop it."
+                : "A script repeats by itself, so it starts once.";
         }
 
         void FillOn(RuleWhen when, RuleOn select)
@@ -491,6 +579,7 @@ namespace RobloxKeeper
             keyPanel.Visible = w == RuleWhen.Hotkey;
             joinPanel.Visible = w == RuleWhen.Joins;
             if (onChoices.Count > 0) FillOn(w, SelectedOn());
+            if (lblScriptNote != null && playChoices.Count > 0) ShowPlay();
         }
 
         // The rule as the form stands. Starts from a copy of the one being
@@ -517,7 +606,9 @@ namespace RobloxKeeper
                 r.Alt = chkAlt.Checked;
                 r.Shift = chkShift.Checked;
             }
-            r.Macro = cmbMacro.SelectedIndex <= 0 ? null : macroNames[cmbMacro.SelectedIndex - 1];
+            PlayChoice play = SelectedPlay();
+            r.Macro = play != null && !play.Script ? play.Name : null;
+            r.Script = play != null && play.Script ? play.Name : null;
             r.Times = numTimes.Value;
             r.DelaySeconds = numDelay.Value;
             r.On = SelectedOn();
@@ -536,6 +627,10 @@ namespace RobloxKeeper
         {
             Rule r = Collect();
             string problem = r.Problem();
+            // A plain key (no Ctrl, Alt or Shift) is also somebody's key if a
+            // macro, the stop key or the autoclicker is on it: both would play.
+            if (problem == null && r.When == RuleWhen.Hotkey && !r.Ctrl && !r.Alt && !r.Shift && kit.Macros != null)
+                problem = kit.Macros.KeyUseProblem(r.HotkeyVk, KeyUse.RULE, null);
             if (problem != null) { lblProblem.Text = problem; return false; }
             Result = r;
             return true;
@@ -545,7 +640,20 @@ namespace RobloxKeeper
 
         public void SetName(string name) { nameBox.Text = name; }
         public void SetWhen(RuleWhen when) { cmbWhen.SelectedIndex = (int)when; }
-        public void SetMacro(string macro) { cmbMacro.SelectedIndex = IndexIn(macroNames, macro) + 1; }
+        public void SetMacro(string macro) { cmbPlay.SelectedIndex = PlayIndex(false, macro) + 1; }
+        public void SetScript(string script) { cmbPlay.SelectedIndex = PlayIndex(true, script) + 1; }
+
+        // What the "What to play" list offers, as it reads.
+        public List<string> PlayItems()
+        {
+            List<string> items = new List<string>();
+            foreach (object o in cmbPlay.Items) items.Add(o.ToString());
+            return items;
+        }
+
+        // Whether the Times row is showing, and the line that stands in for it.
+        public bool TimesShown { get { return !playsScript; } }
+        public string ScriptNote { get { return playsScript ? lblScriptNote.Text : null; } }
         public void SetOn(RuleOn on) { int i = onChoices.IndexOf(on); if (i >= 0) cmbOn.SelectedIndex = i; }
 
         public void SetHotkey(byte vk, bool ctrl, bool alt, bool shift)
